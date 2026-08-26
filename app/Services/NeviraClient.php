@@ -133,6 +133,55 @@ class NeviraClient
         return $payload['data'] ?? [];
     }
 
+    /**
+     * Perjalanan kurir untuk satu nomor nota.
+     *
+     * Detail transaksi memang membawa `delivery_transactions`, tapi tanpa
+     * objek kurirnya — hanya `id_user_courier`. Daftar pengantaran yang
+     * disaring dengan nomor nota mengembalikan baris yang sudah lengkap
+     * dengan nama dan NIP kurir, jadi itu yang dipakai.
+     */
+    public function deliveries(string $transactionNumber, int $limit = 20): array
+    {
+        $payload = $this->get('/deliveries-transactions', [
+            'keyword' => $transactionNumber,
+            'limit'   => $limit,
+        ]);
+
+        return $payload['data'] ?? [];
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    public function summarizeDeliveries(array $rows): array
+    {
+        return collect($rows)
+            ->sortBy(fn ($row) => $row['delivery_date'] ?? '')
+            ->map(function ($row) {
+                $courier = $row['courier'] ?? [];
+                $status  = $row['status'] ?? null;
+
+                return [
+                    'id'            => $row['id_deliveries_transaction'] ?? null,
+                    'date'          => $row['delivery_date'] ?? null,
+                    'status_code'   => $status,
+                    'status'        => config('nevira.delivery_status.'.$status, 'Kode '.$status),
+                    'cancel_reason' => ($status === 6 && filled($row['cancel_type'] ?? null))
+                        ? config('nevira.delivery_cancel_type.'.$row['cancel_type'], $row['cancel_type'])
+                        : null,
+                    'courier_name'  => $courier['username'] ?? null,
+                    'courier_nip'   => $courier['nip'] ?? null,
+                    'courier_id'    => $row['id_user_courier'] ?? null,
+                    'queue_no'      => $row['queue_no'] ?? null,
+                    'distance'      => $row['distance'] ?? null,
+                    'notes'         => $row['notes'] ?? null,
+                    'courier_notes' => $row['notes_courier'] ?? null,
+                    'proof_count'   => count($row['proof_images'] ?? []),
+                    'updated_at'    => $row['updated_at'] ?? null,
+                ];
+            })
+            ->values()->all();
+    }
+
     public function customer(string $customerId): array
     {
         return $this->get('/customer/'.rawurlencode($customerId));

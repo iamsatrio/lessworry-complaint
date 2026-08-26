@@ -76,14 +76,26 @@ class ComplaintController extends Controller
             'channel'               => ['required', Rule::in(array_keys(config('complaint.channels')))],
             'reporter_name'         => ['required', 'string', 'max:120'],
             'reporter_phone'        => ['nullable', 'string', 'max:30'],
-            'nevira_transaction_id' => ['nullable', 'string', 'max:64'],
+            'nevira_transaction_id' => ['required_without:nota_exemption', 'nullable', 'string', 'max:64'],
+            'nota_exemption'        => ['required_without:nevira_transaction_id', 'nullable', Rule::in(array_keys(config('complaint.nota_exemptions')))],
             'outlet_id'             => ['nullable', 'exists:outlets,id'],
             'category'              => ['required', Rule::in(array_keys(config('complaint.categories')))],
             'sub_category'          => ['nullable', 'string', 'max:120'],
             'priority'              => ['required', Rule::in(array_keys(config('complaint.priorities')))],
             'description'           => ['required', 'string'],
             'attachments.*'         => ['nullable', 'image', 'max:5120'],
+        ], [
+            'nevira_transaction_id.required_without' => 'Isi nomor nota NEVIRA, atau pilih alasan kenapa complaint ini tidak punya nota.',
+            'nota_exemption.required_without'        => 'Pilih alasan kenapa complaint ini tidak punya nomor nota.',
+        ], [
+            'nevira_transaction_id' => 'nomor nota',
+            'nota_exemption'        => 'alasan tanpa nota',
         ]);
+
+        // Nota terisi berarti tidak ada pengecualian yang berlaku.
+        if (filled($data['nevira_transaction_id'] ?? null)) {
+            $data['nota_exemption'] = null;
+        }
 
         // Kasir hanya boleh mencatat untuk outletnya sendiri.
         if ($user->isKasir()) {
@@ -270,7 +282,8 @@ class ComplaintController extends Controller
 
         $data = $request->validate([
             'nevira_transaction_id' => ['nullable', 'string', 'max:64'],
-        ], [], ['nevira_transaction_id' => 'ID transaksi NEVIRA']);
+            'nota_exemption'        => ['nullable', Rule::in(array_keys(config('complaint.nota_exemptions')))],
+        ], [], ['nevira_transaction_id' => 'nomor nota']);
 
         $new = trim((string) ($data['nevira_transaction_id'] ?? ''));
         $old = (string) $complaint->nevira_transaction_id;
@@ -281,6 +294,7 @@ class ComplaintController extends Controller
 
         $complaint->forceFill([
             'nevira_transaction_id' => $new !== '' ? $new : null,
+            'nota_exemption'        => $new !== '' ? null : ($data['nota_exemption'] ?? $complaint->nota_exemption),
             // Snapshot lama milik order lain — buang, jangan sampai tertinggal
             // dan menampilkan data order yang bukan miliknya.
             'nevira_snapshot'    => null,
@@ -416,6 +430,19 @@ class ComplaintController extends Controller
         try {
             $payload = $this->nevira->transaction($complaint->nevira_transaction_id);
             $summary = $this->nevira->summarizeTransaction($payload);
+
+            // Perjalanan kurir ditarik terpisah: detail transaksi tidak
+            // membawa nama kurirnya. Gagal di sini tidak boleh membatalkan
+            // sinkron order — data kurir sifatnya pelengkap.
+            if (filled($summary['invoice'])) {
+                try {
+                    $summary['deliveries'] = $this->nevira->summarizeDeliveries(
+                        $this->nevira->deliveries($summary['invoice'])
+                    );
+                } catch (Throwable $e) {
+                    $summary['deliveries'] = [];
+                }
+            }
 
             $complaint->forceFill([
                 'nevira_snapshot'   => $summary,

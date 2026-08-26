@@ -35,6 +35,29 @@ Sistem ini **hanya membaca**. Tidak ada endpoint tulis yang dipanggil.
 | Cari order | `GET /api/transactions?keyword=&limit=` |
 | Detail pelanggan | `GET /api/customer/{id}` |
 | Cek token hidup | `GET /api/me` |
+| Perjalanan kurir | `GET /api/deliveries-transactions?keyword=<nomor_nota>` |
+
+Detail transaksi memang memuat `delivery_transactions`, tapi **tanpa objek kurirnya** — hanya `id_user_courier`. Daftar pengantaran yang disaring dengan nomor nota mengembalikan baris lengkap dengan `courier{username,nip,phone}`, jadi itu yang dipakai.
+
+## Kode status pengantaran
+
+Diambil dari peta di back office NEVIRA sendiri, bukan tebakan:
+
+| Kode | Arti |
+|---|---|
+| 1 | Siap Diantar |
+| 2 | Diantar |
+| 3 | Siap Dijemput |
+| 4 | Dijemput |
+| 5 | Tiba di Outlet |
+| 6 | Batal |
+| 7 | Selesai |
+| 71 | Selesai Diantar |
+| 73 | Selesai Dijemput |
+
+Saat status 6, `cancel_type` menjelaskan sebabnya: `SYSTEM`, `COURIER`, `COURIER_RESCHEDULE`.
+
+Kolom `type` (1 atau 2) **belum diketahui artinya** — peta labelnya tidak ditemukan di bundle back office, jadi sengaja tidak ditampilkan daripada ditebak.
 
 Catatan: endpoint detail adalah `/api/transactions/{id}` (jamak). Tidak ada `/api/transaction/detail/{id}`.
 

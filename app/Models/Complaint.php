@@ -85,6 +85,42 @@ class Complaint extends Model
         return $handlers;
     }
 
+    /** Perjalanan kurir dari snapshot NEVIRA. */
+    public function deliveries(): array
+    {
+        return $this->nevira_snapshot['deliveries'] ?? [];
+    }
+
+    /** Umur transaksi NEVIRA dalam hari; null kalau tanggalnya tidak diketahui. */
+    public function transactionAgeDays(): ?int
+    {
+        $created = $this->nevira_snapshot['created_at'] ?? null;
+
+        if (! $created) {
+            return null;
+        }
+
+        try {
+            return (int) \Illuminate\Support\Carbon::parse($created)->diffInDays(now());
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    public function transactionIsOld(): bool
+    {
+        $age = $this->transactionAgeDays();
+
+        return $age !== null && $age > (int) config('complaint.nota_max_age_days');
+    }
+
+    public function notaExemptionLabel(): ?string
+    {
+        return $this->nota_exemption
+            ? config('complaint.nota_exemptions.'.$this->nota_exemption, $this->nota_exemption)
+            : null;
+    }
+
     public function hasResponsibility(): bool
     {
         return filled($this->responsible_staff_name);

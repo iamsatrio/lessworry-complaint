@@ -101,7 +101,7 @@ class ComplaintTest extends TestCase
         $this->actingAs($kasir)->post('/complaints', [
             'channel' => 'kasir', 'reporter_name' => 'Budi', 'category' => 'hasil_cuci',
             'priority' => 'medium', 'description' => 'Noda tidak hilang',
-            'outlet_id' => $b->id,
+            'outlet_id' => $b->id, 'nota_exemption' => 'lebih_sebulan',
         ]);
 
         $this->assertSame($a->id, Complaint::latest('id')->first()->outlet_id);
@@ -281,16 +281,79 @@ class ComplaintTest extends TestCase
         Http::assertSent(fn ($request) => str_contains($request->url(), '/api/transactions/42'));
     }
 
-    public function test_complaint_tanpa_tautan_order_tetap_diterima(): void
+    /* ---------- Nomor nota wajib, dengan pengecualian yang harus disebut ---------- */
+
+    public function test_complaint_tanpa_nota_dan_tanpa_alasan_ditolak(): void
     {
         $cc = $this->userAs('customer_care');
 
         $this->actingAs($cc)->post('/complaints', [
             'channel' => 'wa_cc', 'reporter_name' => 'Deni', 'category' => 'sikap_petugas',
             'priority' => 'low', 'description' => 'Kasir kurang ramah',
+        ])->assertSessionHasErrors('nevira_transaction_id');
+
+        $this->assertSame(0, Complaint::count());
+    }
+
+    public function test_complaint_tanpa_nota_diterima_kalau_alasannya_disebut(): void
+    {
+        $cc = $this->userAs('customer_care');
+
+        $this->actingAs($cc)->post('/complaints', [
+            'channel' => 'wa_cc', 'reporter_name' => 'Deni', 'category' => 'keterlambatan',
+            'sub_category' => 'Telat jemput', 'priority' => 'high',
+            'description' => 'Kurir belum datang menjemput',
+            'nota_exemption' => 'belum_terbit',
         ])->assertRedirect();
 
-        $this->assertNull(Complaint::latest('id')->first()->nevira_transaction_id);
+        $complaint = Complaint::latest('id')->first();
+
+        $this->assertNull($complaint->nevira_transaction_id);
+        $this->assertSame('belum_terbit', $complaint->nota_exemption);
+        $this->assertSame(
+            'Complaint keterlambatan penjemputan — nota belum terbit',
+            $complaint->notaExemptionLabel()
+        );
+    }
+
+    public function test_alasan_di_luar_daftar_ditolak(): void
+    {
+        $cc = $this->userAs('customer_care');
+
+        $this->actingAs($cc)->post('/complaints', [
+            'channel' => 'wa_cc', 'reporter_name' => 'Deni', 'category' => 'hasil_cuci',
+            'priority' => 'low', 'description' => 'x', 'nota_exemption' => 'malas-ngetik',
+        ])->assertSessionHasErrors('nota_exemption');
+    }
+
+    public function test_nota_terisi_membatalkan_alasan_pengecualian(): void
+    {
+        config(['nevira.enabled' => false]);
+        $cc = $this->userAs('customer_care');
+
+        $this->actingAs($cc)->post('/complaints', [
+            'channel' => 'wa_cc', 'reporter_name' => 'Deni', 'category' => 'hasil_cuci',
+            'priority' => 'low', 'description' => 'x',
+            'nevira_transaction_id' => '31197', 'nota_exemption' => 'lebih_sebulan',
+        ])->assertRedirect();
+
+        $complaint = Complaint::latest('id')->first();
+
+        $this->assertSame('31197', $complaint->nevira_transaction_id);
+        $this->assertNull($complaint->nota_exemption);
+    }
+
+    public function test_umur_transaksi_dihitung_dari_snapshot(): void
+    {
+        $baru = $this->makeComplaint();
+        $baru->forceFill(['nevira_snapshot' => ['created_at' => now()->subDays(3)->toIso8601String()]])->save();
+
+        $lama = $this->makeComplaint();
+        $lama->forceFill(['nevira_snapshot' => ['created_at' => now()->subDays(45)->toIso8601String()]])->save();
+
+        $this->assertFalse($baru->fresh()->transactionIsOld());
+        $this->assertTrue($lama->fresh()->transactionIsOld());
+        $this->assertSame(45, $lama->fresh()->transactionAgeDays());
     }
 
     /* ---------- Menautkan order setelah complaint tersimpan (API-8) ---------- */

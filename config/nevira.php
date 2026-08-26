@@ -27,6 +27,31 @@ return [
 
     'timeout' => (int) env('NEVIRA_TIMEOUT', 15),
 
+    /*
+    | Kode status pengantaran NEVIRA. Diambil dari peta di back office
+    | NEVIRA sendiri, bukan tebakan.
+    */
+    'delivery_status' => [
+        1  => 'Siap Diantar',
+        2  => 'Diantar',
+        3  => 'Siap Dijemput',
+        4  => 'Dijemput',
+        5  => 'Tiba di Outlet',
+        6  => 'Batal',
+        7  => 'Selesai',
+        71 => 'Selesai Diantar',
+        73 => 'Selesai Dijemput',
+    ],
+
+    /*
+    | Alasan pembatalan, dipakai saat status = 6.
+    */
+    'delivery_cancel_type' => [
+        'SYSTEM'              => 'Dibatalkan sistem',
+        'COURIER'             => 'Dibatalkan kurir',
+        'COURIER_RESCHEDULE'  => 'Dijadwalkan ulang kurir',
+    ],
+
     // Matikan untuk bekerja tanpa koneksi NEVIRA (mode pengembangan).
     'enabled' => filter_var(env('NEVIRA_ENABLED', true), FILTER_VALIDATE_BOOL),
 ];

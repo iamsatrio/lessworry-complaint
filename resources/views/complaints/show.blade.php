@@ -113,6 +113,12 @@
               @endforeach
             </div>
           @endif
+          @if($complaint->transactionIsOld())
+            <div class="panel" style="background:var(--warn-soft);border-color:#f3dfa4">
+              Nota ini berumur {{ $complaint->transactionAgeDays() }} hari — lebih dari
+              {{ config('complaint.nota_max_age_days') }} hari. Periksa apakah keluhannya masih terkait order ini.
+            </div>
+          @endif
           <p class="hint">Ditarik {{ $complaint->nevira_synced_at?->diffForHumans() }}</p>
         @endif
         @if($complaint->nevira_sync_error)
@@ -126,7 +132,14 @@
           @csrf<button class="ghost">Tarik Ulang dari NEVIRA</button>
         </form>
       @else
-        <p class="muted" style="margin:0 0 14px">Complaint ini belum tertaut ke order.</p>
+        @if($complaint->nota_exemption)
+          <div class="panel" style="margin:0 0 14px">
+            <b>Tanpa nomor nota</b>
+            <div style="margin-top:5px">{{ $complaint->notaExemptionLabel() }}</div>
+          </div>
+        @else
+          <p class="muted" style="margin:0 0 14px">Complaint ini belum tertaut ke order.</p>
+        @endif
       @endif
 
       {{-- Nomor order bisa dipasang atau dibetulkan kapan saja setelah complaint tersimpan. --}}
@@ -137,6 +150,13 @@
           <label for="lnk">ID transaksi NEVIRA</label>
           <input id="lnk" name="nevira_transaction_id" value="{{ $complaint->nevira_transaction_id }}"
                  placeholder="Nomor ID transaksi dari struk">
+          <label for="lex">Kalau dikosongkan, sebutkan alasannya</label>
+          <select id="lex" name="nota_exemption">
+            <option value="">— tidak ada alasan —</option>
+            @foreach(config('complaint.nota_exemptions') as $k=>$v)
+              <option value="{{ $k }}" @selected($complaint->nota_exemption===$k)>{{ $v }}</option>
+            @endforeach
+          </select>
           <p class="hint">
             @if($complaint->nevira_transaction_id)
               Mengubah nomor akan membuang data order yang sekarang dan menariknya ulang. Kosongkan untuk melepas tautan.
@@ -148,6 +168,8 @@
         </form>
       </details>
     </div>
+
+    @include('complaints._deliveries')
 
     <div class="card">
       <div class="eyebrow">Siapa yang menangani</div>

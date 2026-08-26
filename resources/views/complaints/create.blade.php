@@ -114,6 +114,23 @@ form.addEventListener('input',()=>{
 });
 form.addEventListener('submit',()=>localStorage.removeItem(KEY));
 
+// Memilih alasan tanpa nota mengosongkan kolom notanya, supaya tidak
+// terkirim dua-duanya dan menimbulkan keraguan mana yang berlaku.
+document.getElementById('exempt').addEventListener('change', function(){
+  if(this.value){ document.getElementById('nv').value=''; document.getElementById('nvbox').style.display='none'; }
+});
+
+// Saran otomatis: keluhan telat jemput memang belum punya nota.
+const NO_NOTA = @json(config('complaint.no_nota_yet'));
+function saranPengecualian(){
+  const list = NO_NOTA[cat.value] || [];
+  const cocok = list.length && (list.includes(sub.value) || sub.value === '');
+  const ex = document.getElementById('exempt');
+  if (cocok && !ex.value && !document.getElementById('nv').value) ex.value = 'belum_terbit';
+}
+cat.addEventListener('change', saranPengecualian);
+sub.addEventListener('change', saranPengecualian);
+
 // Cek order ke NEVIRA
 const btn=document.getElementById('cek'), box=document.getElementById('nvbox');
 btn.addEventListener('click', async () => {
@@ -128,11 +145,23 @@ btn.addEventListener('click', async () => {
       const d=j.data;
       box.className='panel good';
       const rupiah = n => n==null ? '—' : 'Rp '+Number(n).toLocaleString('id-ID');
+      // Nota valid membatalkan pilihan pengecualian.
+      document.getElementById('exempt').value = '';
+      // Data pelapor diisikan dari pelanggan pada nota, tapi hanya kalau
+      // petugas belum mengetik apa pun — jangan menimpa yang sudah ditulis.
+      const nm = document.getElementById('rn'), tp = document.getElementById('rp');
+      if (d.customer_name && !nm.value) nm.value = d.customer_name;
+      if (d.customer_phone && !tp.value) tp.value = d.customer_phone;
+      let umur = '';
+      if (d.created_at) {
+        const hari = Math.floor((Date.now() - new Date(d.created_at)) / 86400000);
+        if (hari > 30) umur = `<div style="margin-top:8px;font-weight:700">Nota ini berumur ${hari} hari — lebih dari 1 bulan.</div>`;
+      }
       box.innerHTML = `<b>Order ketemu</b><br>
         Struk ${d.invoice ?? '—'} · ${d.outlet_name ?? 'outlet tidak tercatat'}<br>
         ${d.customer_name ?? 'Nama pelanggan tidak tercatat'}${d.customer_phone ? ' · '+d.customer_phone : ''}<br>
         ${rupiah(d.grand_total)} · ${d.status ?? '—'} · ${d.payment_status ?? '—'}
-        <div style="margin-top:8px;font-size:13px">Cocokkan dengan struk pelanggan sebelum menyimpan.</div>`;
+        <div style="margin-top:8px;font-size:13px">Cocokkan dengan struk pelanggan sebelum menyimpan.</div>${umur}`;
     }else{
       box.className='panel bad'; box.textContent=j.message;
     }

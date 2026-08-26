@@ -50,6 +50,27 @@ return [
 
     'open_statuses' => ['baru', 'ditangani', 'menunggu_pelanggan'],
 
+    /*
+    | Nomor nota NEVIRA wajib diisi, dengan dua pengecualian yang sah.
+    | Petugas harus memilih salah satunya secara sadar — tidak ada jalan
+    | menyimpan complaint tanpa nota dan tanpa alasan.
+    */
+    'nota_exemptions' => [
+        'belum_terbit' => 'Complaint keterlambatan penjemputan — nota belum terbit',
+        'lebih_sebulan' => 'Transaksi lebih dari 1 bulan',
+    ],
+
+    /*
+    | Kategori/sub-kategori yang secara wajar belum punya nota.
+    | Dipakai untuk menyarankan pengecualian, bukan memberlakukannya diam-diam.
+    */
+    'no_nota_yet' => [
+        'keterlambatan' => ['Telat jemput'],
+    ],
+
+    // Transaksi lebih tua dari ini dianggap boleh tanpa nota.
+    'nota_max_age_days' => 30,
+
     'divisions' => [
         'produksi' => 'Operasional Cuci / Produksi',
         'kurir'    => 'Kurir / Antar Jemput',
