@@ -24,13 +24,16 @@ class ComplaintController extends Controller
 
         $query = Complaint::query()
             ->visibleTo($user)
-            ->with(['outlet', 'assignee'])
-            ->latest();
+            ->with(['outlet', 'assignee']);
 
         if ($request->filled('status')) {
-            $query->where('status', $request->string('status'));
+            $query->where('status', $request->string('status'))->latest();
         } else {
-            $query->open();
+            // Papan kerja diurut menurut tenggat: yang paling mepet tampil dulu.
+            // Complaint tanpa tenggat jatuh ke bawah, bukan ke atas.
+            $query->open()
+                ->orderByRaw('due_resolution_at is null')
+                ->orderBy('due_resolution_at');
         }
 
         foreach (['category', 'priority', 'channel', 'outlet_id'] as $filter) {

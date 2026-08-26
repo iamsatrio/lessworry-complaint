@@ -24,7 +24,7 @@ return [
     ],
 
     'priorities' => [
-        'urgent' => 'Peluang Emas (Urgent)',
+        'urgent' => 'Mendesak',
         'high'   => 'Tinggi',
         'medium' => 'Sedang',
         'low'    => 'Rendah',

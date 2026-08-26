@@ -1,20 +1,23 @@
 @extends('layouts.app')
 @section('title','Masuk')
 @section('content')
-<div style="max-width:400px;margin:8vh auto">
+<div style="max-width:420px;margin:9vh auto 0">
   <div style="text-align:center;margin-bottom:26px">
-    <h1 style="margin-bottom:6px">Less Worry</h1>
-    <div class="sub" style="margin:0">Complaint Management</div>
+    <div class="display" style="font-size:32px;font-weight:800;color:var(--teal-deep);letter-spacing:-.03em">Less Worry</div>
+    <div class="muted" style="font-size:13px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;margin-top:6px">
+      Complaint Management
+    </div>
   </div>
   <div class="card">
     <form method="POST" action="{{ route('login') }}">
       @csrf
-      <label>Email</label>
-      <input type="email" name="email" value="{{ old('email') }}" required autofocus>
-      <label>Password</label>
-      <input type="password" name="password" required>
-      <div style="margin-top:18px"><button style="width:100%">Masuk</button></div>
+      <label for="email">Email</label>
+      <input id="email" type="email" name="email" value="{{ old('email') }}" required autofocus autocomplete="username">
+      <label for="password">Password</label>
+      <input id="password" type="password" name="password" required autocomplete="current-password">
+      <div style="margin-top:22px"><button style="width:100%">Masuk</button></div>
     </form>
   </div>
+  <p class="muted small" style="text-align:center">Lupa password? Hubungi supervisor outletmu.</p>
 </div>
 @endsection

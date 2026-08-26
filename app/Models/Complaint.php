@@ -90,6 +90,73 @@ class Complaint extends Model
             && $this->due_response_at->isPast();
     }
 
+    /**
+     * Kondisi SLA untuk meteran di papan kerja.
+     *
+     * Mengembalikan sisa waktu sebagai porsi (0-1) plus label siap tampil,
+     * supaya petugas melihat berapa banyak runway yang tersisa — bukan
+     * sekadar sudah lewat atau belum.
+     *
+     * @return array{state:string,label:string,pct:int}
+     */
+    public function slaMeter(): array
+    {
+        if (! $this->isOpen()) {
+            $minutes = $this->resolutionMinutes();
+
+            return [
+                'state' => 'done',
+                'label' => $minutes === null
+                    ? 'Ditutup'
+                    : 'Selesai '.$this->humanMinutes($minutes),
+                'pct'   => 100,
+            ];
+        }
+
+        if ($this->due_resolution_at === null) {
+            return ['state' => '', 'label' => 'Tanpa tenggat', 'pct' => 0];
+        }
+
+        $start = $this->created_at ?? now();
+        $total = max(1, (int) round($start->diffInMinutes($this->due_resolution_at)));
+        $left  = (int) round(now()->diffInMinutes($this->due_resolution_at, false));
+
+        if ($left <= 0) {
+            return [
+                'state' => 'late',
+                'label' => 'Telat '.$this->humanMinutes(abs($left)),
+                'pct'   => 100,
+            ];
+        }
+
+        $pct = (int) max(3, min(100, round($left / $total * 100)));
+
+        return [
+            'state' => $pct <= 25 ? 'warn' : '',
+            'label' => 'Sisa '.$this->humanMinutes($left),
+            'pct'   => $pct,
+        ];
+    }
+
+    private function humanMinutes(int $minutes): string
+    {
+        if ($minutes < 60) {
+            return $minutes.' mnt';
+        }
+
+        if ($minutes < 1440) {
+            $h = intdiv($minutes, 60);
+            $m = $minutes % 60;
+
+            return $m > 0 ? $h.' jam '.$m.' mnt' : $h.' jam';
+        }
+
+        $d = intdiv($minutes, 1440);
+        $h = intdiv($minutes % 1440, 60);
+
+        return $h > 0 ? $d.' hari '.$h.' jam' : $d.' hari';
+    }
+
     /** Lama penyelesaian dalam menit; null kalau belum selesai. */
     public function resolutionMinutes(): ?int
     {
