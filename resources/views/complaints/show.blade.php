@@ -80,11 +80,32 @@
       @if($complaint->nevira_transaction_id)
         <div class="tix" style="font-size:15px;margin-bottom:12px">{{ $complaint->nevira_transaction_id }}</div>
         @if($complaint->nevira_snapshot)
+          @php $nv = $complaint->nevira_snapshot; @endphp
           <dl class="kv">
-            @foreach(['invoice'=>'Invoice','customer_name'=>'Pelanggan','customer_phone'=>'Telepon','outlet_name'=>'Outlet','total'=>'Total','status'=>'Status'] as $k=>$label)
-              <dt>{{ $label }}</dt><dd>{{ $complaint->nevira_snapshot[$k] ?? '—' }}</dd>
-            @endforeach
+            <dt>Nomor struk</dt><dd style="font-family:var(--mono);font-size:13px">{{ $nv['invoice'] ?? '—' }}</dd>
+            <dt>Pelanggan</dt><dd>{{ $nv['customer_name'] ?? '—' }}@if(!empty($nv['customer_phone']))<div class="muted small">{{ $nv['customer_phone'] }}</div>@endif</dd>
+            <dt>Outlet</dt><dd>{{ $nv['outlet_name'] ?? '—' }}</dd>
+            <dt>Status order</dt><dd>{{ $nv['status'] ?? '—' }}@if(!empty($nv['progress'])) · {{ $nv['progress'] }}%@endif</dd>
+            <dt>Pembayaran</dt><dd>{{ $nv['payment_status'] ?? '—' }}</dd>
+            <dt>Total</dt><dd>@if(isset($nv['grand_total']))Rp {{ number_format((int) $nv['grand_total'],0,',','.') }}@else—@endif</dd>
+            @if(!empty($nv['cashier_name']))<dt>Kasir</dt><dd>{{ $nv['cashier_name'] }}</dd>@endif
+            @if(!empty($nv['estimated_done']))
+              <dt>Estimasi selesai</dt><dd>{{ \Illuminate\Support\Carbon::parse($nv['estimated_done'])->translatedFormat('d M Y, H:i') }}</dd>
+            @endif
           </dl>
+          @if(!empty($nv['services']))
+            <div class="panel" style="margin-top:12px">
+              <b>Layanan dalam order ini</b>
+              @foreach($nv['services'] as $svc)
+                <div style="margin-top:6px">
+                  {{ $svc['name'] ?? 'Layanan' }}
+                  @if(!empty($svc['quantity'])) · {{ $svc['quantity'] }} item @endif
+                  @if(!empty($svc['status'])) · {{ $svc['status'] }} @endif
+                  @if(!empty($svc['notes']))<div class="muted small">Catatan: {{ $svc['notes'] }}</div>@endif
+                </div>
+              @endforeach
+            </div>
+          @endif
           <p class="hint">Ditarik {{ $complaint->nevira_synced_at?->diffForHumans() }}</p>
         @endif
         @if($complaint->nevira_sync_error)

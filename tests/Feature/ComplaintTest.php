@@ -210,9 +210,18 @@ class ComplaintTest extends TestCase
 
         Http::fake([
             '*/login' => Http::response(['access_token' => 'tok123'], 200),
-            '*/transaction/detail/*' => Http::response(['data' => [
-                'id_transaction' => 'TRX-1', 'invoice' => 'INV-001',
-                'nama_pelanggan' => 'Ibu Rina', 'id_outlet' => '1', 'grand_total' => 75000,
+            '*/transactions/31191' => Http::response(['data' => [
+                'id_transaction' => 31191,
+                'transaction_number' => 'INV/119/000123',
+                'order_type' => 'REGULAR',
+                'status' => 'PROCESSING',
+                'payment_status' => 'PAID',
+                'grand_total' => 75000,
+                'id_outlet' => 119,
+                'outlet_name' => 'Outlet Pusat',
+                'id_customer' => 27171,
+                'customer' => ['id_customer' => 27171, 'customer_name' => 'Ibu Rina', 'phone' => '081234567801'],
+                'services' => [['quantity' => 2, 'status' => 'ORDER', 'notes' => 'Cuci kering']],
             ]], 200),
         ]);
 
@@ -221,13 +230,55 @@ class ComplaintTest extends TestCase
         $this->actingAs($cc)->post('/complaints', [
             'channel' => 'wa_cc', 'reporter_name' => 'Ibu Rina', 'category' => 'salah_tagih',
             'priority' => 'medium', 'description' => 'Tagihan tidak sesuai',
-            'nevira_transaction_id' => 'TRX-1',
+            'nevira_transaction_id' => '31191',
         ]);
 
         $snapshot = Complaint::latest('id')->first()->nevira_snapshot;
 
-        $this->assertSame('INV-001', $snapshot['invoice']);
+        $this->assertSame('INV/119/000123', $snapshot['invoice']);
         $this->assertSame('Ibu Rina', $snapshot['customer_name']);
+        $this->assertSame('Outlet Pusat', $snapshot['outlet_name']);
+        $this->assertSame(27171, $snapshot['customer_id']);
+    }
+
+    /**
+     * NEVIRA menolak header "Bearer <token>" dengan 500, bukan 401. Token
+     * harus dikirim mentah. Test ini mengunci perilaku itu supaya tidak
+     * tanpa sengaja diganti ke withToken() di kemudian hari.
+     */
+    public function test_token_dikirim_tanpa_awalan_bearer(): void
+    {
+        config(['nevira.enabled' => true, 'nevira.email' => 'a@b.c', 'nevira.password' => 'x']);
+
+        Http::fake([
+            '*/login' => Http::response(['access_token' => 'tok123'], 200),
+            '*/transactions/*' => Http::response(['data' => ['id_transaction' => 1]], 200),
+        ]);
+
+        app(\App\Services\NeviraClient::class)->transaction('1');
+
+        Http::assertSent(function ($request) {
+            if (! str_contains($request->url(), '/transactions/')) {
+                return true;
+            }
+
+            return $request->header('Authorization') === ['tok123'];
+        });
+    }
+
+    public function test_memakai_endpoint_transaksi_yang_benar(): void
+    {
+        config(['nevira.enabled' => true, 'nevira.email' => 'a@b.c', 'nevira.password' => 'x']);
+
+        Http::fake([
+            '*/login' => Http::response(['access_token' => 'tok123'], 200),
+            '*' => Http::response(['data' => ['id_transaction' => 42]], 200),
+        ]);
+
+        app(\App\Services\NeviraClient::class)->transaction('42');
+
+        Http::assertSent(fn ($request) => ! str_contains($request->url(), '/transaction/detail/'));
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/api/transactions/42'));
     }
 
     public function test_complaint_tanpa_tautan_order_tetap_diterima(): void

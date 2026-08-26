@@ -13,8 +13,18 @@ use RuntimeException;
  * Batasan keras (API-2): sistem complaint tidak pernah menulis, mengubah,
  * atau menghapus data di NEVIRA. Kelas ini sengaja hanya mengekspos GET.
  *
- * Autentikasi: POST /login mengembalikan Sanctum bearer token, dipakai di
- * header Authorization. Token di-cache supaya tidak login tiap request.
+ * Autentikasi (diverifikasi dari koleksi Postman "less-worry BE" dan diuji
+ * langsung ke api.nevira.id pada 2026-08-26):
+ *
+ *   POST /api/login  {email, password}  ->  {access_token, user_data}
+ *   lalu setiap request membawa header:  Authorization: <token>
+ *
+ * PENTING: token dikirim MENTAH, TANPA awalan "Bearer". Memakai
+ * "Bearer <token>" membuat server membalas 500 Server Error — bukan 401 —
+ * sehingga mudah disalahartikan sebagai parameter kurang. Karena itu kelas
+ * ini menyusun header Authorization sendiri, bukan lewat withToken().
+ *
+ * Token berupa JWT HS256 dengan masa berlaku 24 jam.
  */
 class NeviraClient
 {
@@ -27,9 +37,6 @@ class NeviraClient
             && filled(config('nevira.password'));
     }
 
-    /**
-     * Ambil bearer token, login kalau cache kosong.
-     */
     public function token(bool $forceRefresh = false): string
     {
         if ($forceRefresh) {
@@ -73,18 +80,22 @@ class NeviraClient
     }
 
     /**
-     * GET terautentikasi. Sekali retry saat 401 (token kedaluwarsa).
+     * GET terautentikasi. Sekali retry saat token ditolak.
+     *
+     * NEVIRA membalas 401 dengan {"msg":"Please provide access token!"} kalau
+     * header hilang, tapi 500 kalau formatnya salah — keduanya diperlakukan
+     * sebagai kemungkinan token basi supaya satu kali refresh tetap dicoba.
      */
     private function get(string $path, array $query = []): array
     {
         $attempt = fn (string $token) => Http::timeout(config('nevira.timeout'))
             ->acceptJson()
-            ->withToken($token)
+            ->withHeaders(['Authorization' => $token])
             ->get($this->url($path), $query);
 
         $response = $attempt($this->token());
 
-        if ($response->status() === 401) {
+        if (in_array($response->status(), [401, 500], true)) {
             $response = $attempt($this->token(forceRefresh: true));
         }
 
@@ -95,12 +106,31 @@ class NeviraClient
         return (array) $response->json();
     }
 
+    /** Memastikan token masih hidup. Dipakai untuk pemeriksaan koneksi. */
+    public function me(): array
+    {
+        return $this->get('/me');
+    }
+
     /**
-     * Detail satu transaksi NEVIRA — dasar penautan complaint ke order.
+     * Detail satu transaksi — dasar penautan complaint ke order.
+     *
+     * Respons dibungkus dalam kunci "data".
      */
     public function transaction(string $transactionId): array
     {
-        return $this->get('/transaction/detail/'.rawurlencode($transactionId));
+        return $this->get('/transactions/'.rawurlencode($transactionId));
+    }
+
+    /**
+     * Cari transaksi berdasarkan nomor struk, untuk petugas yang hanya
+     * memegang nomor nota dan bukan ID internal.
+     */
+    public function searchTransactions(string $keyword, int $limit = 5): array
+    {
+        $payload = $this->get('/transactions', ['keyword' => $keyword, 'limit' => $limit]);
+
+        return $payload['data'] ?? [];
     }
 
     public function customer(string $customerId): array
@@ -109,44 +139,46 @@ class NeviraClient
     }
 
     /**
-     * Ringkas payload NEVIRA jadi bentuk yang dipakai tampilan complaint.
+     * Ringkas payload transaksi jadi bentuk yang dipakai tampilan complaint.
      *
-     * Struktur respons NEVIRA belum sepenuhnya terdokumentasi (lihat API-3 —
-     * /transactions masih balas 500 tanpa parameter yang tepat), jadi
-     * pemetaan ini defensif: setiap field dicari di beberapa kemungkinan nama
-     * dan kembali null kalau tidak ada.
+     * Nama field mengikuti skema NEVIRA yang sudah dipastikan, bukan tebakan.
      */
     public function summarizeTransaction(array $payload): array
     {
-        $data = $payload['data'] ?? $payload;
+        $d = $payload['data'] ?? $payload;
 
-        if (isset($data[0]) && is_array($data[0])) {
-            $data = $data[0];
+        if (isset($d[0]) && is_array($d[0])) {
+            $d = $d[0];
         }
+
+        $customer = $d['customer'] ?? [];
+        $outlet   = $d['outlet'] ?? [];
 
         return [
-            'transaction_id' => $this->pick($data, ['id_transaction', 'id_transaksi', 'id', 'transaction_id']),
-            'invoice'        => $this->pick($data, ['invoice', 'no_invoice', 'nota', 'no_nota', 'code']),
-            'customer_name'  => $this->pick($data, ['customer_name', 'nama_customer', 'nama_pelanggan', 'name']),
-            'customer_id'    => $this->pick($data, ['id_customer', 'customer_id']),
-            'customer_phone' => $this->pick($data, ['phone', 'no_hp', 'telepon', 'customer_phone']),
-            'outlet_name'    => $this->pick($data, ['outlet_name', 'nama_outlet', 'outlet']),
-            'outlet_id'      => $this->pick($data, ['id_outlet', 'outlet_id']),
-            'total'          => $this->pick($data, ['grand_total', 'total', 'total_bayar']),
-            'status'         => $this->pick($data, ['status', 'status_transaksi', 'transaction_status']),
-            'created_at'     => $this->pick($data, ['created_at', 'tanggal', 'date']),
+            'transaction_id'  => $d['id_transaction'] ?? null,
+            'invoice'         => $d['transaction_number'] ?? null,
+            'order_type'      => $d['order_type'] ?? null,
+            'status'          => $d['status'] ?? null,
+            'payment_status'  => $d['payment_status'] ?? null,
+            'progress'        => $d['progress_percentage'] ?? null,
+            'grand_total'     => $d['grand_total'] ?? null,
+            'customer_id'     => $d['id_customer'] ?? ($customer['id_customer'] ?? null),
+            'customer_name'   => $customer['customer_name'] ?? null,
+            'customer_phone'  => $customer['phone'] ?? null,
+            'outlet_id'       => $d['id_outlet'] ?? null,
+            'outlet_name'     => $d['outlet_name'] ?? ($outlet['outlet_name'] ?? null),
+            'cashier_name'    => $d['cashier']['username'] ?? null,
+            'services'        => collect($d['services'] ?? [])
+                ->map(fn ($s) => [
+                    'name'     => $s['service']['service_name'] ?? ($s['service_number'] ?? null),
+                    'quantity' => $s['quantity'] ?? null,
+                    'status'   => $s['status'] ?? null,
+                    'notes'    => $s['notes'] ?? null,
+                ])->all(),
+            'created_at'      => $d['created_at'] ?? null,
+            'estimated_done'  => $d['estimated_completion_date'] ?? null,
+            'completed_at'    => $d['completion_date'] ?? null,
         ];
-    }
-
-    private function pick(array $data, array $keys): mixed
-    {
-        foreach ($keys as $key) {
-            if (array_key_exists($key, $data) && $data[$key] !== null && $data[$key] !== '') {
-                return $data[$key];
-            }
-        }
-
-        return null;
     }
 
     private function url(string $path): string

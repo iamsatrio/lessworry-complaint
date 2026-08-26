@@ -67,7 +67,7 @@
     <div class="eyebrow">Order di NEVIRA</div>
     <label for="nv">ID transaksi atau nomor struk</label>
     <div style="display:flex;gap:10px">
-      <input id="nv" name="nevira_transaction_id" value="{{ old('nevira_transaction_id') }}" placeholder="Salin dari struk pelanggan">
+      <input id="nv" name="nevira_transaction_id" value="{{ old('nevira_transaction_id') }}" placeholder="Nomor ID transaksi dari struk">
       <button type="button" class="ghost shrink" id="cek">Cek</button>
     </div>
     <div id="nvbox" class="panel" style="display:none"></div>
@@ -126,10 +126,11 @@ btn.addEventListener('click', async () => {
     if(j.ok){
       const d=j.data;
       box.className='panel good';
+      const rupiah = n => n==null ? '—' : 'Rp '+Number(n).toLocaleString('id-ID');
       box.innerHTML = `<b>Order ketemu</b><br>
-        Invoice ${d.invoice ?? '—'} · ${d.outlet_name ?? 'outlet tidak tercatat'}<br>
-        ${d.customer_name ?? 'Nama pelanggan tidak tercatat'} ${d.customer_phone ? '· '+d.customer_phone : ''}<br>
-        Total ${d.total ?? '—'} · Status ${d.status ?? '—'}
+        Struk ${d.invoice ?? '—'} · ${d.outlet_name ?? 'outlet tidak tercatat'}<br>
+        ${d.customer_name ?? 'Nama pelanggan tidak tercatat'}${d.customer_phone ? ' · '+d.customer_phone : ''}<br>
+        ${rupiah(d.grand_total)} · ${d.status ?? '—'} · ${d.payment_status ?? '—'}
         <div style="margin-top:8px;font-size:13px">Cocokkan dengan struk pelanggan sebelum menyimpan.</div>`;
     }else{
       box.className='panel bad'; box.textContent=j.message;
