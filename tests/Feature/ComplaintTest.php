@@ -293,6 +293,106 @@ class ComplaintTest extends TestCase
         $this->assertNull(Complaint::latest('id')->first()->nevira_transaction_id);
     }
 
+    /* ---------- Menautkan order setelah complaint tersimpan (API-8) ---------- */
+
+    public function test_complaint_tanpa_order_bisa_ditautkan_menyusul(): void
+    {
+        config(['nevira.enabled' => true, 'nevira.email' => 'a@b.c', 'nevira.password' => 'x']);
+
+        Http::fake([
+            '*/login' => Http::response(['access_token' => 'tok123'], 200),
+            '*/transactions/31197' => Http::response(['data' => [
+                'id_transaction' => 31197, 'transaction_number' => 'INV/179/1',
+                'outlet_name' => 'Citra Garden Serpong', 'id_customer' => 81290,
+                'customer' => ['id_customer' => 81290, 'customer_name' => 'Ibu Tuti'],
+            ]], 200),
+        ]);
+
+        $cc = $this->userAs('customer_care');
+        $complaint = $this->makeComplaint();
+
+        $this->assertNull($complaint->nevira_transaction_id);
+
+        $this->actingAs($cc)
+            ->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_id' => '31197'])
+            ->assertRedirect();
+
+        $complaint->refresh();
+
+        $this->assertSame('31197', $complaint->nevira_transaction_id);
+        $this->assertSame('INV/179/1', $complaint->nevira_snapshot['invoice']);
+        $this->assertNull($complaint->nevira_sync_error);
+    }
+
+    public function test_nomor_order_salah_ketik_bisa_dibetulkan(): void
+    {
+        config(['nevira.enabled' => true, 'nevira.email' => 'a@b.c', 'nevira.password' => 'x']);
+
+        Http::fake([
+            '*/login' => Http::response(['access_token' => 'tok123'], 200),
+            '*/transactions/222' => Http::response(['data' => [
+                'id_transaction' => 222, 'transaction_number' => 'INV/BENAR',
+            ]], 200),
+        ]);
+
+        $cc = $this->userAs('customer_care');
+        $complaint = $this->makeComplaint(['nevira_transaction_id' => '111']);
+        $complaint->forceFill(['nevira_snapshot' => ['invoice' => 'INV/SALAH']])->save();
+
+        $this->actingAs($cc)->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_id' => '222']);
+
+        $complaint->refresh();
+
+        $this->assertSame('222', $complaint->nevira_transaction_id);
+        // Snapshot order lama tidak boleh tertinggal — itu data order orang lain.
+        $this->assertSame('INV/BENAR', $complaint->nevira_snapshot['invoice']);
+    }
+
+    public function test_melepas_tautan_membuang_snapshot_order_lama(): void
+    {
+        $cc = $this->userAs('customer_care');
+        $complaint = $this->makeComplaint(['nevira_transaction_id' => '111']);
+        $complaint->forceFill([
+            'nevira_snapshot'    => ['invoice' => 'INV/LAMA'],
+            'nevira_customer_id' => '999',
+        ])->save();
+
+        $this->actingAs($cc)->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_id' => '']);
+
+        $complaint->refresh();
+
+        $this->assertNull($complaint->nevira_transaction_id);
+        $this->assertNull($complaint->nevira_snapshot);
+        $this->assertNull($complaint->nevira_customer_id);
+    }
+
+    public function test_perubahan_tautan_tercatat_di_riwayat(): void
+    {
+        $cc = $this->userAs('customer_care');
+        $complaint = $this->makeComplaint();
+
+        $this->actingAs($cc)->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_id' => '31197']);
+
+        $note = $complaint->activities()->latest('id')->first()->note;
+
+        $this->assertStringContainsString('31197', $note);
+    }
+
+    public function test_kasir_tidak_bisa_menautkan_complaint_outlet_lain(): void
+    {
+        $a = $this->outlet('Outlet A');
+        $b = $this->outlet('Outlet B');
+        $kasir = $this->userAs('kasir', $a);
+
+        $lain = $this->makeComplaint(['outlet_id' => $b->id]);
+
+        $this->actingAs($kasir)
+            ->put('/complaints/'.$lain->id.'/link', ['nevira_transaction_id' => '31197'])
+            ->assertForbidden();
+
+        $this->assertNull($lain->fresh()->nevira_transaction_id);
+    }
+
     public function test_nomor_tiket_unik_dan_berurutan(): void
     {
         $a = $this->makeComplaint();

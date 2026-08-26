@@ -119,8 +119,27 @@
           @csrf<button class="ghost">Tarik Ulang dari NEVIRA</button>
         </form>
       @else
-        <p class="muted" style="margin:0">Complaint ini tidak tertaut ke order mana pun.</p>
+        <p class="muted" style="margin:0 0 14px">Complaint ini belum tertaut ke order.</p>
       @endif
+
+      {{-- Nomor order bisa dipasang atau dibetulkan kapan saja setelah complaint tersimpan. --}}
+      <details class="link-editor" @if(!$complaint->nevira_transaction_id) open @endif style="margin-top:14px">
+        <summary>{{ $complaint->nevira_transaction_id ? 'Betulkan nomor order' : 'Tautkan ke order sekarang' }}</summary>
+        <form method="POST" action="{{ route('complaints.link',$complaint) }}" style="margin-top:12px">
+          @csrf @method('PUT')
+          <label for="lnk">ID transaksi NEVIRA</label>
+          <input id="lnk" name="nevira_transaction_id" value="{{ $complaint->nevira_transaction_id }}"
+                 placeholder="Nomor ID transaksi dari struk">
+          <p class="hint">
+            @if($complaint->nevira_transaction_id)
+              Mengubah nomor akan membuang data order yang sekarang dan menariknya ulang. Kosongkan untuk melepas tautan.
+            @else
+              Isi kalau pelanggan sudah membawa struknya. Perubahan tercatat di riwayat.
+            @endif
+          </p>
+          <div style="margin-top:12px"><button class="ghost">Simpan Nomor Order</button></div>
+        </form>
+      </details>
     </div>
 
     <div class="card">

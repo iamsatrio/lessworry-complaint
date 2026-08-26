@@ -73,7 +73,8 @@
     <div id="nvbox" class="panel" style="display:none"></div>
     <p class="hint">
       Menautkan complaint ke order membuat riwayat cuciannya ikut terbaca.
-      Tidak punya nomornya? Lewati saja — complaint tetap tersimpan dan tautannya bisa dipasang nanti.
+      Tidak punya nomornya? Lewati saja — simpan complaint sekarang, lalu pasang nomornya
+      dari halaman complaint itu setelah pelanggan membawa struknya.
     </p>
   </div>
 </div>

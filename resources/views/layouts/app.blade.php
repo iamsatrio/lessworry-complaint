@@ -176,6 +176,12 @@ button:hover,.btn:hover{background:var(--teal-deep);color:#fff}
 .panel.bad{background:var(--danger-soft);border-color:#f3c4c4}
 .panel.good{background:var(--ok-soft);border-color:#bfe5d3}
 
+details.link-editor>summary{list-style:none;cursor:pointer;font-family:var(--display);font-weight:700;
+  font-size:13.5px;color:var(--teal-deep);padding:9px 0;display:flex;align-items:center;gap:7px;min-height:40px}
+details.link-editor>summary::-webkit-details-marker{display:none}
+details.link-editor>summary::before{content:"+";font-size:15px}
+details.link-editor[open]>summary::before{content:"–"}
+
 /* Saringan: terbuka di desktop, dilipat di HP supaya daftar tidak terdorong ke bawah */
 details.filters{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
   margin-bottom:18px;box-shadow:var(--shadow)}

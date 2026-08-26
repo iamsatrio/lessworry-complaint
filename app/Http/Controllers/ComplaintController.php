@@ -253,6 +253,64 @@ class ComplaintController extends Controller
         return back()->with('status', 'Catatan ditambahkan.');
     }
 
+    /**
+     * Pasang atau perbaiki tautan ke order NEVIRA setelah complaint tersimpan.
+     *
+     * Form intake menjanjikan complaint boleh disimpan tanpa nomor order dan
+     * ditautkan menyusul — janji itu perlu ada tempatnya. Ini juga jalan untuk
+     * membetulkan nomor yang salah ketik.
+     *
+     * Isi complaint tidak pernah diubah diam-diam: setiap perubahan tautan
+     * tercatat di riwayat beserta nomor lama dan barunya.
+     */
+    public function updateLink(Request $request, Complaint $complaint)
+    {
+        $user = $request->user();
+        abort_unless($user->canView($complaint), 403);
+
+        $data = $request->validate([
+            'nevira_transaction_id' => ['nullable', 'string', 'max:64'],
+        ], [], ['nevira_transaction_id' => 'ID transaksi NEVIRA']);
+
+        $new = trim((string) ($data['nevira_transaction_id'] ?? ''));
+        $old = (string) $complaint->nevira_transaction_id;
+
+        if ($new === $old) {
+            return back()->with('status', 'Nomor order tidak berubah.');
+        }
+
+        $complaint->forceFill([
+            'nevira_transaction_id' => $new !== '' ? $new : null,
+            // Snapshot lama milik order lain — buang, jangan sampai tertinggal
+            // dan menampilkan data order yang bukan miliknya.
+            'nevira_snapshot'    => null,
+            'nevira_customer_id' => null,
+            'nevira_synced_at'   => null,
+            'nevira_sync_error'  => null,
+        ])->save();
+
+        ComplaintActivity::create([
+            'complaint_id' => $complaint->id,
+            'user_id'      => $user->id,
+            'type'         => 'note',
+            'note'         => $old === ''
+                ? 'Ditautkan ke order NEVIRA '.$new
+                : ($new === ''
+                    ? 'Tautan ke order NEVIRA '.$old.' dilepas'
+                    : 'Tautan order NEVIRA diubah dari '.$old.' ke '.$new),
+        ]);
+
+        if ($new !== '') {
+            $this->syncNevira($complaint);
+
+            return back()->with('status', $complaint->fresh()->nevira_sync_error
+                ? 'Nomor order disimpan, tapi datanya belum bisa ditarik: '.$complaint->fresh()->nevira_sync_error
+                : 'Complaint tertaut ke order '.$new.'.');
+        }
+
+        return back()->with('status', 'Tautan order dilepas.');
+    }
+
     /** Coba tautkan ulang ke NEVIRA (dipakai saat sinkron pertama gagal). */
     public function resync(Complaint $complaint)
     {
