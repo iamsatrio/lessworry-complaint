@@ -21,6 +21,7 @@ class Complaint extends Model
             'due_resolution_at' => 'datetime',
             'first_response_at' => 'datetime',
             'resolved_at'      => 'datetime',
+            'responsibility_set_at' => 'datetime',
         ];
     }
 
@@ -37,6 +38,56 @@ class Complaint extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function responsibilitySetter()
+    {
+        return $this->belongsTo(User::class, 'responsibility_set_by');
+    }
+
+    /**
+     * Orang-orang yang menyentuh order ini menurut NEVIRA — kasir penerima
+     * dan setiap tahap produksi. Fakta, bukan tuduhan.
+     *
+     * @return array<int,array{stage:string,name:?string,nip:?string,status:?string,duration:?int}>
+     */
+    public function orderHandlers(): array
+    {
+        $snapshot = $this->nevira_snapshot ?? [];
+        $handlers = [];
+
+        if (! empty($snapshot['cashier_name'])) {
+            $handlers[] = [
+                'stage'    => 'Kasir penerima order',
+                'name'     => $snapshot['cashier_name'],
+                'nip'      => $snapshot['cashier_nip'] ?? null,
+                'staff_id' => $snapshot['cashier_id'] ?? null,
+                'status'   => null,
+                'duration' => null,
+            ];
+        }
+
+        foreach ($snapshot['processes'] ?? [] as $process) {
+            if (empty($process['staff_name'])) {
+                continue;
+            }
+
+            $handlers[] = [
+                'stage'    => $process['stage'] ?? 'Tahap produksi',
+                'name'     => $process['staff_name'],
+                'nip'      => $process['staff_nip'] ?? null,
+                'staff_id' => $process['staff_id'] ?? null,
+                'status'   => $process['status'] ?? null,
+                'duration' => $process['duration'] ?? null,
+            ];
+        }
+
+        return $handlers;
+    }
+
+    public function hasResponsibility(): bool
+    {
+        return filled($this->responsible_staff_name);
     }
 
     public function activities()

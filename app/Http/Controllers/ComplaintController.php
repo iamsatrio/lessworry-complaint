@@ -311,6 +311,94 @@ class ComplaintController extends Controller
         return back()->with('status', 'Tautan order dilepas.');
     }
 
+    /**
+     * Tetapkan siapa yang bertanggung jawab atas akar masalah complaint.
+     *
+     * Sistem TIDAK menyimpulkan ini sendiri. NEVIRA hanya memberi tahu siapa
+     * mengerjakan tahap apa; menautkan keluhan ke satu orang adalah penilaian,
+     * dan penilaian harus punya nama pembuatnya.
+     *
+     * Karena itu setiap penetapan menyimpan siapa yang menetapkan, kapan, dan
+     * alasannya — lalu ikut tercatat di riwayat complaint.
+     */
+    public function setResponsibility(Request $request, Complaint $complaint)
+    {
+        $user = $request->user();
+        abort_unless($user->canView($complaint), 403);
+        abort_unless($user->canAssignResponsibility(), 403);
+
+        $data = $request->validate([
+            'responsible_staff_name' => ['nullable', 'string', 'max:120'],
+            'responsible_staff_nip'  => ['nullable', 'string', 'max:40'],
+            'responsible_staff_id'   => ['nullable', 'integer'],
+            'responsible_stage'      => ['nullable', 'string', 'max:80'],
+            'responsibility_note'    => ['required_with:responsible_staff_name', 'nullable', 'string'],
+        ], [
+            'responsibility_note.required_with' => 'Tulis alasannya. Menunjuk orang tanpa alasan tidak bisa ditinjau ulang.',
+        ], [
+            'responsible_staff_name' => 'nama karyawan',
+            'responsibility_note'    => 'alasan',
+        ]);
+
+        $name = trim((string) ($data['responsible_staff_name'] ?? ''));
+        $previous = $complaint->responsible_staff_name;
+
+        if ($name === '') {
+            DB::transaction(function () use ($complaint, $user, $previous) {
+                $complaint->forceFill([
+                    'responsible_staff_id'   => null,
+                    'responsible_staff_name' => null,
+                    'responsible_staff_nip'  => null,
+                    'responsible_stage'      => null,
+                    'responsibility_note'    => null,
+                    'responsibility_set_by'  => null,
+                    'responsibility_set_at'  => null,
+                ])->save();
+
+                if ($previous) {
+                    ComplaintActivity::create([
+                        'complaint_id' => $complaint->id,
+                        'user_id'      => $user->id,
+                        'type'         => 'note',
+                        'note'         => 'Penetapan penanggung jawab ('.$previous.') dicabut.',
+                    ]);
+                }
+            });
+
+            return back()->with('status', 'Penetapan penanggung jawab dicabut.');
+        }
+
+        $stage  = $data['responsible_stage'] ?? null;
+        $reason = $data['responsibility_note'] ?? null;
+
+        // Penetapan dan jejaknya harus jatuh bersama. Penetapan yang tersimpan
+        // tanpa catatan riwayat adalah tuduhan tanpa asal-usul.
+        DB::transaction(function () use ($complaint, $data, $user, $name, $previous, $stage, $reason) {
+            $complaint->forceFill([
+                'responsible_staff_id'   => $data['responsible_staff_id'] ?? null,
+                'responsible_staff_name' => $name,
+                'responsible_staff_nip'  => $data['responsible_staff_nip'] ?? null,
+                'responsible_stage'      => $stage,
+                'responsibility_note'    => $reason,
+                'responsibility_set_by'  => $user->id,
+                'responsibility_set_at'  => now(),
+            ])->save();
+
+            ComplaintActivity::create([
+                'complaint_id' => $complaint->id,
+                'user_id'      => $user->id,
+                'type'         => 'note',
+                'note'         => ($previous && $previous !== $name)
+                    ? 'Penanggung jawab diubah dari '.$previous.' ke '.$name.'. Alasan: '.$reason
+                    : 'Penanggung jawab ditetapkan: '.$name
+                        .($stage ? ' (tahap '.$stage.')' : '')
+                        .'. Alasan: '.$reason,
+            ]);
+        });
+
+        return back()->with('status', 'Penanggung jawab ditetapkan: '.$name.'.');
+    }
+
     /** Coba tautkan ulang ke NEVIRA (dipakai saat sinkron pertama gagal). */
     public function resync(Complaint $complaint)
     {

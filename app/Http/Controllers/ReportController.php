@@ -33,6 +33,18 @@ class ReportController extends Controller
             'byCategory'  => $complaints->groupBy('category')->map->count()->sortDesc(),
             'byChannel'   => $complaints->groupBy('channel')->map->count()->sortDesc(),
             'byOutlet'    => $complaints->groupBy(fn ($c) => $c->outlet?->name ?? 'Tanpa outlet')->map->count()->sortDesc(),
+            // Rekap per karyawan hanya untuk yang berwenang melihatnya.
+            'byStaff'     => $user->canSeeStaffAttribution()
+                ? $complaints->whereNotNull('responsible_staff_name')
+                    ->groupBy('responsible_staff_name')
+                    ->map(fn ($group) => [
+                        'total'  => $group->count(),
+                        'nip'    => $group->first()->responsible_staff_nip,
+                        'stages' => $group->pluck('responsible_stage')->filter()->unique()->values()->all(),
+                    ])
+                    ->sortByDesc('total')
+                : collect(),
+            'unattributed' => $complaints->whereNull('responsible_staff_name')->count(),
             'repeat'      => $complaints->whereNotNull('reporter_phone')
                 ->groupBy('reporter_phone')->filter(fn ($g) => $g->count() > 1)
                 ->map(fn ($g) => ['name' => $g->first()->reporter_name, 'count' => $g->count()]),
@@ -51,12 +63,15 @@ class ReportController extends Controller
             ->with(['outlet', 'assignee'])
             ->get();
 
-        return response()->streamDownload(function () use ($complaints) {
+        $showStaff = $user->canSeeStaffAttribution();
+
+        return response()->streamDownload(function () use ($complaints, $showStaff) {
             $out = fopen('php://output', 'w');
             fputcsv($out, [
                 'Nomor Tiket', 'Dibuat', 'Kanal', 'Outlet', 'Pelapor', 'Telepon',
                 'ID Transaksi NEVIRA', 'Kategori', 'Prioritas', 'Status',
                 'Penanggung Jawab', 'Selesai', 'Menit Penyelesaian', 'Kompensasi', 'Lewat SLA',
+                ...($showStaff ? ['Karyawan Penanggung Jawab', 'NIP', 'Tahap', 'Alasan'] : []),
             ]);
 
             foreach ($complaints as $c) {
@@ -76,6 +91,12 @@ class ReportController extends Controller
                     $c->resolutionMinutes(),
                     $c->compensation_amount,
                     $c->isOverdue() ? 'YA' : 'tidak',
+                    ...($showStaff ? [
+                        $c->responsible_staff_name,
+                        $c->responsible_staff_nip,
+                        $c->responsible_stage,
+                        $c->responsibility_note,
+                    ] : []),
                 ]);
             }
 

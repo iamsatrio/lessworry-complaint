@@ -72,6 +72,10 @@
         <div style="margin-top:12px"><button class="ghost">Simpan Catatan</button></div>
       </form>
     </div>
+
+    @if(auth()->user()->canSeeStaffAttribution())
+      @include('complaints._staff')
+    @endif
   </div>
 
   <div>
@@ -88,7 +92,10 @@
             <dt>Status order</dt><dd>{{ $nv['status'] ?? '—' }}@if(!empty($nv['progress'])) · {{ $nv['progress'] }}%@endif</dd>
             <dt>Pembayaran</dt><dd>{{ $nv['payment_status'] ?? '—' }}</dd>
             <dt>Total</dt><dd>@if(isset($nv['grand_total']))Rp {{ number_format((int) $nv['grand_total'],0,',','.') }}@else—@endif</dd>
-            @if(!empty($nv['cashier_name']))<dt>Kasir</dt><dd>{{ $nv['cashier_name'] }}</dd>@endif
+            {{-- Nama kasir menyangkut penilaian kerja orang: hanya untuk yang berwenang. --}}
+            @if(!empty($nv['cashier_name']) && auth()->user()->canSeeStaffAttribution())
+              <dt>Kasir</dt><dd>{{ $nv['cashier_name'] }}</dd>
+            @endif
             @if(!empty($nv['estimated_done']))
               <dt>Estimasi selesai</dt><dd>{{ \Illuminate\Support\Carbon::parse($nv['estimated_done'])->translatedFormat('d M Y, H:i') }}</dd>
             @endif

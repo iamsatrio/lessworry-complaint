@@ -81,6 +81,22 @@ class User extends Authenticatable
         return in_array($this->role, ['customer_care', 'supervisor'], true);
     }
 
+    /**
+     * Data siapa-mengerjakan-apa menyangkut penilaian kerja orang. Hanya
+     * Customer Care dan supervisor yang boleh melihatnya — kasir tidak
+     * perlu bisa menelusuri catatan rekannya.
+     */
+    public function canSeeStaffAttribution(): bool
+    {
+        return in_array($this->role, ['customer_care', 'supervisor'], true);
+    }
+
+    /** Menetapkan penanggung jawab adalah penilaian, bukan pencatatan. */
+    public function canAssignResponsibility(): bool
+    {
+        return in_array($this->role, ['customer_care', 'supervisor'], true);
+    }
+
     public function canManageUsers(): bool
     {
         return $this->role === 'supervisor';

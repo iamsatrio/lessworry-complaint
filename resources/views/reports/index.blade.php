@@ -58,6 +58,37 @@
   </div>
   @endforeach
 
+  @if(auth()->user()->canSeeStaffAttribution())
+  <div class="card">
+    <div class="eyebrow">Complaint per karyawan</div>
+    @forelse($byStaff as $name => $info)
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)">
+        <div>
+          <b class="display">{{ $name }}</b>
+          @if($info['nip'])<span class="muted small" style="font-family:var(--mono)"> · {{ $info['nip'] }}</span>@endif
+          @if($info['stages'])<div class="muted small">{{ implode(', ', $info['stages']) }}</div>@endif
+        </div>
+        <b>{{ $info['total'] }}</b>
+      </div>
+    @empty
+      <p class="muted" style="margin:0">Belum ada complaint yang ditetapkan penanggung jawabnya pada periode ini.</p>
+    @endforelse
+
+    @if($unattributed > 0)
+      <p class="hint">{{ $unattributed }} complaint belum ditetapkan penanggung jawabnya, jadi tidak masuk hitungan di atas.</p>
+    @endif
+
+    <div class="panel" style="margin-top:14px">
+      <b>Angka ini belum bisa dipakai menilai orang.</b>
+      <div style="margin-top:6px">
+        Ini jumlah complaint, bukan tingkat kesalahan. Karyawan yang menangani tiga kali lebih banyak
+        order wajar muncul lebih sering tanpa bekerja lebih buruk. Pakai untuk memilih apa yang
+        ditelusuri berikutnya, bukan sebagai dasar sanksi.
+      </div>
+    </div>
+  </div>
+  @endif
+
   <div class="card">
     <div class="eyebrow">Pelanggan yang komplain berulang</div>
     @forelse($repeat as $phone => $info)

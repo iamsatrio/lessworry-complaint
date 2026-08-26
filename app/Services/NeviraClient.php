@@ -168,6 +168,25 @@ class NeviraClient
             'outlet_id'       => $d['id_outlet'] ?? null,
             'outlet_name'     => $d['outlet_name'] ?? ($outlet['outlet_name'] ?? null),
             'cashier_name'    => $d['cashier']['username'] ?? null,
+            'cashier_id'      => $d['id_cashier'] ?? null,
+            'cashier_nip'     => $d['cashier']['nip'] ?? null,
+
+            // Jejak produksi: siapa mengerjakan tahap apa, berapa lama.
+            // Dipakai untuk menelusuri complaint hasil cuci sampai ke tahapnya.
+            'processes'       => collect($d['services'] ?? [])
+                ->flatMap(fn ($service) => collect($service['processes'] ?? [])
+                    ->map(fn ($p) => [
+                        'stage'        => $p['process_name'] ?? null,
+                        'staff_id'     => $p['id_staff'] ?? null,
+                        'staff_name'   => $p['staff_name'] ?? null,
+                        'staff_nip'    => $p['nip'] ?? null,
+                        'status'       => $p['status'] ?? null,
+                        'started_at'   => $p['started_at'] ?? null,
+                        'completed_at' => $p['completed_at'] ?? null,
+                        'duration'     => $p['total_duration'] ?? null,
+                        'notes'        => $p['notes'] ?? null,
+                    ]))
+                ->values()->all(),
             'services'        => collect($d['services'] ?? [])
                 ->map(fn ($s) => [
                     'name'     => $s['service']['service_name'] ?? ($s['service_number'] ?? null),
