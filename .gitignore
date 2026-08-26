@@ -1,32 +1,46 @@
+!.env.example
+# Build output
+# Dependencies
 # Environment & secrets
+# Laravel runtime
+# Local & editor
+*.key
+*.log
+*.pem
+*.sqlite
+.DS_Store
 .env
 .env.*
-!.env.example
-*.pem
-*.key
-auth.json
-
-# Dependencies
-/vendor
+.env.backup
+.env.production
+.idea
+.phpactor.json
+.phpunit.result.cache
+.vscode
+/.codex
+/.cursor/
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+/bootstrap/cache/*
+/dist
 /node_modules
-
-# Build output
 /public/build
+/public/fonts-manifest.dev.json
 /public/hot
 /public/storage
-/dist
-
-# Laravel runtime
 /storage/*.key
 /storage/framework/cache/*
 /storage/framework/sessions/*
 /storage/framework/views/*
 /storage/logs/*
-/bootstrap/cache/*
-
-# Local & editor
-.DS_Store
-.idea
-.vscode
-*.log
-*.sqlite
+/storage/pail
+/vendor
+Homestead.json
+Homestead.yaml
+Thumbs.db
+_ide_helper.php
+auth.json

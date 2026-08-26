@@ -1,0 +1,89 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\Complaint;
+use App\Models\ComplaintActivity;
+use App\Models\Outlet;
+use App\Models\User;
+use Illuminate\Database\Seeder;
+
+class DatabaseSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $pusat = Outlet::create(['name' => 'Outlet Pusat', 'nevira_outlet_id' => '1']);
+        $cabang = Outlet::create(['name' => 'Outlet Cabang 2', 'nevira_outlet_id' => '2']);
+
+        // Password contoh untuk lingkungan pengembangan. WAJIB diganti sebelum produksi.
+        $pw = 'password';
+
+        $supervisor = User::create([
+            'name' => 'Satrio Wibowo', 'email' => 'satrio@lessworry.id',
+            'password' => $pw, 'role' => 'supervisor', 'must_change_password' => true,
+        ]);
+
+        $cc = User::create([
+            'name' => 'Customer Care', 'email' => 'cc@lessworry.id',
+            'password' => $pw, 'role' => 'customer_care', 'must_change_password' => true,
+        ]);
+
+        $kasir = User::create([
+            'name' => 'Kasir Pusat', 'email' => 'kasir@lessworry.id',
+            'password' => $pw, 'role' => 'kasir', 'outlet_id' => $pusat->id, 'must_change_password' => true,
+        ]);
+
+        User::create([
+            'name' => 'Divisi Produksi', 'email' => 'produksi@lessworry.id',
+            'password' => $pw, 'role' => 'divisi', 'division' => 'produksi', 'must_change_password' => true,
+        ]);
+
+        // Contoh complaint supaya papan kerja dan laporan tidak kosong saat pertama dibuka.
+        $samples = [
+            ['wa_cc', 'Ibu Rina', '081234567801', 'hasil_cuci', 'Masih kotor', 'urgent', 'baru',
+             'Kemeja putih masih ada noda di bagian kerah setelah dicuci.', $pusat->id, '-3 hours', null],
+            ['kasir', 'Pak Budi', '081234567802', 'barang_hilang', 'Item kurang', 'high', 'ditangani',
+             'Pelanggan menghitung 12 potong saat menyerahkan, yang kembali 11 potong.', $pusat->id, '-26 hours', null],
+            ['wa_outlet', 'Mbak Sinta', '081234567803', 'keterlambatan', 'Telat selesai', 'medium', 'selesai',
+             'Dijanjikan selesai Selasa, baru bisa diambil Kamis.', $cabang->id, '-5 days', '-4 days'],
+            ['wa_cc', 'Ibu Rina', '081234567801', 'salah_tagih', 'Berat tidak sesuai', 'medium', 'selesai',
+             'Ditagih 5kg padahal timbangan menunjukkan 4,2kg.', $pusat->id, '-8 days', '-8 days'],
+            ['kasir', 'Pak Deni', '081234567804', 'hasil_cuci', 'Bau', 'high', 'menunggu_pelanggan',
+             'Cucian bau apek. Diminta membawa kembali untuk dicuci ulang.', $cabang->id, '-2 days', null],
+        ];
+
+        foreach ($samples as [$channel, $name, $phone, $cat, $sub, $priority, $status, $desc, $outletId, $created, $resolved]) {
+            $complaint = new Complaint([
+                'channel' => $channel, 'reporter_name' => $name, 'reporter_phone' => $phone,
+                'category' => $cat, 'sub_category' => $sub, 'priority' => $priority,
+                'status' => $status, 'description' => $desc, 'outlet_id' => $outletId,
+            ]);
+
+            $complaint->created_at = now()->parse($created);
+            $complaint->updated_at = $complaint->created_at;
+            $complaint->ticket_number = Complaint::nextTicketNumber();
+            $complaint->created_by = $channel === 'kasir' ? $kasir->id : $cc->id;
+            $complaint->assigned_to = $status === 'baru' ? null : $cc->id;
+            $complaint->applySla();
+
+            if ($status !== 'baru') {
+                $complaint->first_response_at = $complaint->created_at->copy()->addMinutes(35);
+            }
+
+            if ($resolved) {
+                $complaint->resolved_at = now()->parse($resolved);
+                $complaint->resolution = 'Dicuci ulang tanpa biaya dan diantar ke pelanggan.';
+                $complaint->root_cause = 'Proses pemeriksaan akhir terlewat saat jam sibuk.';
+                $complaint->compensation_amount = 25000;
+            }
+
+            $complaint->save();
+
+            ComplaintActivity::create([
+                'complaint_id' => $complaint->id, 'user_id' => $complaint->created_by,
+                'type' => 'created', 'to_status' => 'baru',
+                'note' => 'Complaint dibuat lewat '.$complaint->channelLabel(),
+            ]);
+        }
+    }
+}
