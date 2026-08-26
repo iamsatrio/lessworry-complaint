@@ -16,26 +16,39 @@ class DatabaseSeeder extends Seeder
         $cabang = Outlet::create(['name' => 'Outlet Cabang 2', 'nevira_outlet_id' => '2']);
 
         // Password contoh untuk lingkungan pengembangan. WAJIB diganti sebelum produksi.
+        //
+        // Akun demo di bawah sengaja TIDAK ditandai must_change_password supaya
+        // sistem bisa langsung ditelusuri. Akun sungguhan yang dibuat lewat
+        // halaman Pengguna selalu memakai password sementara dan wajib diganti
+        // saat pertama masuk.
         $pw = 'password';
 
         $supervisor = User::create([
             'name' => 'Satrio Wibowo', 'email' => 'satrio@lessworry.id',
-            'password' => $pw, 'role' => 'supervisor', 'must_change_password' => true,
+            'password' => $pw, 'role' => 'supervisor',
         ]);
 
         $cc = User::create([
             'name' => 'Customer Care', 'email' => 'cc@lessworry.id',
-            'password' => $pw, 'role' => 'customer_care', 'must_change_password' => true,
+            'password' => $pw, 'role' => 'customer_care',
         ]);
 
         $kasir = User::create([
             'name' => 'Kasir Pusat', 'email' => 'kasir@lessworry.id',
-            'password' => $pw, 'role' => 'kasir', 'outlet_id' => $pusat->id, 'must_change_password' => true,
+            'password' => $pw, 'role' => 'kasir', 'outlet_id' => $pusat->id,
         ]);
 
         User::create([
             'name' => 'Divisi Produksi', 'email' => 'produksi@lessworry.id',
-            'password' => $pw, 'role' => 'divisi', 'division' => 'produksi', 'must_change_password' => true,
+            'password' => $pw, 'role' => 'divisi', 'division' => 'produksi',
+        ]);
+
+        // Satu akun contoh yang masih memegang password sementara, supaya alur
+        // "wajib ganti password saat pertama masuk" bisa dilihat langsung.
+        User::create([
+            'name' => 'Kasir Cabang (baru)', 'email' => 'kasirbaru@lessworry.id',
+            'password' => $pw, 'role' => 'kasir', 'outlet_id' => $cabang->id,
+            'must_change_password' => true,
         ]);
 
         // Contoh complaint supaya papan kerja dan laporan tidak kosong saat pertama dibuka.

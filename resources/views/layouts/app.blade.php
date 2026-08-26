@@ -236,6 +236,9 @@ details.filters .body{padding:0 22px 20px}
       <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">Dashboard</a>
       <a href="{{ route('complaints.index') }}" class="{{ request()->routeIs('complaints.index') ? 'active' : '' }}">Papan Kerja</a>
       <a href="{{ route('reports.index') }}" class="{{ request()->routeIs('reports.*') ? 'active' : '' }}">Laporan</a>
+      @if(auth()->user()->canManageUsers())
+        <a href="{{ route('users.index') }}" class="{{ request()->routeIs('users.*') ? 'active' : '' }}">Pengguna</a>
+      @endif
       @if(auth()->user()->canCreateComplaint())
         <a href="{{ route('complaints.create') }}" class="cta">Catat Complaint</a>
       @endif

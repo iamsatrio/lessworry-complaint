@@ -4,7 +4,40 @@ Aplikasi web internal untuk mencatat dan menangani keluhan pelanggan Less Worry,
 
 ## Status
 
-Tahap awal. Belum ada kode aplikasi — keputusan arsitektur dan tech stack masih berjalan.
+Aplikasi Laravel yang berjalan. Terhubung ke NEVIRA POS (hanya baca) dan sudah diverifikasi terhadap data produksi.
+
+## Menjalankan secara lokal
+
+```bash
+composer install
+cp .env.example .env
+php artisan key:generate
+touch database/database.sqlite
+php artisan migrate --seed
+php artisan serve
+```
+
+Akun contoh (hanya untuk pengembangan, password `password`):
+
+| Peran | Email |
+|---|---|
+| Supervisor | `satrio@lessworry.id` |
+| Customer Care | `cc@lessworry.id` |
+| Kasir | `kasir@lessworry.id` |
+| Divisi Produksi | `produksi@lessworry.id` |
+
+`kasirbaru@lessworry.id` sengaja masih memegang password sementara, untuk melihat alur wajib-ganti-password.
+
+## Dokumentasi
+
+- `docs/nevira-api.md` — kontrak integrasi NEVIRA, termasuk jebakan header `Bearer`
+- `docs/deploy.md` — daftar periksa sebelum produksi
+
+## Pengujian
+
+```bash
+php artisan test
+```
 
 ## Pelacakan pekerjaan
 
