@@ -38,7 +38,7 @@
     kalau sempat dijadwalkan ulang.
   </p>
 </div>
-@elseif($complaint->nevira_transaction_id && $complaint->nevira_synced_at)
+@elseif($complaint->isLinkedToOrder() && $complaint->nevira_synced_at)
 <div class="card">
   <div class="eyebrow">Perjalanan kurir</div>
   <p class="muted" style="margin:0">

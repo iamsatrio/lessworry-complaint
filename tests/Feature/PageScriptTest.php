@@ -100,7 +100,7 @@ class PageScriptTest extends TestCase
     {
         $this->actingAs($this->userAs('customer_care'))
             ->get('/complaints/create')
-            ->assertSee('name="nevira_transaction_id"', false)
+            ->assertSee('name="nevira_transaction_number"', false)
             ->assertSee('id="cek"', false)
             ->assertSee('id="nvbox"', false);
     }

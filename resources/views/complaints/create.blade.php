@@ -67,7 +67,7 @@
     <div class="eyebrow">Order di NEVIRA</div>
     <label for="nv">Nomor nota NEVIRA <span class="req">*</span></label>
     <div style="display:flex;gap:10px">
-      <input id="nv" name="nevira_transaction_id" value="{{ old('nevira_transaction_id') }}"
+      <input id="nv" name="nevira_transaction_number" value="{{ old('nevira_transaction_number') }}"
              placeholder="Salin dari struk, mis. INV/118/1787749345365/1">
       <button type="button" class="ghost shrink" id="cek">Cek</button>
     </div>
@@ -183,8 +183,9 @@ async function cekNota(){
 
     if (j.ok) {
       const d = j.data;
-      // Simpan ID numerik NEVIRA — endpoint detail hanya menerima yang numerik.
-      if (j.id) nvInput.value = j.id;
+      // Kolom tetap memegang nomor nota. Id internal NEVIRA tidak pernah
+      // dikirim ke browser, apalagi ditulis balik ke layar.
+      if (d.invoice) nvInput.value = d.invoice;
       terakhirDicek = nvInput.value;
       if (exempt) exempt.value = '';
       if (nm && d.customer_name && !nm.value) nm.value = d.customer_name;

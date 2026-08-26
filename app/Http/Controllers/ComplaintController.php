@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Complaint;
 use App\Models\ComplaintActivity;
+use App\Models\ComplaintAttachment;
 use App\Models\Outlet;
 use App\Models\User;
 use App\Services\NeviraClient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Throwable;
 
@@ -76,8 +78,8 @@ class ComplaintController extends Controller
             'channel'               => ['required', Rule::in(array_keys(config('complaint.channels')))],
             'reporter_name'         => ['required', 'string', 'max:120'],
             'reporter_phone'        => ['nullable', 'string', 'max:30'],
-            'nevira_transaction_id' => ['required_without:nota_exemption', 'nullable', 'string', 'max:64'],
-            'nota_exemption'        => ['required_without:nevira_transaction_id', 'nullable', Rule::in(array_keys(config('complaint.nota_exemptions')))],
+            'nevira_transaction_number' => ['required_without:nota_exemption', 'nullable', 'string', 'max:64'],
+            'nota_exemption'            => ['required_without:nevira_transaction_number', 'nullable', Rule::in(array_keys(config('complaint.nota_exemptions')))],
             'outlet_id'             => ['nullable', 'exists:outlets,id'],
             'category'              => ['required', Rule::in(array_keys(config('complaint.categories')))],
             'sub_category'          => ['nullable', 'string', 'max:120'],
@@ -85,15 +87,15 @@ class ComplaintController extends Controller
             'description'           => ['required', 'string'],
             'attachments.*'         => ['nullable', 'image', 'max:5120'],
         ], [
-            'nevira_transaction_id.required_without' => 'Isi nomor nota NEVIRA, atau pilih alasan kenapa complaint ini tidak punya nota.',
-            'nota_exemption.required_without'        => 'Pilih alasan kenapa complaint ini tidak punya nomor nota.',
+            'nevira_transaction_number.required_without' => 'Isi nomor nota NEVIRA, atau pilih alasan kenapa complaint ini tidak punya nota.',
+            'nota_exemption.required_without'            => 'Pilih alasan kenapa complaint ini tidak punya nomor nota.',
         ], [
-            'nevira_transaction_id' => 'nomor nota',
-            'nota_exemption'        => 'alasan tanpa nota',
+            'nevira_transaction_number' => 'nomor nota',
+            'nota_exemption'            => 'alasan tanpa nota',
         ]);
 
         // Nota terisi berarti tidak ada pengecualian yang berlaku.
-        if (filled($data['nevira_transaction_id'] ?? null)) {
+        if (filled($data['nevira_transaction_number'] ?? null)) {
             $data['nota_exemption'] = null;
         }
 
@@ -120,7 +122,10 @@ class ComplaintController extends Controller
             ]);
 
             foreach ($request->file('attachments', []) as $file) {
-                $path = $file->store('complaints/'.$complaint->id, 'public');
+                // Disk privat, bukan 'public'. Foto bukti berisi barang dan
+                // kadang wajah pelanggan; di disk publik siapa pun yang
+                // memegang URL bisa membukanya tanpa login.
+                $path = $file->store('complaints/'.$complaint->id, 'local');
                 $complaint->attachments()->create([
                     'path'          => $path,
                     'original_name' => $file->getClientOriginalName(),
@@ -132,7 +137,7 @@ class ComplaintController extends Controller
 
         // Tarik data order NEVIRA kalau ID diisi. Kegagalan tidak boleh
         // membatalkan complaint — dicatat, bisa dicoba lagi nanti. (API-8)
-        if (filled($complaint->nevira_transaction_id)) {
+        if (filled($complaint->nevira_transaction_number)) {
             $this->syncNevira($complaint);
         }
 
@@ -281,20 +286,21 @@ class ComplaintController extends Controller
         abort_unless($user->canView($complaint), 403);
 
         $data = $request->validate([
-            'nevira_transaction_id' => ['nullable', 'string', 'max:64'],
-            'nota_exemption'        => ['nullable', Rule::in(array_keys(config('complaint.nota_exemptions')))],
-        ], [], ['nevira_transaction_id' => 'nomor nota']);
+            'nevira_transaction_number' => ['nullable', 'string', 'max:64'],
+            'nota_exemption'            => ['nullable', Rule::in(array_keys(config('complaint.nota_exemptions')))],
+        ], [], ['nevira_transaction_number' => 'nomor nota']);
 
-        $new = trim((string) ($data['nevira_transaction_id'] ?? ''));
-        $old = (string) $complaint->nevira_transaction_id;
+        $new = trim((string) ($data['nevira_transaction_number'] ?? ''));
+        $old = (string) $complaint->nevira_transaction_number;
 
         if ($new === $old) {
             return back()->with('status', 'Nomor order tidak berubah.');
         }
 
         $complaint->forceFill([
-            'nevira_transaction_id' => $new !== '' ? $new : null,
-            'nota_exemption'        => $new !== '' ? null : ($data['nota_exemption'] ?? $complaint->nota_exemption),
+            'nevira_transaction_number' => $new !== '' ? $new : null,
+            'nevira_transaction_id'     => null,
+            'nota_exemption'            => $new !== '' ? null : ($data['nota_exemption'] ?? $complaint->nota_exemption),
             // Snapshot lama milik order lain — buang, jangan sampai tertinggal
             // dan menampilkan data order yang bukan miliknya.
             'nevira_snapshot'    => null,
@@ -413,6 +419,23 @@ class ComplaintController extends Controller
         return back()->with('status', 'Penanggung jawab ditetapkan: '.$name.'.');
     }
 
+    /**
+     * Sajikan foto bukti lewat pemeriksaan wewenang.
+     *
+     * Sebelumnya berkas ini duduk di disk publik: siapa pun yang memegang
+     * URL-nya bisa membuka foto barang pelanggan tanpa login sama sekali.
+     */
+    public function attachment(Request $request, Complaint $complaint, ComplaintAttachment $attachment)
+    {
+        abort_unless($request->user()->canView($complaint), 403);
+        abort_unless($attachment->complaint_id === $complaint->id, 404);
+        abort_unless(Storage::disk('local')->exists($attachment->path), 404);
+
+        return Storage::disk('local')->response($attachment->path, $attachment->original_name, [
+            'Cache-Control' => 'private, max-age=0, no-store',
+        ]);
+    }
+
     /** Coba tautkan ulang ke NEVIRA (dipakai saat sinkron pertama gagal). */
     public function resync(Complaint $complaint)
     {
@@ -450,7 +473,7 @@ class ComplaintController extends Controller
     private function syncNevira(Complaint $complaint): void
     {
         try {
-            $resolved = $this->nevira->resolveTransaction($complaint->nevira_transaction_id);
+            $resolved = $this->nevira->resolveTransaction($complaint->nevira_transaction_number);
             $summary  = $this->nevira->summarizeTransaction($resolved['payload']);
 
             // Perjalanan kurir ditarik terpisah: detail transaksi tidak
@@ -467,9 +490,10 @@ class ComplaintController extends Controller
             }
 
             $complaint->forceFill([
-                // Simpan id numerik hasil pencarian supaya penarikan berikutnya
-                // langsung ke detail, tanpa mencari ulang.
-                'nevira_transaction_id' => $resolved['id'],
+                // Id internal disimpan untuk panggilan API berikutnya, dan
+                // tidak pernah dirender ke halaman mana pun.
+                'nevira_transaction_id'     => $resolved['id'],
+                'nevira_transaction_number' => $resolved['number'] ?? $complaint->nevira_transaction_number,
                 'nevira_snapshot'    => $summary,
                 'nevira_customer_id' => $summary['customer_id'] ?? null,
                 'nevira_synced_at'   => now(),

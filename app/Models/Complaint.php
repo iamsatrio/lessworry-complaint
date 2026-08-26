@@ -10,7 +10,18 @@ class Complaint extends Model
 {
     use HasFactory;
 
-    protected $guarded = ['id'];
+    /**
+     * Ditulis eksplisit, bukan $guarded. Kolom yang menyangkut hasil
+     * penelusuran (snapshot NEVIRA, penanggung jawab, id internal, stempel
+     * waktu SLA) hanya boleh diisi lewat jalur yang memeriksa wewenang,
+     * tidak lewat request pengguna.
+     */
+    protected $fillable = [
+        'channel', 'reporter_name', 'reporter_phone',
+        'nevira_transaction_number', 'nota_exemption',
+        'outlet_id', 'category', 'sub_category', 'priority',
+        'description', 'assigned_to', 'forwarded_division',
+    ];
 
     protected function casts(): array
     {
@@ -119,6 +130,17 @@ class Complaint extends Model
         return $this->nota_exemption
             ? config('complaint.nota_exemptions.'.$this->nota_exemption, $this->nota_exemption)
             : null;
+    }
+
+    /** Yang ditampilkan ke petugas adalah nomor nota, bukan id internal NEVIRA. */
+    public function orderLabel(): ?string
+    {
+        return $this->nevira_transaction_number;
+    }
+
+    public function isLinkedToOrder(): bool
+    {
+        return filled($this->nevira_transaction_number);
     }
 
     public function hasResponsibility(): bool

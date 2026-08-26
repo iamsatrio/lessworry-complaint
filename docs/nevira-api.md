@@ -117,3 +117,19 @@ data.promos   []  { promo_name, promo_type, value_type, value }
 Lewat environment variable saja — `NEVIRA_EMAIL`, `NEVIRA_PASSWORD`. Lihat `.env.example`.
 
 Gunakan **service account** khusus integrasi dengan hak baca secukupnya. Jangan memakai akun pribadi: kalau orangnya ganti password, integrasi mati, dan hak aksesnya jauh lebih luas daripada yang dibutuhkan.
+
+
+## Yang tidak boleh keluar dari server
+
+`id_transaction` adalah pengenal internal basis data NEVIRA. Nilainya **tidak pernah** dikirim ke browser, tidak ditampilkan di halaman mana pun, dan tidak disimpan di `nevira_snapshot`.
+
+Yang jadi pegangan petugas — dan satu-satunya yang tampil — adalah **nomor nota** (`transaction_number`), karena itu yang tercetak di struk pelanggan.
+
+Di basis data complaint keduanya dipisah:
+
+| Kolom | Isi | Boleh tampil |
+|---|---|---|
+| `nevira_transaction_number` | Nomor nota dari struk | ya |
+| `nevira_transaction_id` | Id internal NEVIRA | **tidak** |
+
+Endpoint `/nevira/lookup` juga hanya menerima nomor nota yang **cocok persis**. Pencarian sebagian ditolak: dulu mengetik `INV` saja mengembalikan order pelanggan mana pun, sehingga endpoint itu praktis jadi alat menyisir basis data NEVIRA.

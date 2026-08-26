@@ -17,8 +17,9 @@ class DeliveryTest extends TestCase
     {
         $c = new Complaint(array_merge([
             'channel' => 'wa_cc', 'reporter_name' => 'Pelanggan', 'category' => 'keterlambatan',
-            'priority' => 'medium', 'status' => 'baru', 'description' => 'Keluhan uji',
+            'priority' => 'medium', 'description' => 'Keluhan uji',
         ], $attrs));
+        $c->status = $attrs['status'] ?? 'baru';
         $c->ticket_number = Complaint::nextTicketNumber();
         $c->created_at = now();
         $c->applySla();
@@ -90,7 +91,7 @@ class DeliveryTest extends TestCase
         $this->actingAs($cc)->post('/complaints', [
             'channel' => 'wa_cc', 'reporter_name' => 'Tuti', 'category' => 'keterlambatan',
             'priority' => 'high', 'description' => 'Telat diantar',
-            'nevira_transaction_id' => '832',
+            'nevira_transaction_number' => '832',
         ]);
 
         $deliveries = Complaint::latest('id')->first()->deliveries();
@@ -119,7 +120,7 @@ class DeliveryTest extends TestCase
         $this->actingAs($cc)->post('/complaints', [
             'channel' => 'wa_cc', 'reporter_name' => 'Tuti', 'category' => 'keterlambatan',
             'priority' => 'high', 'description' => 'Telat diantar',
-            'nevira_transaction_id' => '832',
+            'nevira_transaction_number' => '832',
         ]);
 
         $complaint = Complaint::latest('id')->first();
@@ -137,7 +138,7 @@ class DeliveryTest extends TestCase
             'password' => 'secret123', 'role' => 'customer_care',
         ]);
 
-        $complaint = $this->makeComplaint(['nevira_transaction_id' => '832']);
+        $complaint = $this->makeComplaint(['nevira_transaction_number' => '832']);
         $complaint->forceFill([
             'nevira_snapshot' => ['deliveries' => app(NeviraClient::class)->summarizeDeliveries($this->rows())],
             'nevira_synced_at' => now(),

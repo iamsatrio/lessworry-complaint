@@ -27,8 +27,8 @@
       @if($complaint->attachments->isNotEmpty())
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
         @foreach($complaint->attachments as $a)
-          <a href="{{ asset('storage/'.$a->path) }}" target="_blank" rel="noopener">
-            <img src="{{ asset('storage/'.$a->path) }}" alt="{{ $a->original_name }}"
+          <a href="{{ route('complaints.attachment', [$complaint, $a]) }}" target="_blank" rel="noopener">
+            <img src="{{ route('complaints.attachment', [$complaint, $a]) }}" alt="{{ $a->original_name }}"
                  style="height:96px;border-radius:10px;border:1px solid var(--line)">
           </a>
         @endforeach
@@ -81,8 +81,8 @@
   <div>
     <div class="card">
       <div class="eyebrow">Order di NEVIRA</div>
-      @if($complaint->nevira_transaction_id)
-        <div class="tix" style="font-size:15px;margin-bottom:12px">{{ $complaint->nevira_transaction_id }}</div>
+      @if($complaint->isLinkedToOrder())
+        <div class="tix" style="font-size:15px;margin-bottom:12px">{{ $complaint->orderLabel() }}</div>
         @if($complaint->nevira_snapshot)
           @php $nv = $complaint->nevira_snapshot; @endphp
           <dl class="kv">
@@ -143,12 +143,12 @@
       @endif
 
       {{-- Nomor order bisa dipasang atau dibetulkan kapan saja setelah complaint tersimpan. --}}
-      <details class="link-editor" @if(!$complaint->nevira_transaction_id) open @endif style="margin-top:14px">
-        <summary>{{ $complaint->nevira_transaction_id ? 'Betulkan nomor order' : 'Tautkan ke order sekarang' }}</summary>
+      <details class="link-editor" @if(!$complaint->isLinkedToOrder()) open @endif style="margin-top:14px">
+        <summary>{{ $complaint->isLinkedToOrder() ? 'Betulkan nomor order' : 'Tautkan ke order sekarang' }}</summary>
         <form method="POST" action="{{ route('complaints.link',$complaint) }}" style="margin-top:12px">
           @csrf @method('PUT')
           <label for="lnk">ID transaksi NEVIRA</label>
-          <input id="lnk" name="nevira_transaction_id" value="{{ $complaint->nevira_transaction_id }}"
+          <input id="lnk" name="nevira_transaction_number" value="{{ $complaint->nevira_transaction_number }}"
                  placeholder="Nomor ID transaksi dari struk">
           <label for="lex">Kalau dikosongkan, sebutkan alasannya</label>
           <select id="lex" name="nota_exemption">
@@ -158,7 +158,7 @@
             @endforeach
           </select>
           <p class="hint">
-            @if($complaint->nevira_transaction_id)
+            @if($complaint->isLinkedToOrder())
               Mengubah nomor akan membuang data order yang sekarang dan menariknya ulang. Kosongkan untuk melepas tautan.
             @else
               Isi kalau pelanggan sudah membawa struknya. Perubahan tercatat di riwayat.

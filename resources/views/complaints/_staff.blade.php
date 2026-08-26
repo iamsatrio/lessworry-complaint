@@ -5,7 +5,7 @@
 
   @if(empty($handlers))
     <p class="muted" style="margin:0">
-      @if($complaint->nevira_transaction_id)
+      @if($complaint->isLinkedToOrder())
         NEVIRA belum mencatat siapa yang mengerjakan order ini. Kalau order baru masuk,
         tahapan produksinya memang belum berjalan.
       @else

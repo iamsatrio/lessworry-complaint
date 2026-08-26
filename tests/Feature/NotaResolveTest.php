@@ -102,14 +102,16 @@ class NotaResolveTest extends TestCase
         $this->actingAs($this->cc())->post('/complaints', [
             'channel' => 'wa_cc', 'reporter_name' => 'Ibu Sari', 'category' => 'hasil_cuci',
             'priority' => 'medium', 'description' => 'Noda belum hilang',
-            'nevira_transaction_id' => self::NOTA,
+            'nevira_transaction_number' => self::NOTA,
         ])->assertRedirect();
 
         $complaint = Complaint::latest('id')->first();
 
-        // Yang tersimpan adalah id numeriknya, bukan nomor nota yang diketik.
-        $this->assertSame('31242', $complaint->nevira_transaction_id);
+        // Yang tersimpan dan dipakai petugas adalah nomor nota.
+        $this->assertSame(self::NOTA, $complaint->nevira_transaction_number);
         $this->assertSame(self::NOTA, $complaint->nevira_snapshot['invoice']);
+        // Id internal disimpan terpisah, hanya untuk panggilan API.
+        $this->assertSame('31242', $complaint->nevira_transaction_id);
         $this->assertNull($complaint->nevira_sync_error);
     }
 
@@ -134,7 +136,7 @@ class NotaResolveTest extends TestCase
         $this->assertNull($complaint->reporter_phone);
 
         $this->actingAs($this->cc())
-            ->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_id' => self::NOTA]);
+            ->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_number' => self::NOTA]);
 
         $complaint->refresh();
 
@@ -150,7 +152,7 @@ class NotaResolveTest extends TestCase
             'channel' => 'wa_cc', 'reporter_name' => 'Adik pemilik order',
             'reporter_phone' => '089999999999', 'category' => 'hasil_cuci',
             'priority' => 'medium', 'description' => 'Diantar adiknya',
-            'nevira_transaction_id' => self::NOTA,
+            'nevira_transaction_number' => self::NOTA,
         ]);
 
         $complaint = Complaint::latest('id')->first();
@@ -159,14 +161,21 @@ class NotaResolveTest extends TestCase
         $this->assertSame('089999999999', $complaint->reporter_phone);
     }
 
-    public function test_endpoint_lookup_mengembalikan_id_numerik(): void
+    public function test_endpoint_lookup_tidak_pernah_membocorkan_id_internal(): void
     {
         $this->fakeOk();
 
-        $this->actingAs($this->cc())
+        $response = $this->actingAs($this->cc())
             ->getJson('/nevira/lookup?id='.urlencode(self::NOTA))
             ->assertOk()
-            ->assertJson(['ok' => true, 'id' => '31242'])
+            ->assertJson(['ok' => true])
+            ->assertJsonPath('data.invoice', self::NOTA)
             ->assertJsonPath('data.customer_name', 'Ibu Sari');
+
+        $isi = $response->json();
+
+        $this->assertArrayNotHasKey('id', $isi);
+        $this->assertArrayNotHasKey('transaction_id', $isi['data']);
+        $this->assertStringNotContainsString('31242', $response->getContent());
     }
 }

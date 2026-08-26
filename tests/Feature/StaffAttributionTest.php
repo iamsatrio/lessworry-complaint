@@ -24,8 +24,9 @@ class StaffAttributionTest extends TestCase
     {
         $c = new Complaint(array_merge([
             'channel' => 'wa_cc', 'reporter_name' => 'Pelanggan', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'status' => 'baru', 'description' => 'Keluhan uji',
+            'priority' => 'medium', 'description' => 'Keluhan uji',
         ], $attrs));
+        $c->status = $attrs['status'] ?? 'baru';
         $c->ticket_number = Complaint::nextTicketNumber();
         $c->created_at = now();
         $c->applySla();
@@ -36,7 +37,7 @@ class StaffAttributionTest extends TestCase
 
     private function withTrail(): Complaint
     {
-        $c = $this->makeComplaint(['nevira_transaction_id' => '31135']);
+        $c = $this->makeComplaint(['nevira_transaction_number' => '31135']);
         $c->forceFill(['nevira_snapshot' => [
             'cashier_name' => 'Muhamad Gilang Ramadhan',
             'cashier_nip'  => 'LW/06-0002',

@@ -134,7 +134,10 @@ class NeviraClient
      * Karena itu masukan non-numerik dicari dulu lewat keyword untuk
      * mendapat id_transaction, baru detailnya diambil.
      *
-     * @return array{id:string,payload:array}
+     * Hanya menerima nomor nota yang COCOK PERSIS. Pencarian sebagian
+     * ditolak: endpoint ini bukan alat menyisir basis data NEVIRA.
+     *
+     * @return array{id:string,number:?string,payload:array}
      */
     public function resolveTransaction(string $input): array
     {
@@ -145,25 +148,34 @@ class NeviraClient
         }
 
         if (ctype_digit($input)) {
-            return ['id' => $input, 'payload' => $this->transaction($input)];
+            $payload = $this->transaction($input);
+            $data = $payload['data'] ?? [];
+
+            return [
+                'id'      => $input,
+                'number'  => $data['transaction_number'] ?? null,
+                'payload' => $payload,
+            ];
         }
 
-        $matches = $this->searchTransactions($input, 5);
+        $matches = $this->searchTransactions($input, 10);
 
-        if (empty($matches)) {
+        // Wajib cocok persis. Pencarian sebagian akan mengembalikan order
+        // milik pelanggan lain yang kebetulan mirip, dan itu membuat
+        // endpoint ini bisa dipakai memancing data.
+        $exact = collect($matches)->firstWhere('transaction_number', $input);
+
+        if (! $exact) {
             throw new RuntimeException('Nota "'.$input.'" tidak ditemukan di NEVIRA.');
         }
 
-        // Kalau ada beberapa yang cocok, utamakan yang nomornya sama persis.
-        $exact = collect($matches)->firstWhere('transaction_number', $input);
-        $chosen = $exact ?: $matches[0];
-        $id = (string) ($chosen['id_transaction'] ?? '');
+        $id = (string) ($exact['id_transaction'] ?? '');
 
         if ($id === '') {
             throw new RuntimeException('NEVIRA menemukan nota itu tapi tidak menyertakan id_transaction.');
         }
 
-        return ['id' => $id, 'payload' => $this->transaction($id)];
+        return ['id' => $id, 'number' => $exact['transaction_number'] ?? $input, 'payload' => $this->transaction($id)];
     }
 
     /**
@@ -248,7 +260,8 @@ class NeviraClient
         $outlet   = $d['outlet'] ?? [];
 
         return [
-            'transaction_id'  => $d['id_transaction'] ?? null,
+            // id_transaction sengaja TIDAK ikut: itu pengenal internal
+            // NEVIRA dan tidak punya keperluan di sisi tampilan.
             'invoice'         => $d['transaction_number'] ?? null,
             'order_type'      => $d['order_type'] ?? null,
             'status'          => $d['status'] ?? null,

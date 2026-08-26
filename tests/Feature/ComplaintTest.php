@@ -31,8 +31,9 @@ class ComplaintTest extends TestCase
     {
         $c = new Complaint(array_merge([
             'channel' => 'wa_cc', 'reporter_name' => 'Pelanggan', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'status' => 'baru', 'description' => 'Keluhan uji',
+            'priority' => 'medium', 'description' => 'Keluhan uji',
         ], $attrs));
+        $c->status = $attrs['status'] ?? 'baru';
         $c->ticket_number = Complaint::nextTicketNumber();
         $c->created_at = now();
         $c->applySla();
@@ -194,13 +195,13 @@ class ComplaintTest extends TestCase
         $this->actingAs($cc)->post('/complaints', [
             'channel' => 'wa_cc', 'reporter_name' => 'Sinta', 'category' => 'keterlambatan',
             'priority' => 'high', 'description' => 'Telat 2 hari',
-            'nevira_transaction_id' => 'TRX-1',
+            'nevira_transaction_number' => 'TRX-1',
         ]);
 
         $complaint = Complaint::latest('id')->first();
 
         $this->assertNotNull($complaint);
-        $this->assertSame('TRX-1', $complaint->nevira_transaction_id);
+        $this->assertSame('TRX-1', $complaint->nevira_transaction_number);
         $this->assertNotNull($complaint->nevira_sync_error);
     }
 
@@ -230,7 +231,7 @@ class ComplaintTest extends TestCase
         $this->actingAs($cc)->post('/complaints', [
             'channel' => 'wa_cc', 'reporter_name' => 'Ibu Rina', 'category' => 'salah_tagih',
             'priority' => 'medium', 'description' => 'Tagihan tidak sesuai',
-            'nevira_transaction_id' => '31191',
+            'nevira_transaction_number' => '31191',
         ]);
 
         $snapshot = Complaint::latest('id')->first()->nevira_snapshot;
@@ -290,7 +291,7 @@ class ComplaintTest extends TestCase
         $this->actingAs($cc)->post('/complaints', [
             'channel' => 'wa_cc', 'reporter_name' => 'Deni', 'category' => 'sikap_petugas',
             'priority' => 'low', 'description' => 'Kasir kurang ramah',
-        ])->assertSessionHasErrors('nevira_transaction_id');
+        ])->assertSessionHasErrors('nevira_transaction_number');
 
         $this->assertSame(0, Complaint::count());
     }
@@ -308,7 +309,7 @@ class ComplaintTest extends TestCase
 
         $complaint = Complaint::latest('id')->first();
 
-        $this->assertNull($complaint->nevira_transaction_id);
+        $this->assertNull($complaint->nevira_transaction_number);
         $this->assertSame('belum_terbit', $complaint->nota_exemption);
         $this->assertSame(
             'Complaint keterlambatan penjemputan — nota belum terbit',
@@ -334,12 +335,12 @@ class ComplaintTest extends TestCase
         $this->actingAs($cc)->post('/complaints', [
             'channel' => 'wa_cc', 'reporter_name' => 'Deni', 'category' => 'hasil_cuci',
             'priority' => 'low', 'description' => 'x',
-            'nevira_transaction_id' => '31197', 'nota_exemption' => 'lebih_sebulan',
+            'nevira_transaction_number' => '31197', 'nota_exemption' => 'lebih_sebulan',
         ])->assertRedirect();
 
         $complaint = Complaint::latest('id')->first();
 
-        $this->assertSame('31197', $complaint->nevira_transaction_id);
+        $this->assertSame('31197', $complaint->nevira_transaction_number);
         $this->assertNull($complaint->nota_exemption);
     }
 
@@ -374,16 +375,19 @@ class ComplaintTest extends TestCase
         $cc = $this->userAs('customer_care');
         $complaint = $this->makeComplaint();
 
-        $this->assertNull($complaint->nevira_transaction_id);
+        $this->assertNull($complaint->nevira_transaction_number);
 
         $this->actingAs($cc)
-            ->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_id' => '31197'])
+            ->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_number' => '31197'])
             ->assertRedirect();
 
         $complaint->refresh();
 
-        $this->assertSame('31197', $complaint->nevira_transaction_id);
+        // Yang tersimpan dan ditampilkan adalah nomor notanya.
+        $this->assertSame('INV/179/1', $complaint->nevira_transaction_number);
         $this->assertSame('INV/179/1', $complaint->nevira_snapshot['invoice']);
+        // Id internal NEVIRA tidak pernah ikut ke snapshot.
+        $this->assertArrayNotHasKey('transaction_id', $complaint->nevira_snapshot);
         $this->assertNull($complaint->nevira_sync_error);
     }
 
@@ -399,14 +403,14 @@ class ComplaintTest extends TestCase
         ]);
 
         $cc = $this->userAs('customer_care');
-        $complaint = $this->makeComplaint(['nevira_transaction_id' => '111']);
+        $complaint = $this->makeComplaint(['nevira_transaction_number' => '111']);
         $complaint->forceFill(['nevira_snapshot' => ['invoice' => 'INV/SALAH']])->save();
 
-        $this->actingAs($cc)->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_id' => '222']);
+        $this->actingAs($cc)->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_number' => '222']);
 
         $complaint->refresh();
 
-        $this->assertSame('222', $complaint->nevira_transaction_id);
+        $this->assertSame('INV/BENAR', $complaint->nevira_transaction_number);
         // Snapshot order lama tidak boleh tertinggal — itu data order orang lain.
         $this->assertSame('INV/BENAR', $complaint->nevira_snapshot['invoice']);
     }
@@ -414,17 +418,17 @@ class ComplaintTest extends TestCase
     public function test_melepas_tautan_membuang_snapshot_order_lama(): void
     {
         $cc = $this->userAs('customer_care');
-        $complaint = $this->makeComplaint(['nevira_transaction_id' => '111']);
+        $complaint = $this->makeComplaint(['nevira_transaction_number' => '111']);
         $complaint->forceFill([
             'nevira_snapshot'    => ['invoice' => 'INV/LAMA'],
             'nevira_customer_id' => '999',
         ])->save();
 
-        $this->actingAs($cc)->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_id' => '']);
+        $this->actingAs($cc)->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_number' => '']);
 
         $complaint->refresh();
 
-        $this->assertNull($complaint->nevira_transaction_id);
+        $this->assertNull($complaint->nevira_transaction_number);
         $this->assertNull($complaint->nevira_snapshot);
         $this->assertNull($complaint->nevira_customer_id);
     }
@@ -434,7 +438,7 @@ class ComplaintTest extends TestCase
         $cc = $this->userAs('customer_care');
         $complaint = $this->makeComplaint();
 
-        $this->actingAs($cc)->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_id' => '31197']);
+        $this->actingAs($cc)->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_number' => '31197']);
 
         $note = $complaint->activities()->latest('id')->first()->note;
 
@@ -450,10 +454,10 @@ class ComplaintTest extends TestCase
         $lain = $this->makeComplaint(['outlet_id' => $b->id]);
 
         $this->actingAs($kasir)
-            ->put('/complaints/'.$lain->id.'/link', ['nevira_transaction_id' => '31197'])
+            ->put('/complaints/'.$lain->id.'/link', ['nevira_transaction_number' => '31197'])
             ->assertForbidden();
 
-        $this->assertNull($lain->fresh()->nevira_transaction_id);
+        $this->assertNull($lain->fresh()->nevira_transaction_number);
     }
 
     public function test_nomor_tiket_unik_dan_berurutan(): void

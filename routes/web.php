@@ -37,9 +37,13 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function () {
     Route::post('/complaints/{complaint}/note', [ComplaintController::class, 'addNote'])->name('complaints.note');
     Route::post('/complaints/{complaint}/resync', [ComplaintController::class, 'resync'])->name('complaints.resync');
     Route::put('/complaints/{complaint}/link', [ComplaintController::class, 'updateLink'])->name('complaints.link');
+    Route::get('/complaints/{complaint}/lampiran/{attachment}', [ComplaintController::class, 'attachment'])->name('complaints.attachment');
     Route::put('/complaints/{complaint}/responsibility', [ComplaintController::class, 'setResponsibility'])->name('complaints.responsibility');
 
-    Route::get('/nevira/lookup', NeviraLookupController::class)->name('nevira.lookup');
+    // Dibatasi lajunya: tanpa ini nomor nota bisa dicoba satu per satu.
+    Route::get('/nevira/lookup', NeviraLookupController::class)
+        ->middleware('throttle:20,1')
+        ->name('nevira.lookup');
 
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
