@@ -132,33 +132,37 @@ cat.addEventListener('change', saranPengecualian);
 sub.addEventListener('change', saranPengecualian);
 
 // Cek order ke NEVIRA
-const btn=document.getElementById('cek'), box=document.getElementById('nvbox');
-btn.addEventListener('click', async () => {
-  const id = document.getElementById('nv').value.trim();
-  if(!id){ box.style.display='none'; return; }
+const btn=document.getElementById('cek'), box=document.getElementById('nvbox'), nvInput=document.getElementById('nv');
+let terakhirDicek = '';
+
+async function cekNota(){
+  const id = nvInput.value.trim();
+  if(!id || id === terakhirDicek) return;
+  terakhirDicek = id;
   btn.disabled=true; btn.textContent='Mencari…';
-  box.style.display='block'; box.className='panel'; box.textContent='Mengambil data order dari NEVIRA…';
+  box.style.display='block'; box.className='panel'; box.textContent='Mencari nota di NEVIRA…';
   try{
     const r = await fetch(`{{ route('nevira.lookup') }}?id=${encodeURIComponent(id)}`, {headers:{'Accept':'application/json'}});
     const j = await r.json();
     if(j.ok){
       const d=j.data;
-      box.className='panel good';
-      const rupiah = n => n==null ? '—' : 'Rp '+Number(n).toLocaleString('id-ID');
-      // Nota valid membatalkan pilihan pengecualian.
+      // Simpan ID numerik NEVIRA, bukan nomor nota yang diketik —
+      // endpoint detail hanya menerima yang numerik.
+      if(j.id) nvInput.value = j.id;
+      terakhirDicek = nvInput.value;
       document.getElementById('exempt').value = '';
-      // Data pelapor diisikan dari pelanggan pada nota, tapi hanya kalau
-      // petugas belum mengetik apa pun — jangan menimpa yang sudah ditulis.
       const nm = document.getElementById('rn'), tp = document.getElementById('rp');
       if (d.customer_name && !nm.value) nm.value = d.customer_name;
       if (d.customer_phone && !tp.value) tp.value = d.customer_phone;
+      const rupiah = n => n==null ? '—' : 'Rp '+Number(n).toLocaleString('id-ID');
       let umur = '';
       if (d.created_at) {
         const hari = Math.floor((Date.now() - new Date(d.created_at)) / 86400000);
         if (hari > 30) umur = `<div style="margin-top:8px;font-weight:700">Nota ini berumur ${hari} hari — lebih dari 1 bulan.</div>`;
       }
+      box.className='panel good';
       box.innerHTML = `<b>Order ketemu</b><br>
-        Struk ${d.invoice ?? '—'} · ${d.outlet_name ?? 'outlet tidak tercatat'}<br>
+        Nota ${d.invoice ?? '—'} · ${d.outlet_name ?? 'outlet tidak tercatat'}<br>
         ${d.customer_name ?? 'Nama pelanggan tidak tercatat'}${d.customer_phone ? ' · '+d.customer_phone : ''}<br>
         ${rupiah(d.grand_total)} · ${d.status ?? '—'} · ${d.payment_status ?? '—'}
         <div style="margin-top:8px;font-size:13px">Cocokkan dengan struk pelanggan sebelum menyimpan.</div>${umur}`;
@@ -167,10 +171,14 @@ btn.addEventListener('click', async () => {
     }
   }catch(e){
     box.className='panel bad';
-    box.textContent='Server tidak merespons. Simpan complaint dulu — tautan order bisa dipasang setelah ini.';
+    box.textContent='Server tidak merespons. Simpan complaint dulu — nomor nota bisa dipasang setelah ini.';
   }finally{
     btn.disabled=false; btn.textContent='Cek';
   }
-});
+}
+
+btn.addEventListener('click', () => { terakhirDicek=''; cekNota(); });
+nvInput.addEventListener('blur', cekNota);
+nvInput.addEventListener('paste', () => setTimeout(cekNota, 60));
 </script>
 @endsection

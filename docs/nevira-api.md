@@ -61,6 +61,28 @@ Kolom `type` (1 atau 2) **belum diketahui artinya** — peta labelnya tidak dite
 
 Catatan: endpoint detail adalah `/api/transactions/{id}` (jamak). Tidak ada `/api/transaction/detail/{id}`.
 
+### Nomor nota bukan id_transaction
+
+Yang tercetak di struk pelanggan adalah **nomor nota** (`transaction_number`), mis. `INV/118/1787749345365/1`. Endpoint detail hanya menerima **`id_transaction` numerik**.
+
+Memasukkan nomor nota ke endpoint detail membalas:
+
+```
+GET /api/transactions/INV%2F118%2F1787749345365%2F1
+404 {"msg":"Url Not Found","code":404}
+```
+
+404 itu terbaca seperti "order tidak ada", padahal ordernya ada — formatnya yang salah.
+
+Jalan yang benar untuk nomor nota:
+
+```
+GET /api/transactions?keyword=INV/118/1787749345365/1   -> data[0].id_transaction
+GET /api/transactions/31242                             -> detail
+```
+
+`NeviraClient::resolveTransaction()` menerima keduanya: masukan numerik langsung ke detail, masukan non-numerik dicari dulu. Id numerik hasil pencarian disimpan supaya penarikan berikutnya tidak mencari ulang.
+
 ## Bentuk respons
 
 `GET /api/transactions/{id}` membungkus hasil dalam kunci `data`:

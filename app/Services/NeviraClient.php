@@ -123,6 +123,50 @@ class NeviraClient
     }
 
     /**
+     * Ambil transaksi dari apa pun yang dipegang petugas.
+     *
+     * Yang tercetak di struk pelanggan adalah nomor nota
+     * (mis. INV/118/1787749345365/1), sedangkan endpoint detail menuntut
+     * id_transaction numerik. Memasukkan nomor nota ke endpoint detail
+     * membalas 404 "Url Not Found" — terbaca seperti order tidak ada,
+     * padahal formatnya yang salah.
+     *
+     * Karena itu masukan non-numerik dicari dulu lewat keyword untuk
+     * mendapat id_transaction, baru detailnya diambil.
+     *
+     * @return array{id:string,payload:array}
+     */
+    public function resolveTransaction(string $input): array
+    {
+        $input = trim($input);
+
+        if ($input === '') {
+            throw new RuntimeException('Nomor nota kosong.');
+        }
+
+        if (ctype_digit($input)) {
+            return ['id' => $input, 'payload' => $this->transaction($input)];
+        }
+
+        $matches = $this->searchTransactions($input, 5);
+
+        if (empty($matches)) {
+            throw new RuntimeException('Nota "'.$input.'" tidak ditemukan di NEVIRA.');
+        }
+
+        // Kalau ada beberapa yang cocok, utamakan yang nomornya sama persis.
+        $exact = collect($matches)->firstWhere('transaction_number', $input);
+        $chosen = $exact ?: $matches[0];
+        $id = (string) ($chosen['id_transaction'] ?? '');
+
+        if ($id === '') {
+            throw new RuntimeException('NEVIRA menemukan nota itu tapi tidak menyertakan id_transaction.');
+        }
+
+        return ['id' => $id, 'payload' => $this->transaction($id)];
+    }
+
+    /**
      * Cari transaksi berdasarkan nomor struk, untuk petugas yang hanya
      * memegang nomor nota dan bukan ID internal.
      */

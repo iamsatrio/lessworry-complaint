@@ -25,9 +25,16 @@ class NeviraLookupController extends Controller
         }
 
         try {
-            $summary = $nevira->summarizeTransaction($nevira->transaction($request->string('id')));
+            $resolved = $nevira->resolveTransaction((string) $request->string('id'));
+            $summary  = $nevira->summarizeTransaction($resolved['payload']);
 
-            return response()->json(['ok' => true, 'data' => $summary]);
+            // Kembalikan id numeriknya juga, supaya form menyimpan yang
+            // dipakai NEVIRA, bukan nomor nota yang diketik petugas.
+            return response()->json([
+                'ok'   => true,
+                'id'   => $resolved['id'],
+                'data' => $summary,
+            ]);
         } catch (Throwable $e) {
             return response()->json([
                 'ok'      => false,

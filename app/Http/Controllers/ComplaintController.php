@@ -425,11 +425,33 @@ class ComplaintController extends Controller
             : 'Data NEVIRA berhasil ditarik.');
     }
 
+    /**
+     * Isi identitas pelapor dari pelanggan pada nota — hanya kolom yang
+     * masih kosong. Yang sudah diketik petugas tidak pernah ditimpa:
+     * pelapor bisa saja bukan pemilik order, misalnya yang mengantarkan.
+     */
+    private function fillReporterFromOrder(Complaint $complaint, array $summary): void
+    {
+        $isi = [];
+
+        if (blank($complaint->reporter_name) && filled($summary['customer_name'] ?? null)) {
+            $isi['reporter_name'] = $summary['customer_name'];
+        }
+
+        if (blank($complaint->reporter_phone) && filled($summary['customer_phone'] ?? null)) {
+            $isi['reporter_phone'] = $summary['customer_phone'];
+        }
+
+        if ($isi) {
+            $complaint->forceFill($isi)->save();
+        }
+    }
+
     private function syncNevira(Complaint $complaint): void
     {
         try {
-            $payload = $this->nevira->transaction($complaint->nevira_transaction_id);
-            $summary = $this->nevira->summarizeTransaction($payload);
+            $resolved = $this->nevira->resolveTransaction($complaint->nevira_transaction_id);
+            $summary  = $this->nevira->summarizeTransaction($resolved['payload']);
 
             // Perjalanan kurir ditarik terpisah: detail transaksi tidak
             // membawa nama kurirnya. Gagal di sini tidak boleh membatalkan
@@ -445,11 +467,16 @@ class ComplaintController extends Controller
             }
 
             $complaint->forceFill([
-                'nevira_snapshot'   => $summary,
+                // Simpan id numerik hasil pencarian supaya penarikan berikutnya
+                // langsung ke detail, tanpa mencari ulang.
+                'nevira_transaction_id' => $resolved['id'],
+                'nevira_snapshot'    => $summary,
                 'nevira_customer_id' => $summary['customer_id'] ?? null,
-                'nevira_synced_at'  => now(),
-                'nevira_sync_error' => null,
+                'nevira_synced_at'   => now(),
+                'nevira_sync_error'  => null,
             ])->save();
+
+            $this->fillReporterFromOrder($complaint, $summary);
         } catch (Throwable $e) {
             // Complaint tetap hidup walau NEVIRA mati. (API-8, API-10)
             $complaint->forceFill([
