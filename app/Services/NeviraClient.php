@@ -110,7 +110,19 @@ class NeviraClient
         }
 
         if (! $response->successful()) {
-            throw new NeviraRequestFailed('NEVIRA '.$path.' balas HTTP '.$response->status(), 'NEVIRA membalas HTTP '.$response->status().'.');
+            // Detail teknis hanya ke log — tidak pernah ke layar. $path memuat
+            // id internal transaksi, dan pesan mentah pernah bocor apa adanya
+            // lewat nevira_sync_error. Query sengaja tidak ikut dicatat: di
+            // situ ada nomor nota pelanggan. (API-8 T3)
+            Log::warning('NEVIRA request gagal', [
+                'path'   => $path,
+                'status' => $response->status(),
+            ]);
+
+            throw new NeviraRequestFailed(
+                'NEVIRA '.$path.' balas HTTP '.$response->status(),
+                'NEVIRA membalas HTTP '.$response->status().'. Complaint tetap tersimpan; coba tarik ulang setelah NEVIRA pulih.'
+            );
         }
 
         return (array) $response->json();
