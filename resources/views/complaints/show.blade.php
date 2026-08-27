@@ -171,30 +171,35 @@
 
     @include('complaints._deliveries')
 
-    <div class="card">
-      <div class="eyebrow">Siapa yang menangani</div>
-      <form method="POST" action="{{ route('complaints.assign',$complaint) }}">
-        @csrf
-        @if($handlers->isNotEmpty())
-          <label for="asg">Penanggung jawab</label>
-          <select id="asg" name="assigned_to">
-            <option value="">Belum ditentukan</option>
-            @foreach($handlers as $h)
-              <option value="{{ $h->id }}" @selected($complaint->assigned_to==$h->id)>{{ $h->name }} — {{ $h->roleLabel() }}</option>
+    {{-- Penugasan dan penerusan ke divisi adalah wewenang, bukan pencatatan:
+         hanya Customer Care dan supervisor. Server memeriksanya lagi di
+         ComplaintController::assign — menyembunyikan tombol saja bukan pagar. --}}
+    @if(auth()->user()->canAssignResponsibility())
+      <div class="card">
+        <div class="eyebrow">Siapa yang menangani</div>
+        <form method="POST" action="{{ route('complaints.assign',$complaint) }}">
+          @csrf
+          @if($handlers->isNotEmpty())
+            <label for="asg">Penanggung jawab</label>
+            <select id="asg" name="assigned_to">
+              <option value="">Belum ditentukan</option>
+              @foreach($handlers as $h)
+                <option value="{{ $h->id }}" @selected($complaint->assigned_to==$h->id)>{{ $h->name }} — {{ $h->roleLabel() }}</option>
+              @endforeach
+            </select>
+          @endif
+          <label for="fwd">Teruskan ke divisi</label>
+          <select id="fwd" name="forwarded_division">
+            <option value="">Tidak diteruskan</option>
+            @foreach(config('complaint.divisions') as $k=>$v)
+              <option value="{{ $k }}" @selected($complaint->forwarded_division===$k)>{{ $v }}</option>
             @endforeach
           </select>
-        @endif
-        <label for="fwd">Teruskan ke divisi</label>
-        <select id="fwd" name="forwarded_division">
-          <option value="">Tidak diteruskan</option>
-          @foreach(config('complaint.divisions') as $k=>$v)
-            <option value="{{ $k }}" @selected($complaint->forwarded_division===$k)>{{ $v }}</option>
-          @endforeach
-        </select>
-        <p class="hint">Meneruskan ke divisi membuat complaint ini muncul di papan kerja mereka.</p>
-        <div style="margin-top:14px"><button class="ghost">Simpan Penugasan</button></div>
-      </form>
-    </div>
+          <p class="hint">Meneruskan ke divisi membuat complaint ini muncul di papan kerja mereka.</p>
+          <div style="margin-top:14px"><button class="ghost">Simpan Penugasan</button></div>
+        </form>
+      </div>
+    @endif
 
     <div class="card">
       <div class="eyebrow">Perbarui status</div>

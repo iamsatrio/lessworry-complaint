@@ -236,15 +236,32 @@ class ComplaintController extends Controller
         return back()->with('status', 'Status diperbarui: '.$complaint->statusLabel());
     }
 
+    /**
+     * Tentukan siapa yang menangani complaint ini, dan apakah diteruskan ke
+     * divisi.
+     *
+     * Rute ini dulu hanya memeriksa canView, padahal baris audit yang
+     * ditulisnya sendiri berbunyi "Penanggung jawab diperbarui" — kasir yang
+     * dikeluhkan bisa memindahkan namanya ke rekannya, dan pengguna divisi
+     * bisa melempar complaint ke divisi lain sampai lenyap dari antrean
+     * semua orang. Wewenangnya sama dengan /responsibility. (API-14 #3)
+     */
     public function assign(Request $request, Complaint $complaint)
     {
         $user = $request->user();
         abort_unless($user->canView($complaint), 403);
+        abort_unless($user->canAssignResponsibility(), 403);
 
         $data = $request->validate([
-            'assigned_to'        => ['nullable', 'exists:users,id'],
+            // Hanya ke akun aktif yang memang menangani complaint. Sebelumnya
+            // exists:users,id saja, jadi penugasan bisa diarahkan ke akun
+            // nonaktif atau ke pengguna divisi yang tidak pernah muncul di
+            // dropdown — dan complaint itu tidak pernah tersentuh siapa pun.
+            'assigned_to'        => ['nullable', Rule::exists('users', 'id')
+                ->where('is_active', true)
+                ->whereIn('role', ['kasir', 'customer_care', 'supervisor'])],
             'forwarded_division' => ['nullable', Rule::in(array_keys(config('complaint.divisions')))],
-        ]);
+        ], [], ['assigned_to' => 'penanggung jawab']);
 
         $complaint->fill($data)->save();
 
