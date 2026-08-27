@@ -160,12 +160,29 @@ class Complaint extends Model
 
     /* ---------- Nomor tiket ---------- */
 
+    /**
+     * Nomor tiket berikutnya untuk hari ini.
+     *
+     * Dihitung dari nomor TERBESAR yang sudah ada, bukan dari jumlah baris:
+     * begitu ada satu lubang di urutan, jumlah baris menghasilkan nomor yang
+     * sudah dipakai — dan kolomnya punya indeks unik, jadi penyimpanannya
+     * gagal dan complaint hilang. (API-8 T5)
+     *
+     * Ini tetap bisa bentrok kalau dua permintaan membacanya bersamaan;
+     * yang menutup sisanya adalah percobaan ulang di
+     * ComplaintController::simpanMeskiNomorBentrok().
+     */
     public static function nextTicketNumber(): string
     {
         $prefix = 'LW-'.now()->format('Ymd');
-        $todayCount = static::where('ticket_number', 'like', $prefix.'%')->count();
 
-        return $prefix.'-'.str_pad((string) ($todayCount + 1), 3, '0', STR_PAD_LEFT);
+        $terakhir = static::where('ticket_number', 'like', $prefix.'-%')
+            ->orderByDesc('ticket_number')
+            ->value('ticket_number');
+
+        $urut = $terakhir ? ((int) substr($terakhir, -3)) + 1 : 1;
+
+        return $prefix.'-'.str_pad((string) $urut, 3, '0', STR_PAD_LEFT);
     }
 
     /* ---------- SLA ---------- */

@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Exceptions\NeviraAccessDenied;
 use App\Exceptions\NeviraException;
 use App\Services\NeviraGate;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -108,35 +109,45 @@ class ComplaintController extends Controller
             $data['outlet_id'] = $user->outlet_id;
         }
 
-        $complaint = DB::transaction(function () use ($data, $user, $request) {
-            $complaint = new Complaint($data);
-            $complaint->ticket_number = Complaint::nextTicketNumber();
-            $complaint->status = 'baru';
-            $complaint->created_by = $user->id;
-            $complaint->created_at = now();
-            $complaint->applySla();
-            $complaint->save();
+        // Berkas ditulis SEBELUM transaksi supaya percobaan ulang di bawah
+        // tidak menulis unggahan yang sama dua kali. Disk privat, bukan
+        // 'public': foto bukti berisi barang dan kadang wajah pelanggan; di
+        // disk publik siapa pun yang memegang URL bisa membukanya tanpa login.
+        $berkas = [];
+        foreach ($request->file('attachments', []) as $file) {
+            $berkas[] = [
+                'file'          => $file,
+                'original_name' => $file->getClientOriginalName(),
+            ];
+        }
 
-            ComplaintActivity::create([
-                'complaint_id' => $complaint->id,
-                'user_id'      => $user->id,
-                'type'         => 'created',
-                'to_status'    => 'baru',
-                'note'         => 'Complaint dibuat lewat '.$complaint->channelLabel(),
-            ]);
+        $complaint = $this->simpanMeskiNomorBentrok(function () use ($data, $user, $berkas) {
+            return DB::transaction(function () use ($data, $user, $berkas) {
+                $complaint = new Complaint($data);
+                $complaint->ticket_number = Complaint::nextTicketNumber();
+                $complaint->status = 'baru';
+                $complaint->created_by = $user->id;
+                $complaint->created_at = now();
+                $complaint->applySla();
+                $complaint->save();
 
-            foreach ($request->file('attachments', []) as $file) {
-                // Disk privat, bukan 'public'. Foto bukti berisi barang dan
-                // kadang wajah pelanggan; di disk publik siapa pun yang
-                // memegang URL bisa membukanya tanpa login.
-                $path = $file->store('complaints/'.$complaint->id, 'local');
-                $complaint->attachments()->create([
-                    'path'          => $path,
-                    'original_name' => $file->getClientOriginalName(),
+                ComplaintActivity::create([
+                    'complaint_id' => $complaint->id,
+                    'user_id'      => $user->id,
+                    'type'         => 'created',
+                    'to_status'    => 'baru',
+                    'note'         => 'Complaint dibuat lewat '.$complaint->channelLabel(),
                 ]);
-            }
 
-            return $complaint;
+                foreach ($berkas as $b) {
+                    $complaint->attachments()->create([
+                        'path'          => $b['file']->store('complaints/'.$complaint->id, 'local'),
+                        'original_name' => $b['original_name'],
+                    ]);
+                }
+
+                return $complaint;
+            });
         });
 
         // Tarik data order NEVIRA kalau ID diisi. Kegagalan tidak boleh
@@ -148,6 +159,43 @@ class ComplaintController extends Controller
         return redirect()
             ->route('complaints.show', $complaint)
             ->with('status', 'Complaint '.$complaint->ticket_number.' tercatat.');
+    }
+
+    /**
+     * Simpan complaint, ambil nomor tiket lagi kalau keburu disambar.
+     *
+     * Dua kasir menekan Simpan pada detik yang sama: keduanya membaca nomor
+     * berikutnya yang sama, yang kedua kena UNIQUE constraint di dalam
+     * transaksi dan dulu berakhir HTTP 500 — complaint hilang, sementara
+     * pelanggannya sudah telanjur ditutup teleponnya. Kehilangan data, bukan
+     * sekadar galat.
+     *
+     * Transaksinya sudah rollback saat kita sampai ke sini, jadi mencoba
+     * ulang aman: tidak ada baris separuh jadi yang tertinggal. Bentrok yang
+     * tidak juga reda tetap dilempar ke atas — gagal yang terlihat lebih baik
+     * daripada complaint yang diam-diam tidak tersimpan. (API-8 T5)
+     */
+    private function simpanMeskiNomorBentrok(callable $simpan, int $percobaan = 5): Complaint
+    {
+        for ($ke = 1; ; $ke++) {
+            try {
+                return $simpan();
+            } catch (QueryException $e) {
+                if ($ke >= $percobaan || ! $this->bentrokNomorTiket($e)) {
+                    throw $e;
+                }
+
+                // Jeda acak singkat supaya dua permintaan yang bertabrakan
+                // tidak mengulang bersamaan lagi.
+                usleep(random_int(1_000, 5_000));
+            }
+        }
+    }
+
+    private function bentrokNomorTiket(QueryException $e): bool
+    {
+        return $e->getCode() === '23000'
+            && str_contains($e->getMessage(), 'ticket_number');
     }
 
     public function show(Complaint $complaint)
