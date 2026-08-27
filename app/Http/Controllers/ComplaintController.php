@@ -51,7 +51,10 @@ class ComplaintController extends Controller
                 $sub->where('ticket_number', 'like', "%{$q}%")
                     ->orWhere('reporter_name', 'like', "%{$q}%")
                     ->orWhere('reporter_phone', 'like', "%{$q}%")
-                    ->orWhere('nevira_transaction_id', 'like', "%{$q}%");
+                    // Dicari lewat nomor nota, bukan id internal NEVIRA:
+                    // kotak pencarian tidak boleh jadi alat memastikan
+                    // tebakan id internal satu per satu. (API-8 T12)
+                    ->orWhere('nevira_transaction_number', 'like', "%{$q}%");
             });
         }
 

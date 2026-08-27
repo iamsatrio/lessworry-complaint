@@ -69,7 +69,10 @@ class ReportController extends Controller
             $out = fopen('php://output', 'w');
             fputcsv($out, [
                 'Nomor Tiket', 'Dibuat', 'Kanal', 'Outlet', 'Pelapor', 'Telepon',
-                'ID Transaksi NEVIRA', 'Kategori', 'Prioritas', 'Status',
+                // Nomor nota, bukan id internal NEVIRA. CSV rekap diteruskan
+                // lewat WhatsApp dan email; pengenal internal sistem lain
+                // tidak boleh ikut keluar. (API-8 T2)
+                'Nomor Nota', 'Kategori', 'Prioritas', 'Status',
                 'Penanggung Jawab', 'Selesai', 'Menit Penyelesaian', 'Kompensasi', 'Lewat SLA',
                 ...($showStaff ? ['Karyawan Penanggung Jawab', 'NIP', 'Tahap', 'Alasan'] : []),
             ]);
@@ -82,7 +85,7 @@ class ReportController extends Controller
                     $c->outlet?->name,
                     $c->reporter_name,
                     $c->reporter_phone,
-                    $c->nevira_transaction_id,
+                    $c->nevira_transaction_number,
                     $c->categoryLabel(),
                     $c->priority,
                     $c->statusLabel(),
