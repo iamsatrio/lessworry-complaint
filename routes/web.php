@@ -16,7 +16,9 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 });
 
-Route::middleware(['auth', 'active'])->group(function () {
+// auth.session memutus sesi yang hash passwordnya sudah basi — itu yang
+// membuat penggantian password benar-benar berlaku ke perangkat lain.
+Route::middleware(['auth', 'auth.session', 'active'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     // Ganti password harus bisa diakses walau password sementara belum diganti.
@@ -24,7 +26,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::put('/password', [PasswordController::class, 'update'])->name('password.update');
 });
 
-Route::middleware(['auth', 'active', 'password.changed'])->group(function () {
+Route::middleware(['auth', 'auth.session', 'active', 'password.changed'])->group(function () {
 
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 

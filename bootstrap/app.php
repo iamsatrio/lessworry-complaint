@@ -12,6 +12,11 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
+            // Tanpa ini Auth::logoutOtherDevices() tidak melakukan apa-apa:
+            // hash password di sesi tidak pernah dibandingkan dengan yang
+            // tersimpan, jadi sesi di perangkat lain hidup terus setelah
+            // password diganti atau direset. (API-14 #2)
+            'auth.session'     => \Illuminate\Session\Middleware\AuthenticateSession::class,
             'active'           => \App\Http\Middleware\EnsureUserIsActive::class,
             'password.changed' => \App\Http\Middleware\EnsurePasswordChanged::class,
         ]);
