@@ -190,24 +190,42 @@ class ComplaintController extends Controller
             return back()->withErrors(['status' => 'Peranmu tidak berwenang menutup complaint.']);
         }
 
-        $compensation = (int) ($data['compensation_amount'] ?? 0);
-        if ($compensation > $user->compensationLimit()) {
+        // Batas wewenang kompensasi berlaku dua arah. Batas atas sudah
+        // dijaga; yang tidak adalah penurunan — kasir bisa memangkas angka
+        // yang sudah disetujui supervisor jadi 1. Yang menentukan bukan arah
+        // perubahannya, tapi apakah KEDUA nilai ada di dalam wewenangnya.
+        // (API-14 #10)
+        $sekarang = (int) $complaint->compensation_amount;
+        $compensation = $request->has('compensation_amount')
+            ? (int) ($data['compensation_amount'] ?? 0)
+            : $sekarang;
+        $batas = $user->compensationLimit();
+
+        if ($compensation !== $sekarang && $compensation > $batas) {
             return back()->withErrors([
                 'compensation_amount' => 'Nilai kompensasi melebihi batas wewenang '.$user->roleLabel()
-                    .' (Rp '.number_format($user->compensationLimit(), 0, ',', '.').'). Naikkan ke supervisor.',
+                    .' (Rp '.number_format($batas, 0, ',', '.').'). Naikkan ke supervisor.',
+            ]);
+        }
+
+        if ($compensation !== $sekarang && $sekarang > $batas) {
+            return back()->withErrors([
+                'compensation_amount' => 'Kompensasi Rp '.number_format($sekarang, 0, ',', '.')
+                    .' disetujui di atas batas wewenang '.$user->roleLabel()
+                    .'. Hanya yang berwenang di angka itu yang boleh mengubahnya.',
             ]);
         }
 
         $from = $complaint->status;
 
-        DB::transaction(function () use ($complaint, $data, $user, $from, $closing, $compensation) {
+        DB::transaction(function () use ($complaint, $data, $user, $from, $closing, $compensation, $sekarang) {
             $complaint->status = $data['status'];
             $complaint->resolution = $data['resolution'] ?? $complaint->resolution;
             $complaint->root_cause = $data['root_cause'] ?? $complaint->root_cause;
 
-            if ($compensation > 0) {
-                $complaint->compensation_amount = $compensation;
-            }
+            // Nilai yang sama artinya tidak ada perubahan; 0 yang dikirim
+            // sengaja memang mengosongkan kompensasi.
+            $complaint->compensation_amount = $compensation;
 
             if ($complaint->first_response_at === null) {
                 $complaint->first_response_at = now();
@@ -231,6 +249,19 @@ class ComplaintController extends Controller
                 'to_status'    => $complaint->status,
                 'note'         => $data['note'] ?? null,
             ]);
+
+            // Uang yang berpindah harus punya jejak sendiri. Riwayat dulu
+            // hanya mencatat perubahan status, jadi nilai kompensasi bisa
+            // bergerak tanpa siapa pun bisa menelusurinya. (API-14 #10)
+            if ($compensation !== $sekarang) {
+                ComplaintActivity::create([
+                    'complaint_id' => $complaint->id,
+                    'user_id'      => $user->id,
+                    'type'         => 'note',
+                    'note'         => 'Kompensasi diubah dari Rp '.number_format($sekarang, 0, ',', '.')
+                        .' ke Rp '.number_format($compensation, 0, ',', '.').'.',
+                ]);
+            }
         });
 
         return back()->with('status', 'Status diperbarui: '.$complaint->statusLabel());
