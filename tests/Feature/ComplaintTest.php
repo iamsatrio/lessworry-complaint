@@ -224,6 +224,9 @@ class ComplaintTest extends TestCase
                 'customer' => ['id_customer' => 27171, 'customer_name' => 'Ibu Rina', 'phone' => '081234567801'],
                 'services' => [['quantity' => 2, 'status' => 'ORDER', 'notes' => 'Cuci kering']],
             ]], 200),
+            '*/transactions?*' => Http::response(['data' => [
+                ['id_transaction' => 31191, 'transaction_number' => 'INV/119/000123'],
+            ]], 200),
         ]);
 
         $cc = $this->userAs('customer_care');
@@ -231,7 +234,7 @@ class ComplaintTest extends TestCase
         $this->actingAs($cc)->post('/complaints', [
             'channel' => 'wa_cc', 'reporter_name' => 'Ibu Rina', 'category' => 'salah_tagih',
             'priority' => 'medium', 'description' => 'Tagihan tidak sesuai',
-            'nevira_transaction_number' => '31191',
+            'nevira_transaction_number' => 'INV/119/000123',
         ]);
 
         $snapshot = Complaint::latest('id')->first()->nevira_snapshot;
@@ -370,6 +373,9 @@ class ComplaintTest extends TestCase
                 'outlet_name' => 'Citra Garden Serpong', 'id_customer' => 81290,
                 'customer' => ['id_customer' => 81290, 'customer_name' => 'Ibu Tuti'],
             ]], 200),
+            '*/transactions?*' => Http::response(['data' => [
+                ['id_transaction' => 31197, 'transaction_number' => 'INV/179/1'],
+            ]], 200),
         ]);
 
         $cc = $this->userAs('customer_care');
@@ -378,7 +384,7 @@ class ComplaintTest extends TestCase
         $this->assertNull($complaint->nevira_transaction_number);
 
         $this->actingAs($cc)
-            ->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_number' => '31197'])
+            ->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_number' => 'INV/179/1'])
             ->assertRedirect();
 
         $complaint->refresh();
@@ -400,13 +406,16 @@ class ComplaintTest extends TestCase
             '*/transactions/222' => Http::response(['data' => [
                 'id_transaction' => 222, 'transaction_number' => 'INV/BENAR',
             ]], 200),
+            '*/transactions?*' => Http::response(['data' => [
+                ['id_transaction' => 222, 'transaction_number' => 'INV/BENAR'],
+            ]], 200),
         ]);
 
         $cc = $this->userAs('customer_care');
         $complaint = $this->makeComplaint(['nevira_transaction_number' => '111']);
         $complaint->forceFill(['nevira_snapshot' => ['invoice' => 'INV/SALAH']])->save();
 
-        $this->actingAs($cc)->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_number' => '222']);
+        $this->actingAs($cc)->put('/complaints/'.$complaint->id.'/link', ['nevira_transaction_number' => 'INV/BENAR']);
 
         $complaint->refresh();
 

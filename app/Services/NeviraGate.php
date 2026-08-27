@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\NeviraAccessDenied;
+use App\Exceptions\NeviraInputRejected;
 use App\Exceptions\NeviraOutletMismatch;
 use App\Exceptions\NeviraRateLimited;
 use App\Models\User;
@@ -50,6 +51,7 @@ class NeviraGate
     public function resolve(User $user, string $input): array
     {
         $this->pastikanBoleh($user);
+        $this->pastikanBentukNota($input);
         $this->pastikanBelumMelewatiBatas($user);
 
         $resolved = $this->client->resolveTransaction($input);
@@ -83,6 +85,22 @@ class NeviraGate
     {
         if (! $user->canCreateComplaint()) {
             throw new NeviraAccessDenied('Peran '.$user->role.' tidak berkepentingan dengan data order NEVIRA.');
+        }
+    }
+
+    /**
+     * Yang dipegang petugas adalah nomor nota di struk, bukan id internal
+     * NEVIRA. Masukan yang seluruhnya angka ditembakkan langsung ke endpoint
+     * detail dan karena itu melewati aturan cocok-persis — jadi nomor bisa
+     * dicoba satu per satu. Tidak ada alasan menerimanya dari antarmuka.
+     * (API-8 T4)
+     */
+    private function pastikanBentukNota(string $input): void
+    {
+        if (ctype_digit(trim($input))) {
+            throw new NeviraInputRejected(
+                'Masukkan nomor nota seperti tertulis di struk (contoh: INV/118/1787749345365/1), bukan angka saja.'
+            );
         }
     }
 

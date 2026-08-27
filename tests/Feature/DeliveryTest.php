@@ -80,6 +80,9 @@ class DeliveryTest extends TestCase
             '*/transactions/832' => Http::response(['data' => [
                 'id_transaction' => 832, 'transaction_number' => 'INV/123/1',
             ]], 200),
+            '*/transactions?*' => Http::response(['data' => [
+                ['id_transaction' => 832, 'transaction_number' => 'INV/123/1'],
+            ]], 200),
             '*/deliveries-transactions*' => Http::response(['data' => $this->rows()], 200),
         ]);
 
@@ -91,7 +94,7 @@ class DeliveryTest extends TestCase
         $this->actingAs($cc)->post('/complaints', [
             'channel' => 'wa_cc', 'reporter_name' => 'Tuti', 'category' => 'keterlambatan',
             'priority' => 'high', 'description' => 'Telat diantar',
-            'nevira_transaction_number' => '832',
+            'nevira_transaction_number' => 'INV/123/1',
         ]);
 
         $deliveries = Complaint::latest('id')->first()->deliveries();
@@ -109,6 +112,9 @@ class DeliveryTest extends TestCase
             '*/transactions/832' => Http::response(['data' => [
                 'id_transaction' => 832, 'transaction_number' => 'INV/123/1',
             ]], 200),
+            '*/transactions?*' => Http::response(['data' => [
+                ['id_transaction' => 832, 'transaction_number' => 'INV/123/1'],
+            ]], 200),
             '*/deliveries-transactions*' => Http::response('', 500),
         ]);
 
@@ -120,7 +126,7 @@ class DeliveryTest extends TestCase
         $this->actingAs($cc)->post('/complaints', [
             'channel' => 'wa_cc', 'reporter_name' => 'Tuti', 'category' => 'keterlambatan',
             'priority' => 'high', 'description' => 'Telat diantar',
-            'nevira_transaction_number' => '832',
+            'nevira_transaction_number' => 'INV/123/1',
         ]);
 
         $complaint = Complaint::latest('id')->first();
