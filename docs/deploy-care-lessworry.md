@@ -105,7 +105,7 @@ DB_USERNAME=care
 DB_PASSWORD=password_yang_tadi_dibuat
 
 SESSION_DRIVER=database
-SESSION_LIFETIME=30
+SESSION_LIFETIME=30          # menit; naikkan kalau tim sering kehabisan sesi
 SESSION_EXPIRE_ON_CLOSE=true
 SESSION_ENCRYPT=true
 SESSION_SECURE_COOKIE=true
