@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\NeviraAccessDenied;
+use App\Models\Outlet;
 use App\Exceptions\NeviraException;
 use App\Services\NeviraGate;
 use Illuminate\Http\JsonResponse;
@@ -54,11 +55,31 @@ class NeviraLookupController extends Controller
     /**
      * Buang apa pun yang tidak berhak dilihat peran ini.
      */
+    /**
+     * Petakan outlet NEVIRA pada nota ke outlet di sistem ini.
+     *
+     * Yang dikembalikan id LOKAL, supaya form bisa memilih pilihannya tanpa
+     * pengenal sistem lain ikut ke browser.
+     */
+    private function outletLokal(array $summary): ?int
+    {
+        $idNevira = $summary['outlet_id'] ?? null;
+
+        if (blank($idNevira)) {
+            return null;
+        }
+
+        return Outlet::where('nevira_outlet_id', (string) $idNevira)->value('id');
+    }
+
     private function untukPeran(array $summary, $user): array
     {
         $aman = [
             'invoice'        => $summary['invoice'] ?? null,
             'outlet_name'    => $summary['outlet_name'] ?? null,
+            // Id outlet LOKAL, bukan id NEVIRA — supaya form bisa memilih
+            // pilihannya tanpa pengenal sistem lain ikut ke browser.
+            'outlet_id'      => $this->outletLokal($summary),
             'status'         => $summary['status'] ?? null,
             'payment_status' => $summary['payment_status'] ?? null,
             'grand_total'    => $summary['grand_total'] ?? null,

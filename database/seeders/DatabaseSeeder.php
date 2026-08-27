@@ -12,8 +12,28 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $pusat = Outlet::create(['name' => 'Outlet Pusat', 'nevira_outlet_id' => '1']);
-        $cabang = Outlet::create(['name' => 'Outlet Cabang 2', 'nevira_outlet_id' => '2']);
+        // Outlet nyata beserta id NEVIRA-nya, supaya penentuan outlet dari
+        // nota berfungsi tanpa menunggu `php artisan nevira:sync-outlets`.
+        $daftarOutlet = [
+            '115' => 'Kemang',
+            '116' => 'Cipete',
+            '117' => 'Hampton Gading Serpong',
+            '118' => 'Tebet',
+            '119' => 'Lebak Bulus',
+            '120' => 'Fatmawati',
+            '121' => 'Pondok Indah',
+            '122' => 'Jati Padang',
+            '123' => 'Park Serpong',
+            '124' => 'Jagakarsa',
+            '179' => 'Citra Garden Serpong',
+        ];
+
+        foreach ($daftarOutlet as $idNevira => $nama) {
+            Outlet::create(['name' => $nama, 'nevira_outlet_id' => $idNevira]);
+        }
+
+        $pusat = Outlet::where('nevira_outlet_id', '118')->first();   // Tebet
+        $cabang = Outlet::where('nevira_outlet_id', '123')->first();  // Park Serpong
 
         // Password contoh untuk lingkungan pengembangan. WAJIB diganti sebelum produksi.
         //

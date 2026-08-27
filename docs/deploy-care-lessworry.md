@@ -153,6 +153,20 @@ exit
 
 Sisanya dibuat lewat halaman **Pengguna** setelah kamu masuk.
 
+### Petakan outlet ke NEVIRA
+
+```bash
+php artisan nevira:sync-outlets --dry-run    # lihat rencananya
+php artisan nevira:sync-outlets              # jalankan
+```
+
+Wajib dijalankan setelah kredensial NEVIRA terisi. Tanpa pemetaan ini:
+
+- complaint tidak bisa menentukan outletnya sendiri dari nota,
+- pembatasan kasir per outlet tidak punya dasar pembanding, sehingga kasir **ditolak** saat memeriksa nota.
+
+Jalankan ulang setiap kali ada outlet baru dibuka. Perintah ini hanya membaca dari NEVIRA dan tidak pernah menghapus outlet yang sudah ada.
+
 ## 6. Izin berkas
 
 ```bash

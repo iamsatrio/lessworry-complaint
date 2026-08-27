@@ -597,6 +597,32 @@ class ComplaintController extends Controller
      * masih kosong. Yang sudah diketik petugas tidak pernah ditimpa:
      * pelapor bisa saja bukan pemilik order, misalnya yang mengantarkan.
      */
+    /**
+     * Tentukan outlet complaint dari outlet pada nota.
+     *
+     * Kasir tetap terkunci ke outletnya sendiri (diputuskan di store), jadi
+     * ini hanya mengisi yang belum ditentukan — biasanya complaint dari
+     * Customer Care, yang tidak tahu outlet mana sebelum notanya dicek.
+     */
+    private function fillOutletFromOrder(Complaint $complaint, array $summary): void
+    {
+        if (filled($complaint->outlet_id)) {
+            return;
+        }
+
+        $idNevira = $summary['outlet_id'] ?? null;
+
+        if (blank($idNevira)) {
+            return;
+        }
+
+        $outlet = Outlet::where('nevira_outlet_id', (string) $idNevira)->first();
+
+        if ($outlet) {
+            $complaint->forceFill(['outlet_id' => $outlet->id])->save();
+        }
+    }
+
     private function fillReporterFromOrder(Complaint $complaint, array $summary): void
     {
         $isi = [];
@@ -647,6 +673,7 @@ class ComplaintController extends Controller
             ])->save();
 
             $this->fillReporterFromOrder($complaint, $summary);
+            $this->fillOutletFromOrder($complaint, $summary);
         } catch (NeviraAccessDenied $e) {
             abort(403);
         } catch (NeviraException $e) {

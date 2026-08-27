@@ -260,6 +260,18 @@ class NeviraClient
             ->values()->all();
     }
 
+    /**
+     * Daftar outlet NEVIRA. Dipakai untuk memetakan outlet di sistem ini
+     * ke id outlet NEVIRA, supaya complaint bisa menentukan outletnya
+     * sendiri dari nota.
+     */
+    public function outlets(int $limit = 200): array
+    {
+        $payload = $this->get('/outlet', ['limit' => $limit]);
+
+        return $payload['data'] ?? $payload;
+    }
+
     public function customer(string $customerId): array
     {
         return $this->get('/customer/'.rawurlencode($customerId));

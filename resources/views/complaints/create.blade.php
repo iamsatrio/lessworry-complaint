@@ -49,9 +49,10 @@
       @if(!auth()->user()->isKasir())
       <div><label for="out">Outlet</label>
         <select id="out" name="outlet_id">
-          <option value="">Belum diketahui</option>
+          <option value="">Terisi sendiri dari nota</option>
           @foreach($outlets as $o)<option value="{{ $o->id }}" @selected(old('outlet_id')==$o->id)>{{ $o->name }}</option>@endforeach
         </select>
+        <p class="hint" id="out-hint" style="display:none"></p>
       </div>
       @endif
     </div>
@@ -114,6 +115,8 @@ const btn    = el('cek');
 const box    = el('nvbox');
 const nm     = el('rn');
 const tp     = el('rp');
+const out    = el('out');
+const outHint= el('out-hint');
 const pakai  = el('pakai');
 const btnPakai = el('btn-pakai');
 const pakaiHint= el('pakai-hint');
@@ -197,6 +200,22 @@ async function cekNota(){
       // pelapor belum tentu pemilik order. Kalau isinya berbeda, tawarkan
       // tombol supaya petugas bisa memilih secara sadar.
       pelangganNota = {nama: d.customer_name || '', telp: d.customer_phone || ''};
+
+      // Outlet ditentukan dari nota. Yang dipilih petugas tidak ditimpa —
+      // complaint bisa saja dilaporkan di outlet lain daripada tempat cuci.
+      if (out && d.outlet_id) {
+        const ada = [...out.options].some(o => o.value == d.outlet_id);
+        if (ada && !out.value) {
+          out.value = d.outlet_id;
+          if (outHint) { outHint.style.display='block'; outHint.textContent = 'Terisi dari nota: ' + (d.outlet_name || ''); }
+        } else if (ada && out.value != d.outlet_id && outHint) {
+          outHint.style.display='block';
+          outHint.textContent = 'Nota ini dari outlet ' + (d.outlet_name || '') + ' — berbeda dari pilihanmu.';
+        }
+      } else if (out && !d.outlet_id && d.outlet_name && outHint) {
+        outHint.style.display='block';
+        outHint.textContent = 'Outlet "' + d.outlet_name + '" belum terdaftar di sistem ini. Jalankan nevira:sync-outlets.';
+      }
       if (nm && pelangganNota.nama && !nm.value) nm.value = pelangganNota.nama;
       if (tp && pelangganNota.telp && !tp.value) tp.value = pelangganNota.telp;
       tawarkanPakai();
