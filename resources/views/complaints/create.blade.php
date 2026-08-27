@@ -36,8 +36,7 @@
   <p class="hint">Untuk keluhan hasil cuci dan barang rusak, foto hampir selalu menentukan.</p>
 </div>
 
-<div class="grid g2">
-  <div class="card">
+<div class="card">
     <div class="eyebrow">Siapa yang melapor</div>
     <div class="row">
       <div><label for="ch">Masuk lewat <span class="req">*</span></label>
@@ -56,15 +55,9 @@
       </div>
       @endif
     </div>
-    <label for="rn">Nama pelapor <span class="req">*</span></label>
-    <input id="rn" name="reporter_name" value="{{ old('reporter_name') }}" required>
-    <label for="rp">Nomor telepon</label>
-    <input id="rp" name="reporter_phone" value="{{ old('reporter_phone') }}" inputmode="tel" placeholder="08xxxxxxxxxx">
-    <p class="hint">Dipakai untuk mengabari hasil penanganan, dan untuk melihat kalau pelanggan ini pernah komplain sebelumnya.</p>
-  </div>
-
-  <div class="card">
-    <div class="eyebrow">Order di NEVIRA</div>
+    {{-- Nota didahulukan: begitu diisi, identitas pelapor terisi sendiri.
+         Kalau nama diketik lebih dulu, sistem tidak menimpanya, dan
+         pengisian otomatis jadi terasa tidak jalan. --}}
     <label for="nv">Nomor nota NEVIRA <span class="req">*</span></label>
     <div style="display:flex;gap:10px">
       <input id="nv" name="nevira_transaction_number" value="{{ old('nevira_transaction_number') }}"
@@ -72,10 +65,7 @@
       <button type="button" class="ghost shrink" id="cek">Cek</button>
     </div>
     <div id="nvbox" class="panel" style="display:none"></div>
-    <p class="hint">
-      Boleh nomor nota yang tercetak di struk, boleh juga ID transaksi. Pengecekan berjalan
-      sendiri begitu kolom ini ditinggalkan; data pelapor ikut terisi.
-    </p>
+    <p class="hint">Isi ini lebih dulu — nama dan telepon pelapor akan terisi sendiri dari data pelanggan pada nota.</p>
 
     <label for="exempt">Kalau tidak ada notanya, pilih alasannya</label>
     <select id="exempt" name="nota_exemption">
@@ -84,11 +74,22 @@
         <option value="{{ $k }}" @selected(old('nota_exemption')===$k)>{{ $v }}</option>
       @endforeach
     </select>
+
+    <label for="rn">Nama pelapor <span class="req">*</span></label>
+    <input id="rn" name="reporter_name" value="{{ old('reporter_name') }}" required>
+    <label for="rp">Nomor telepon</label>
+    <input id="rp" name="reporter_phone" value="{{ old('reporter_phone') }}" inputmode="tel" placeholder="08xxxxxxxxxx">
+    <div id="pakai" style="display:none;margin-top:10px">
+      <button type="button" class="ghost" id="btn-pakai" style="padding:9px 16px;min-height:40px;font-size:13.5px">
+        Pakai data pelanggan dari nota
+      </button>
+      <p class="hint" id="pakai-hint"></p>
+    </div>
     <p class="hint">
-      Complaint tanpa nota tidak bisa ditelusuri ke ordernya, jadi alasannya harus disebut.
-      Isi salah satu: nomor nota, atau alasan di atas.
+      Pelapor tidak selalu pemilik order — bisa saja yang mengantarkan. Kalau berbeda, tulis siapa yang benar-benar melapor.
     </p>
   </div>
+
 </div>
 
 <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
@@ -113,6 +114,10 @@ const btn    = el('cek');
 const box    = el('nvbox');
 const nm     = el('rn');
 const tp     = el('rp');
+const pakai  = el('pakai');
+const btnPakai = el('btn-pakai');
+const pakaiHint= el('pakai-hint');
+let pelangganNota = null;
 
 /* ---------- Sub-kategori mengikuti kategori ---------- */
 const SUB = @json(collect(config('complaint.categories'))->map(fn ($c) => $c['sub']));
@@ -188,8 +193,13 @@ async function cekNota(){
       if (d.invoice) nvInput.value = d.invoice;
       terakhirDicek = nvInput.value;
       if (exempt) exempt.value = '';
-      if (nm && d.customer_name && !nm.value) nm.value = d.customer_name;
-      if (tp && d.customer_phone && !tp.value) tp.value = d.customer_phone;
+      // Kolom kosong diisi sendiri. Yang sudah diketik petugas TIDAK ditimpa —
+      // pelapor belum tentu pemilik order. Kalau isinya berbeda, tawarkan
+      // tombol supaya petugas bisa memilih secara sadar.
+      pelangganNota = {nama: d.customer_name || '', telp: d.customer_phone || ''};
+      if (nm && pelangganNota.nama && !nm.value) nm.value = pelangganNota.nama;
+      if (tp && pelangganNota.telp && !tp.value) tp.value = pelangganNota.telp;
+      tawarkanPakai();
 
       let umur = '';
       if (d.created_at) {
@@ -214,6 +224,25 @@ async function cekNota(){
     if (btn) { btn.disabled = false; btn.textContent = 'Cek'; }
   }
 }
+
+function tawarkanPakai(){
+  if (!pakai || !pelangganNota) return;
+  const beda = (pelangganNota.nama && nm && nm.value !== pelangganNota.nama)
+            || (pelangganNota.telp && tp && tp.value !== pelangganNota.telp);
+  pakai.style.display = beda ? 'block' : 'none';
+  if (beda && pakaiHint) {
+    pakaiHint.textContent = 'Pada nota tercatat atas nama ' + (pelangganNota.nama || '—')
+      + (pelangganNota.telp ? ' · ' + pelangganNota.telp : '') + '.';
+  }
+}
+if (btnPakai) btnPakai.addEventListener('click', () => {
+  if (!pelangganNota) return;
+  if (nm && pelangganNota.nama) nm.value = pelangganNota.nama;
+  if (tp && pelangganNota.telp) tp.value = pelangganNota.telp;
+  tawarkanPakai();
+});
+if (nm) nm.addEventListener('input', tawarkanPakai);
+if (tp) tp.addEventListener('input', tawarkanPakai);
 
 if (btn)     btn.addEventListener('click', () => { terakhirDicek = ''; cekNota(); });
 if (nvInput) {
