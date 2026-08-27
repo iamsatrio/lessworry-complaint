@@ -89,7 +89,9 @@ class ComplaintController extends Controller
             'category'              => ['required', Rule::in(array_keys(config('complaint.categories')))],
             'sub_category'          => ['nullable', 'string', 'max:120'],
             'priority'              => ['required', Rule::in(array_keys(config('complaint.priorities')))],
-            'description'           => ['required', 'string'],
+            // Batas panjang: tanpa ini 2 juta karakter tersimpan utuh dan
+            // ikut termuat di papan kerja maupun halaman detail. (API-8 T8)
+            'description'           => ['required', 'string', 'max:5000'],
             'attachments.*'         => ['nullable', 'image', 'max:5120'],
         ], [
             'nevira_transaction_number.required_without' => 'Isi nomor nota NEVIRA, atau pilih alasan kenapa complaint ini tidak punya nota.',
@@ -243,9 +245,9 @@ class ComplaintController extends Controller
             // penyimpanan dari halaman basi menimpa keputusan orang lain
             // tanpa peringatan ke siapa pun. (API-8 T6)
             'lock_version'        => ['required', 'integer'],
-            'note'                => ['nullable', 'string'],
-            'resolution'          => ['nullable', 'string'],
-            'root_cause'          => ['nullable', 'string'],
+            'note'                => ['nullable', 'string', 'max:2000'],
+            'resolution'          => ['nullable', 'string', 'max:5000'],
+            'root_cause'          => ['nullable', 'string', 'max:2000'],
             'compensation_amount' => ['nullable', 'integer', 'min:0'],
         ], [
             'lock_version.required' => 'Muat ulang halaman complaint ini sebelum menyimpan.',
@@ -391,7 +393,7 @@ class ComplaintController extends Controller
     {
         abort_unless($request->user()->canView($complaint), 403);
 
-        $data = $request->validate(['note' => ['required', 'string']]);
+        $data = $request->validate(['note' => ['required', 'string', 'max:2000']]);
 
         ComplaintActivity::create([
             'complaint_id' => $complaint->id,
@@ -492,7 +494,7 @@ class ComplaintController extends Controller
             'responsible_staff_nip'  => ['nullable', 'string', 'max:40'],
             'responsible_staff_id'   => ['nullable', 'integer'],
             'responsible_stage'      => ['nullable', 'string', 'max:80'],
-            'responsibility_note'    => ['required_with:responsible_staff_name', 'nullable', 'string'],
+            'responsibility_note'    => ['required_with:responsible_staff_name', 'nullable', 'string', 'max:2000'],
         ], [
             'responsibility_note.required_with' => 'Tulis alasannya. Menunjuk orang tanpa alasan tidak bisa ditinjau ulang.',
         ], [
