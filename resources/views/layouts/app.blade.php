@@ -145,6 +145,7 @@ button:hover,.btn:hover{background:var(--teal-deep);color:#fff}
 /* ---------- Pesan ---------- */
 .flash,.err{border-radius:var(--r);padding:14px 18px;margin-bottom:20px;font-size:14.5px;border:1px solid}
 .flash{background:var(--ok-soft);border-color:#bfe5d3;color:#1e6b48}
+.flash.warn{background:var(--warn-soft);border-color:#f3dfa4;color:#8a6800}
 .err{background:var(--danger-soft);border-color:#f3c4c4;color:#a32e2e}
 .err b{font-family:var(--display)}
 .err ul{margin:6px 0 0 18px;padding:0}
@@ -262,6 +263,7 @@ details.filters .body{padding:0 22px 20px}
 
 <main>
   @if(session('status'))<div class="flash">{{ session('status') }}</div>@endif
+  @if(session('warning'))<div class="flash warn">{{ session('warning') }}</div>@endif
   @if($errors->any())
     <div class="err"><b>Periksa lagi sebelum lanjut</b><ul>@foreach($errors->all() as $e)<li>{{ $e }}</li>@endforeach</ul></div>
   @endif

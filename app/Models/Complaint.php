@@ -168,6 +168,34 @@ class Complaint extends Model
         return $this->hasMany(ComplaintAttachment::class);
     }
 
+    /**
+     * Complaint lain untuk nomor nota yang sama, sebatas yang boleh dilihat
+     * pengguna ini. (API-8 T7)
+     *
+     * Sengaja peringatan, bukan larangan: satu nota memang bisa punya dua
+     * keluhan berbeda — noda yang tidak hilang DAN antarnya telat. Yang
+     * berbahaya adalah tidak tahu, karena satu keluhan lalu terhitung
+     * berkali-kali di rekap SLA dan dikerjakan beberapa petugas paralel.
+     *
+     * Disaring visibleTo supaya peringatannya sendiri tidak jadi jalan
+     * melihat complaint outlet lain.
+     *
+     * @return \Illuminate\Support\Collection<int,Complaint>
+     */
+    public function kembaranNota(User $user)
+    {
+        if (blank($this->nevira_transaction_number)) {
+            return collect();
+        }
+
+        return static::query()
+            ->visibleTo($user)
+            ->where('nevira_transaction_number', $this->nevira_transaction_number)
+            ->whereKeyNot($this->getKey())
+            ->orderBy('id')
+            ->get();
+    }
+
     /* ---------- Nomor tiket ---------- */
 
     /**

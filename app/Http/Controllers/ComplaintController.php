@@ -156,9 +156,21 @@ class ComplaintController extends Controller
             $this->syncNevira($complaint, $user);
         }
 
-        return redirect()
+        $redirect = redirect()
             ->route('complaints.show', $complaint)
             ->with('status', 'Complaint '.$complaint->ticket_number.' tercatat.');
+
+        // Peringatan, bukan larangan: satu nota boleh punya dua keluhan
+        // berbeda. Yang tidak boleh adalah petugas tidak tahu. (API-8 T7)
+        $kembaran = $complaint->kembaranNota($user);
+
+        if ($kembaran->isNotEmpty()) {
+            $redirect->with('warning', 'Nota '.$complaint->nevira_transaction_number
+                .' sudah pernah dikeluhkan: '.$kembaran->pluck('ticket_number')->implode(', ')
+                .'. Periksa dulu — kalau keluhannya sama, gabungkan supaya tidak dihitung dua kali.');
+        }
+
+        return $redirect;
     }
 
     /**
@@ -206,6 +218,7 @@ class ComplaintController extends Controller
 
         return view('complaints.show', [
             'complaint' => $complaint,
+            'kembaran'  => $complaint->kembaranNota(Auth::user()),
             // Daftar pegawai hanya untuk peran yang memang menetapkan
             // penanggung jawab. Sebelumnya setiap kasir menerima nama dan
             // peran seluruh pegawai perusahaan, termasuk outlet lain.

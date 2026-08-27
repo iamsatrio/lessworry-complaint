@@ -81,6 +81,20 @@
   <div>
     <div class="card">
       <div class="eyebrow">Order di NEVIRA</div>
+      @if($kembaran->isNotEmpty())
+        {{-- Satu nota boleh punya beberapa keluhan berbeda; yang berbahaya
+             adalah mengerjakannya paralel tanpa saling tahu. --}}
+        <div class="panel" style="background:var(--warn-soft);border-color:#f3dfa4;margin:0 0 14px">
+          <b>Nota ini juga dikeluhkan di tiket lain</b>
+          <div style="margin-top:5px">
+            @foreach($kembaran as $lain)
+              <a href="{{ route('complaints.show',$lain) }}" class="tix">{{ $lain->ticket_number }}</a>
+              <span class="muted small">({{ $lain->statusLabel() }})</span>@if(!$loop->last), @endif
+            @endforeach
+          </div>
+          <div class="small" style="margin-top:8px">Periksa dulu sebelum mengerjakan — kalau keluhannya sama, gabungkan.</div>
+        </div>
+      @endif
       @if($complaint->isLinkedToOrder())
         <div class="tix" style="font-size:15px;margin-bottom:12px">{{ $complaint->orderLabel() }}</div>
         @if($complaint->nevira_snapshot)
