@@ -33,8 +33,11 @@
 /public/hot
 /public/storage
 /storage/*.key
+/storage/app/private/*
+/storage/app/public/*
 /storage/framework/cache/*
 /storage/framework/sessions/*
+/storage/framework/testing
 /storage/framework/views/*
 /storage/logs/*
 /storage/pail
@@ -44,3 +47,4 @@ Homestead.yaml
 Thumbs.db
 _ide_helper.php
 auth.json
+!.gitkeep
