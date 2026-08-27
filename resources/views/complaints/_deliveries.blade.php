@@ -1,4 +1,10 @@
-@php $deliveries = $complaint->deliveries(); @endphp
+@php
+  $deliveries = $complaint->deliveries();
+  // Nama dan NIP kurir adalah data karyawan: aturannya sama dengan kasir POS
+  // dan penanggung jawab. Perjalanannya sendiri tetap tampil untuk semua —
+  // yang disembunyikan hanya identitas orangnya. (API-14 #5)
+  $bolehLihatKurir = auth()->user()->canSeeStaffAttribution();
+@endphp
 
 @if(!empty($deliveries))
 <div class="card">
@@ -17,8 +23,12 @@
         @endif
         <div class="small">
           @if($d['courier_name'])
-            Kurir: <b>{{ $d['courier_name'] }}</b>
-            @if($d['courier_nip'])<span class="muted" style="font-family:var(--mono)"> · {{ $d['courier_nip'] }}</span>@endif
+            @if($bolehLihatKurir)
+              Kurir: <b>{{ $d['courier_name'] }}</b>
+              @if($d['courier_nip'])<span class="muted" style="font-family:var(--mono)"> · {{ $d['courier_nip'] }}</span>@endif
+            @else
+              <span class="muted">Kurir sudah ditugaskan</span>
+            @endif
           @else
             <span class="muted">Kurir belum ditugaskan</span>
           @endif

@@ -158,9 +158,15 @@ class ComplaintController extends Controller
 
         return view('complaints.show', [
             'complaint' => $complaint,
-            'handlers'  => User::where('is_active', true)
-                ->whereIn('role', ['kasir', 'customer_care', 'supervisor'])
-                ->orderBy('name')->get(),
+            // Daftar pegawai hanya untuk peran yang memang menetapkan
+            // penanggung jawab. Sebelumnya setiap kasir menerima nama dan
+            // peran seluruh pegawai perusahaan, termasuk outlet lain.
+            // (API-14 #6)
+            'handlers'  => Auth::user()->canAssignResponsibility()
+                ? User::where('is_active', true)
+                    ->whereIn('role', ['kasir', 'customer_care', 'supervisor'])
+                    ->orderBy('name')->get()
+                : collect(),
         ]);
     }
 

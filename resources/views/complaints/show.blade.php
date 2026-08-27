@@ -175,13 +175,15 @@
       <div class="eyebrow">Siapa yang menangani</div>
       <form method="POST" action="{{ route('complaints.assign',$complaint) }}">
         @csrf
-        <label for="asg">Penanggung jawab</label>
-        <select id="asg" name="assigned_to">
-          <option value="">Belum ditentukan</option>
-          @foreach($handlers as $h)
-            <option value="{{ $h->id }}" @selected($complaint->assigned_to==$h->id)>{{ $h->name }} — {{ $h->roleLabel() }}</option>
-          @endforeach
-        </select>
+        @if($handlers->isNotEmpty())
+          <label for="asg">Penanggung jawab</label>
+          <select id="asg" name="assigned_to">
+            <option value="">Belum ditentukan</option>
+            @foreach($handlers as $h)
+              <option value="{{ $h->id }}" @selected($complaint->assigned_to==$h->id)>{{ $h->name }} — {{ $h->roleLabel() }}</option>
+            @endforeach
+          </select>
+        @endif
         <label for="fwd">Teruskan ke divisi</label>
         <select id="fwd" name="forwarded_division">
           <option value="">Tidak diteruskan</option>
