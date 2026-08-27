@@ -201,4 +201,68 @@ class UserManagementTest extends TestCase
         $this->actingAs($supervisor)->delete('/users/'.$kasir->id)->assertStatus(405);
         $this->assertDatabaseHas('users', ['id' => $kasir->id]);
     }
+
+    /* ---------- is_active yang hilang tidak boleh mematikan akun (API-14 #9) ---------- */
+
+    public function test_request_tanpa_is_active_tidak_menonaktifkan_akun(): void
+    {
+        $supervisor = User::create([
+            'name' => 'SV', 'email' => 'sv'.uniqid().'@lessworry.id',
+            'password' => 'secret123', 'role' => 'supervisor',
+        ]);
+
+        $kasir = User::create([
+            'name' => 'Kasir', 'email' => 'k'.uniqid().'@lessworry.id',
+            'password' => 'secret123', 'role' => 'kasir',
+        ]);
+
+        $this->assertTrue($kasir->is_active);
+
+        // Kolom is_active sengaja tidak dikirim — nilai yang tidak dikirim
+        // berarti "jangan diubah", bukan "matikan".
+        $this->actingAs($supervisor)->put('/users/'.$kasir->id, [
+            'name' => 'Kasir', 'role' => 'kasir',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertTrue($kasir->fresh()->is_active, 'akun mati diam-diam karena kolomnya tidak dikirim');
+    }
+
+    public function test_request_tanpa_is_active_tidak_menghidupkan_akun_nonaktif(): void
+    {
+        $supervisor = User::create([
+            'name' => 'SV', 'email' => 'sv'.uniqid().'@lessworry.id',
+            'password' => 'secret123', 'role' => 'supervisor',
+        ]);
+
+        $kasir = User::create([
+            'name' => 'Kasir', 'email' => 'k'.uniqid().'@lessworry.id',
+            'password' => 'secret123', 'role' => 'kasir',
+        ]);
+        $kasir->forceFill(['is_active' => false])->save();
+
+        $this->actingAs($supervisor)->put('/users/'.$kasir->id, [
+            'name' => 'Kasir', 'role' => 'kasir',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertFalse($kasir->fresh()->is_active, '"jangan diubah" tidak boleh berarti "hidupkan"');
+    }
+
+    public function test_is_active_yang_dikirim_tetap_berlaku(): void
+    {
+        $supervisor = User::create([
+            'name' => 'SV', 'email' => 'sv'.uniqid().'@lessworry.id',
+            'password' => 'secret123', 'role' => 'supervisor',
+        ]);
+
+        $kasir = User::create([
+            'name' => 'Kasir', 'email' => 'k'.uniqid().'@lessworry.id',
+            'password' => 'secret123', 'role' => 'kasir',
+        ]);
+
+        $this->actingAs($supervisor)->put('/users/'.$kasir->id, [
+            'name' => 'Kasir', 'role' => 'kasir', 'is_active' => 0,
+        ])->assertSessionHasNoErrors();
+
+        $this->assertFalse($kasir->fresh()->is_active);
+    }
 }

@@ -96,7 +96,12 @@ class UserController extends Controller
             'is_active' => ['nullable', 'boolean'],
         ]);
 
-        $isActive = $request->boolean('is_active');
+        // Kolom yang tidak dikirim berarti "jangan diubah", bukan "matikan".
+        // $request->boolean() memperlakukan kolom absen sebagai false, jadi
+        // setiap PUT tanpa field ini mematikan akun diam-diam. (API-14 #9)
+        $isActive = $request->has('is_active')
+            ? $request->boolean('is_active')
+            : (bool) $user->is_active;
 
         // Supervisor terakhir yang aktif tidak boleh mematikan dirinya sendiri —
         // itu mengunci semua orang keluar dari pengelolaan pengguna.
