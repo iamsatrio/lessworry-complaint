@@ -226,11 +226,28 @@ class ComplaintController extends Controller
 
         $data = $request->validate([
             'status'              => ['required', Rule::in(array_keys(config('complaint.statuses')))],
+            // Versi yang dilihat petugas saat halaman dibuka. Tanpa ini,
+            // penyimpanan dari halaman basi menimpa keputusan orang lain
+            // tanpa peringatan ke siapa pun. (API-8 T6)
+            'lock_version'        => ['required', 'integer'],
             'note'                => ['nullable', 'string'],
             'resolution'          => ['nullable', 'string'],
             'root_cause'          => ['nullable', 'string'],
             'compensation_amount' => ['nullable', 'integer', 'min:0'],
-        ]);
+        ], [
+            'lock_version.required' => 'Muat ulang halaman complaint ini sebelum menyimpan.',
+        ], ['lock_version' => 'penanda versi']);
+
+        if ((int) $data['lock_version'] !== (int) $complaint->lock_version) {
+            // withInput() penting: petugas sudah mengetik resolusi panjang,
+            // dan menghukumnya dengan mengosongkan form membuat pengaman ini
+            // dibenci lalu diakali.
+            return back()->withInput()->withErrors([
+                'lock_version' => 'Complaint ini sudah diubah orang lain sejak halaman ini dibuka — '
+                    .'sekarang berstatus '.$complaint->statusLabel().'. Muat ulang halamannya, '
+                    .'baca perubahannya, lalu simpan lagi kalau masih perlu.',
+            ]);
+        }
 
         $closing = in_array($data['status'], ['selesai', 'ditolak'], true);
 
@@ -268,6 +285,7 @@ class ComplaintController extends Controller
 
         DB::transaction(function () use ($complaint, $data, $user, $from, $closing, $compensation, $sekarang) {
             $complaint->status = $data['status'];
+            $complaint->lock_version = (int) $complaint->lock_version + 1;
             $complaint->resolution = $data['resolution'] ?? $complaint->resolution;
             $complaint->root_cause = $data['root_cause'] ?? $complaint->root_cause;
 

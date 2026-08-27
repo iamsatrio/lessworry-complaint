@@ -205,6 +205,9 @@
       <div class="eyebrow">Perbarui status</div>
       <form method="POST" action="{{ route('complaints.status',$complaint) }}">
         @csrf
+        {{-- Versi yang sedang ditampilkan. Kalau ada yang menyimpan duluan,
+             penyimpanan dari halaman ini ditolak, bukan menimpanya. --}}
+        <input type="hidden" name="lock_version" value="{{ $complaint->lock_version }}">
         <label for="st">Status</label>
         <select id="st" name="status" required>
           @foreach(config('complaint.statuses') as $k=>$v)

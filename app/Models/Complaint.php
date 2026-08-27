@@ -23,6 +23,15 @@ class Complaint extends Model
         'description', 'assigned_to', 'forwarded_division',
     ];
 
+    /**
+     * Default harus ada di model, bukan hanya di kolom database: instance
+     * yang baru disimpan masih memegang null sampai di-refresh, dan form
+     * halaman complaint membaca nilai ini langsung. (API-8 T6)
+     */
+    protected $attributes = [
+        'lock_version' => 0,
+    ];
+
     protected function casts(): array
     {
         return [
@@ -33,6 +42,7 @@ class Complaint extends Model
             'first_response_at' => 'datetime',
             'resolved_at'      => 'datetime',
             'responsibility_set_at' => 'datetime',
+            'lock_version'     => 'integer',
         ];
     }
 

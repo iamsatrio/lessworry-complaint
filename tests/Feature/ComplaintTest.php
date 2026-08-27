@@ -126,7 +126,7 @@ class ComplaintTest extends TestCase
         $complaint = $this->makeComplaint(['outlet_id' => $a->id]);
 
         $this->actingAs($kasir)
-            ->post('/complaints/'.$complaint->id.'/status', ['status' => 'selesai'])
+            ->post('/complaints/'.$complaint->id.'/status', ['lock_version' => $complaint->fresh()->lock_version, 'status' => 'selesai'])
             ->assertSessionHasErrors('status');
 
         $this->assertSame('baru', $complaint->fresh()->status);
@@ -139,7 +139,7 @@ class ComplaintTest extends TestCase
         $complaint = $this->makeComplaint(['outlet_id' => $a->id]);
 
         $this->actingAs($kasir)->post('/complaints/'.$complaint->id.'/status', [
-            'status' => 'ditangani', 'compensation_amount' => 500000,
+            'lock_version' => $complaint->fresh()->lock_version, 'status' => 'ditangani', 'compensation_amount' => 500000,
         ])->assertSessionHasErrors('compensation_amount');
 
         $this->assertSame(0, (int) $complaint->fresh()->compensation_amount);
@@ -151,7 +151,7 @@ class ComplaintTest extends TestCase
         $complaint = $this->makeComplaint();
 
         $this->actingAs($supervisor)->post('/complaints/'.$complaint->id.'/status', [
-            'status' => 'selesai', 'resolution' => 'Dicuci ulang gratis',
+            'lock_version' => $complaint->fresh()->lock_version, 'status' => 'selesai', 'resolution' => 'Dicuci ulang gratis',
         ]);
 
         $complaint->refresh();
