@@ -2,10 +2,11 @@
 
 namespace App\Services;
 
+use App\Exceptions\NeviraNotFound;
+use App\Exceptions\NeviraRequestFailed;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use RuntimeException;
 
 /**
  * Klien NEVIRA POS — HANYA BACA.
@@ -53,7 +54,10 @@ class NeviraClient
     private function login(): string
     {
         if (! $this->isConfigured()) {
-            throw new RuntimeException('Kredensial NEVIRA belum diisi. Set NEVIRA_EMAIL dan NEVIRA_PASSWORD di .env');
+            throw new NeviraRequestFailed(
+                'Kredensial NEVIRA belum diisi. Set NEVIRA_EMAIL dan NEVIRA_PASSWORD di .env',
+                'Integrasi NEVIRA belum dikonfigurasi.'
+            );
         }
 
         $response = Http::timeout(config('nevira.timeout'))
@@ -67,13 +71,19 @@ class NeviraClient
         if (! $response->successful()) {
             // Jangan pernah log body request — berisi password.
             Log::warning('NEVIRA login gagal', ['status' => $response->status()]);
-            throw new RuntimeException('Login NEVIRA gagal (HTTP '.$response->status().')');
+            throw new NeviraRequestFailed(
+                'Login NEVIRA gagal (HTTP '.$response->status().')',
+                'Tidak bisa masuk ke NEVIRA saat ini.'
+            );
         }
 
         $token = $response->json('access_token');
 
         if (! is_string($token) || $token === '') {
-            throw new RuntimeException('Login NEVIRA tidak mengembalikan access_token');
+            throw new NeviraRequestFailed(
+                'Login NEVIRA tidak mengembalikan access_token',
+                'Tidak bisa masuk ke NEVIRA saat ini.'
+            );
         }
 
         return $token;
@@ -100,7 +110,7 @@ class NeviraClient
         }
 
         if (! $response->successful()) {
-            throw new RuntimeException('NEVIRA '.$path.' balas HTTP '.$response->status());
+            throw new NeviraRequestFailed('NEVIRA '.$path.' balas HTTP '.$response->status(), 'NEVIRA membalas HTTP '.$response->status().'.');
         }
 
         return (array) $response->json();
@@ -144,7 +154,7 @@ class NeviraClient
         $input = trim($input);
 
         if ($input === '') {
-            throw new RuntimeException('Nomor nota kosong.');
+            throw new NeviraNotFound('Nomor nota kosong.');
         }
 
         if (ctype_digit($input)) {
@@ -166,13 +176,13 @@ class NeviraClient
         $exact = collect($matches)->firstWhere('transaction_number', $input);
 
         if (! $exact) {
-            throw new RuntimeException('Nota "'.$input.'" tidak ditemukan di NEVIRA.');
+            throw new NeviraNotFound('Nota "'.$input.'" tidak ditemukan di NEVIRA.');
         }
 
         $id = (string) ($exact['id_transaction'] ?? '');
 
         if ($id === '') {
-            throw new RuntimeException('NEVIRA menemukan nota itu tapi tidak menyertakan id_transaction.');
+            throw new NeviraNotFound('NEVIRA menemukan nota itu tapi tidak menyertakan id_transaction.');
         }
 
         return ['id' => $id, 'number' => $exact['transaction_number'] ?? $input, 'payload' => $this->transaction($id)];

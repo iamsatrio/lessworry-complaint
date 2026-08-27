@@ -7,17 +7,18 @@ use App\Models\ComplaintActivity;
 use App\Models\ComplaintAttachment;
 use App\Models\Outlet;
 use App\Models\User;
-use App\Services\NeviraClient;
+use App\Exceptions\NeviraAccessDenied;
+use App\Exceptions\NeviraException;
+use App\Services\NeviraGate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
-use Throwable;
 
 class ComplaintController extends Controller
 {
-    public function __construct(private NeviraClient $nevira) {}
+    public function __construct(private NeviraGate $nevira) {}
 
     /** Papan kerja: complaint terbuka, disaring per peran. */
     public function index(Request $request)
@@ -138,7 +139,7 @@ class ComplaintController extends Controller
         // Tarik data order NEVIRA kalau ID diisi. Kegagalan tidak boleh
         // membatalkan complaint — dicatat, bisa dicoba lagi nanti. (API-8)
         if (filled($complaint->nevira_transaction_number)) {
-            $this->syncNevira($complaint);
+            $this->syncNevira($complaint, $user);
         }
 
         return redirect()
@@ -284,6 +285,9 @@ class ComplaintController extends Controller
     {
         $user = $request->user();
         abort_unless($user->canView($complaint), 403);
+        // Menautkan berarti menarik data pelanggan dari NEVIRA. Peran yang
+        // tidak mencatat complaint tidak berkepentingan dengan itu.
+        abort_unless($user->canCreateComplaint(), 403);
 
         $data = $request->validate([
             'nevira_transaction_number' => ['nullable', 'string', 'max:64'],
@@ -321,7 +325,7 @@ class ComplaintController extends Controller
         ]);
 
         if ($new !== '') {
-            $this->syncNevira($complaint);
+            $this->syncNevira($complaint, $user);
 
             return back()->with('status', $complaint->fresh()->nevira_sync_error
                 ? 'Nomor order disimpan, tapi datanya belum bisa ditarik: '.$complaint->fresh()->nevira_sync_error
@@ -439,9 +443,11 @@ class ComplaintController extends Controller
     /** Coba tautkan ulang ke NEVIRA (dipakai saat sinkron pertama gagal). */
     public function resync(Complaint $complaint)
     {
-        abort_unless(Auth::user()->canView($complaint), 403);
+        $user = Auth::user();
+        abort_unless($user->canView($complaint), 403);
+        abort_unless($user->canCreateComplaint(), 403);
 
-        $this->syncNevira($complaint);
+        $this->syncNevira($complaint, $user);
 
         return back()->with('status', $complaint->nevira_sync_error
             ? 'Sinkron NEVIRA gagal: '.$complaint->nevira_sync_error
@@ -470,23 +476,25 @@ class ComplaintController extends Controller
         }
     }
 
-    private function syncNevira(Complaint $complaint): void
+    /**
+     * Tarik data order NEVIRA lewat NeviraGate.
+     *
+     * Semua pemeriksaan akses ada di gate, bukan di sini — itu inti
+     * perbaikan T1. Penolakan yang bersifat wewenang dilempar ke atas
+     * (403); sisanya dicatat sebagai kegagalan sinkron supaya complaint
+     * tetap hidup walau NEVIRA menolak atau mati. (API-8, API-10)
+     */
+    private function syncNevira(Complaint $complaint, User $user): void
     {
         try {
-            $resolved = $this->nevira->resolveTransaction($complaint->nevira_transaction_number);
-            $summary  = $this->nevira->summarizeTransaction($resolved['payload']);
+            $resolved = $this->nevira->resolve($user, $complaint->nevira_transaction_number);
+            $summary  = $resolved['summary'];
 
             // Perjalanan kurir ditarik terpisah: detail transaksi tidak
-            // membawa nama kurirnya. Gagal di sini tidak boleh membatalkan
-            // sinkron order — data kurir sifatnya pelengkap.
+            // membawa nama kurirnya. Gagal di sini tidak membatalkan sinkron
+            // order — data kurir sifatnya pelengkap.
             if (filled($summary['invoice'])) {
-                try {
-                    $summary['deliveries'] = $this->nevira->summarizeDeliveries(
-                        $this->nevira->deliveries($summary['invoice'])
-                    );
-                } catch (Throwable $e) {
-                    $summary['deliveries'] = [];
-                }
+                $summary['deliveries'] = $this->nevira->deliveries($summary['invoice']);
             }
 
             $complaint->forceFill([
@@ -501,10 +509,11 @@ class ComplaintController extends Controller
             ])->save();
 
             $this->fillReporterFromOrder($complaint, $summary);
-        } catch (Throwable $e) {
-            // Complaint tetap hidup walau NEVIRA mati. (API-8, API-10)
+        } catch (NeviraAccessDenied $e) {
+            abort(403);
+        } catch (NeviraException $e) {
             $complaint->forceFill([
-                'nevira_sync_error' => mb_substr($e->getMessage(), 0, 190),
+                'nevira_sync_error' => mb_substr($e->userMessage(), 0, 190),
             ])->save();
         }
     }
