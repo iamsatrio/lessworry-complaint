@@ -106,10 +106,36 @@ class Complaint extends Model
         return $handlers;
     }
 
-    /** Perjalanan kurir dari snapshot NEVIRA. */
+    /** Kunci yang selalu ada di satu baris perjalanan kurir. */
+    private const BENTUK_PENGANTARAN = [
+        'id' => null, 'date' => null, 'status_code' => null, 'status' => null,
+        'cancel_reason' => null, 'courier_name' => null, 'courier_nip' => null,
+        'courier_id' => null, 'queue_no' => null, 'distance' => null,
+        'notes' => null, 'courier_notes' => null, 'proof_count' => 0,
+        'updated_at' => null,
+    ];
+
+    /**
+     * Perjalanan kurir dari snapshot NEVIRA, dengan bentuk yang dijamin.
+     *
+     * Snapshot adalah data sistem lain yang mengendap berbulan-bulan: baris
+     * yang disimpan sebelum summarizeDeliveries() berubah bentuk punya kunci
+     * yang berbeda, dan halaman complaint yang membacanya langsung membalas
+     * HTTP 500. Kunci yang hilang diisi null di sini supaya tampilan tidak
+     * perlu tahu versi mana yang sedang dibacanya. (API-14 #11)
+     */
     public function deliveries(): array
     {
-        return $this->nevira_snapshot['deliveries'] ?? [];
+        $rows = $this->nevira_snapshot['deliveries'] ?? [];
+
+        if (! is_array($rows)) {
+            return [];
+        }
+
+        return collect($rows)
+            ->filter(fn ($row) => is_array($row))
+            ->map(fn (array $row) => array_merge(self::BENTUK_PENGANTARAN, $row))
+            ->values()->all();
     }
 
     /** Umur transaksi NEVIRA dalam hari; null kalau tanggalnya tidak diketahui. */
