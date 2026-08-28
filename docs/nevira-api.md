@@ -36,6 +36,8 @@ Sistem ini **hanya membaca**. Tidak ada endpoint tulis yang dipanggil.
 | Detail pelanggan | `GET /api/customer/{id}` |
 | Cek token hidup | `GET /api/me` |
 | Perjalanan kurir | `GET /api/deliveries-transactions?keyword=<nomor_nota>` |
+| Daftar outlet | `GET /api/outlet?limit=` |
+| Karyawan satu outlet | `GET /api/user/by-outlet/{id_outlet}` |
 
 Detail transaksi memang memuat `delivery_transactions`, tapi **tanpa objek kurirnya** — hanya `id_user_courier`. Daftar pengantaran yang disaring dengan nomor nota mengembalikan baris lengkap dengan `courier{username,nip,phone}`, jadi itu yang dipakai.
 
@@ -111,6 +113,22 @@ data.promos   []  { promo_name, promo_type, value_type, value }
 `GET /api/transactions` dan `GET /api/customer` mengembalikan paginasi Laravel: `{ current_page, data: [...] }`.
 
 `GET /api/customer/{id}` mengembalikan objek langsung, **tanpa** pembungkus `data`.
+
+`GET /api/user/by-outlet/{id_outlet}` mengembalikan daftar karyawan outlet itu di dalam kunci `data`
+(diuji ke outlet Tebet, id 118: 39 baris):
+
+```
+data[].id_user      int
+data[].username     string   <- nama yang dipakai NEVIRA
+data[].nip          string
+data[].id_role      int      <- pemetaan angka ke nama peran BELUM diketahui
+data[].status       int      <- 0 = nonaktif, dibuang sebelum ditawarkan
+```
+
+Dipakai untuk memilih pelaku complaint dari daftar alih-alih mengetik nama (API-19). Ditarik lewat
+`NeviraGate::outletStaff()` — jatah panggilannya sama dengan panggilan NEVIRA lain, dan hasilnya
+disimpan sebentar (`NEVIRA_OUTLET_STAFF_TTL`, standar 10 menit) supaya membuka halaman complaint
+berkali-kali tidak menghabiskan jatah itu.
 
 ## Kredensial
 

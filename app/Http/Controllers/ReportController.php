@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Complaint;
+use App\Models\ComplaintResponsible;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -22,6 +23,10 @@ class ReportController extends Controller
 
         $resolved = $complaints->whereNotNull('resolved_at');
 
+        $pelaku = $user->canSeeStaffAttribution()
+            ? ComplaintResponsible::whereIn('complaint_id', $complaints->modelKeys())->get()
+            : collect();
+
         return view('reports.index', [
             'from'        => $from,
             'to'          => $to,
@@ -34,17 +39,20 @@ class ReportController extends Controller
             'byChannel'   => $complaints->groupBy('channel')->map->count()->sortDesc(),
             'byOutlet'    => $complaints->groupBy(fn ($c) => $c->outlet?->name ?? 'Tanpa outlet')->map->count()->sortDesc(),
             // Rekap per karyawan hanya untuk yang berwenang melihatnya.
+            // Tiap pelaku dihitung, bukan satu per complaint: satu keluhan
+            // bisa melibatkan kasir, petugas cuci, dan kurir sekaligus.
             'byStaff'     => $user->canSeeStaffAttribution()
-                ? $complaints->whereNotNull('responsible_staff_name')
-                    ->groupBy('responsible_staff_name')
+                ? $pelaku->groupBy(fn ($p) => $p->staff_name)
                     ->map(fn ($group) => [
-                        'total'  => $group->count(),
-                        'nip'    => $group->first()->responsible_staff_nip,
-                        'stages' => $group->pluck('responsible_stage')->filter()->unique()->values()->all(),
+                        'total'  => $group->pluck('complaint_id')->unique()->count(),
+                        'nip'    => $group->pluck('staff_nip')->filter()->first(),
+                        'stages' => $group
+                            ->map(fn ($p) => $p->roleLabel().($p->stage ? ' · '.$p->stage : ''))
+                            ->unique()->values()->all(),
                     ])
                     ->sortByDesc('total')
                 : collect(),
-            'unattributed' => $complaints->whereNull('responsible_staff_name')->count(),
+            'unattributed' => $complaints->count() - $pelaku->pluck('complaint_id')->unique()->count(),
             'repeat'      => $complaints->whereNotNull('reporter_phone')
                 ->groupBy('reporter_phone')->filter(fn ($g) => $g->count() > 1)
                 ->map(fn ($g) => ['name' => $g->first()->reporter_name, 'count' => $g->count()]),
@@ -65,7 +73,13 @@ class ReportController extends Controller
 
         $showStaff = $user->canSeeStaffAttribution();
 
-        return response()->streamDownload(function () use ($complaints, $showStaff) {
+        // Semua pelaku satu complaint masuk ke satu baris CSV — rekap ini
+        // dibaca per complaint, bukan per orang.
+        $pelaku = $showStaff
+            ? ComplaintResponsible::whereIn('complaint_id', $complaints->modelKeys())->get()->groupBy('complaint_id')
+            : collect();
+
+        return response()->streamDownload(function () use ($complaints, $showStaff, $pelaku) {
             $out = fopen('php://output', 'w');
             fputcsv($out, [
                 'Nomor Tiket', 'Dibuat', 'Kanal', 'Outlet', 'Pelapor', 'Telepon',
@@ -74,7 +88,7 @@ class ReportController extends Controller
                 // tidak boleh ikut keluar. (API-8 T2)
                 'Nomor Nota', 'Kategori', 'Prioritas', 'Status',
                 'Penanggung Jawab', 'Selesai', 'Menit Penyelesaian', 'Kompensasi', 'Lewat SLA',
-                ...($showStaff ? ['Karyawan Penanggung Jawab', 'NIP', 'Tahap', 'Alasan'] : []),
+                ...($showStaff ? ['Karyawan Penanggung Jawab', 'NIP', 'Peran', 'Alasan'] : []),
             ]);
 
             foreach ($complaints as $c) {
@@ -95,10 +109,14 @@ class ReportController extends Controller
                     $c->compensation_amount,
                     $c->isOverdue() ? 'YA' : 'tidak',
                     ...($showStaff ? [
-                        $c->responsible_staff_name,
-                        $c->responsible_staff_nip,
-                        $c->responsible_stage,
-                        $c->responsibility_note,
+                        $pelaku->get($c->id, collect())->pluck('staff_name')->implode('; '),
+                        $pelaku->get($c->id, collect())->pluck('staff_nip')->implode('; '),
+                        $pelaku->get($c->id, collect())
+                            ->map(fn ($p) => $p->roleLabel().($p->stage ? ' ('.$p->stage.')' : ''))
+                            ->implode('; '),
+                        $pelaku->get($c->id, collect())
+                            ->map(fn ($p) => $p->staff_name.': '.$p->reason)
+                            ->implode(' | '),
                     ] : []),
                 ]);
             }

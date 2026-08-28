@@ -50,7 +50,12 @@
     <div class="card">
       <div class="eyebrow">Riwayat penanganan</div>
       <div class="tl">
-        @forelse($complaint->activities as $a)
+        {{-- Baris yang menyebut nama karyawan disaring di sini: riwayat
+             complaint dibaca juga oleh kasir, dan penetapan pelaku bukan
+             konsumsinya. Datanya tetap tersimpan utuh. (API-19) --}}
+        @php $riwayat = $complaint->activities->reject(fn ($a) => $a->type === 'responsible'
+              && ! auth()->user()->canSeeStaffAttribution()); @endphp
+        @forelse($riwayat as $a)
           <div class="item">
             <div class="small">
               <b class="display">{{ $a->user?->name ?? 'Sistem' }}</b>

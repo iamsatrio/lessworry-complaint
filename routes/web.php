@@ -40,7 +40,11 @@ Route::middleware(['auth', 'auth.session', 'active', 'password.changed'])->group
     Route::post('/complaints/{complaint}/resync', [ComplaintController::class, 'resync'])->name('complaints.resync');
     Route::put('/complaints/{complaint}/link', [ComplaintController::class, 'updateLink'])->name('complaints.link');
     Route::get('/complaints/{complaint}/lampiran/{attachment}', [ComplaintController::class, 'attachment'])->name('complaints.attachment');
-    Route::put('/complaints/{complaint}/responsibility', [ComplaintController::class, 'setResponsibility'])->name('complaints.responsibility');
+    // Pelaku complaint — beberapa orang per complaint, wewenangnya dicek
+    // di controller (Customer Care dan supervisor saja). (API-19)
+    Route::post('/complaints/{complaint}/pelaku', [ComplaintController::class, 'addResponsible'])->name('complaints.responsibles.store');
+    Route::put('/complaints/{complaint}/pelaku/{responsible}', [ComplaintController::class, 'updateResponsible'])->name('complaints.responsibles.update');
+    Route::delete('/complaints/{complaint}/pelaku/{responsible}', [ComplaintController::class, 'destroyResponsible'])->name('complaints.responsibles.destroy');
 
     // Dibatasi lajunya: tanpa ini nomor nota bisa dicoba satu per satu.
     Route::get('/nevira/lookup', NeviraLookupController::class)

@@ -42,6 +42,17 @@ class PageScriptTest extends TestCase
         $dipanggil = array_unique($dipanggil[1]);
         $tersedia  = $tersedia[1];
 
+        // Halaman tanpa skrip tidak punya kelas kegagalan ini sama sekali —
+        // yang dijaga di sini adalah skrip yang memanggil elemen hilang.
+        // Yang berbahaya justru sebaliknya: skrip ada, rujukannya tidak
+        // terbaca pola di atas.
+        if (! str_contains($html, '<script')) {
+            $this->assertSame([], $dipanggil,
+                "Halaman $halaman tidak punya skrip, tapi ada rujukan elemen — pola test perlu ditinjau.");
+
+            return;
+        }
+
         $this->assertNotEmpty($dipanggil, "Tidak ada rujukan elemen di $halaman — pola test perlu ditinjau.");
 
         foreach ($dipanggil as $id) {

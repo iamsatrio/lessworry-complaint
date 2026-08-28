@@ -28,6 +28,13 @@ return [
     'timeout' => (int) env('NEVIRA_TIMEOUT', 15),
 
     /*
+    | Daftar karyawan per outlet hampir tidak berubah dalam sehari, sementara
+    | halaman complaint dibuka berkali-kali. Disimpan sebentar supaya tidak
+    | menghabiskan jatah panggilan NEVIRA.
+    */
+    'outlet_staff_ttl_minutes' => (int) env('NEVIRA_OUTLET_STAFF_TTL', 10),
+
+    /*
     | Kode status pengantaran NEVIRA. Diambil dari peta di back office
     | NEVIRA sendiri, bukan tebakan.
     */

@@ -272,6 +272,44 @@ class NeviraClient
         return $payload['data'] ?? $payload;
     }
 
+    /**
+     * Daftar karyawan satu outlet.
+     *
+     * Dipakai untuk memilih pelaku complaint dari daftar alih-alih mengetik
+     * namanya. Diuji ke outlet Tebet (118): 39 karyawan, dengan id_user,
+     * username, nip, id_role, status.
+     */
+    public function usersByOutlet(string $outletId, int $limit = 200): array
+    {
+        $payload = $this->get('/user/by-outlet/'.rawurlencode($outletId), ['limit' => $limit]);
+
+        return $payload['data'] ?? (array_is_list($payload) ? $payload : []);
+    }
+
+    /**
+     * Ringkas daftar karyawan jadi bentuk yang dipakai pemilihan pelaku.
+     *
+     * Karyawan nonaktif dibuang: menawarkannya hanya memperpanjang daftar
+     * yang harus disisir petugas, dan orang yang sudah keluar tidak bisa
+     * dimintai keterangan.
+     *
+     * @return array<int,array{staff_id:?string,name:string,nip:?string,role_id:mixed}>
+     */
+    public function summarizeStaff(array $rows): array
+    {
+        return collect($rows)
+            ->filter(fn ($row) => is_array($row) && filled($row['username'] ?? null))
+            ->reject(fn ($row) => array_key_exists('status', $row) && in_array($row['status'], [0, '0', false], true))
+            ->map(fn ($row) => [
+                'staff_id' => isset($row['id_user']) ? (string) $row['id_user'] : null,
+                'name'     => (string) $row['username'],
+                'nip'      => $row['nip'] ?? null,
+                'role_id'  => $row['id_role'] ?? null,
+            ])
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()->all();
+    }
+
     public function customer(string $customerId): array
     {
         return $this->get('/customer/'.rawurlencode($customerId));

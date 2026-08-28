@@ -71,17 +71,18 @@
         <b>{{ $info['total'] }}</b>
       </div>
     @empty
-      <p class="muted" style="margin:0">Belum ada complaint yang ditetapkan penanggung jawabnya pada periode ini.</p>
+      <p class="muted" style="margin:0">Belum ada complaint yang ditetapkan pelakunya pada periode ini.</p>
     @endforelse
 
     @if($unattributed > 0)
-      <p class="hint">{{ $unattributed }} complaint belum ditetapkan penanggung jawabnya, jadi tidak masuk hitungan di atas.</p>
+      <p class="hint">{{ $unattributed }} complaint belum ditetapkan pelakunya, jadi tidak masuk hitungan di atas.</p>
     @endif
 
     <div class="panel" style="margin-top:14px">
       <b>Angka ini belum bisa dipakai menilai orang.</b>
       <div style="margin-top:6px">
-        Ini jumlah complaint, bukan tingkat kesalahan. Karyawan yang menangani tiga kali lebih banyak
+        Ini jumlah complaint, bukan tingkat kesalahan. Satu complaint bisa melibatkan beberapa orang,
+        jadi angka-angka di sini boleh berjumlah lebih besar dari total complaint. Karyawan yang menangani tiga kali lebih banyak
         order wajar muncul lebih sering tanpa bekerja lebih buruk. Pakai untuk memilih apa yang
         ditelusuri berikutnya, bukan sebagai dasar sanksi.
       </div>

@@ -71,6 +71,19 @@ return [
     // Transaksi lebih tua dari ini dianggap boleh tanpa nota.
     'nota_max_age_days' => 30,
 
+    /*
+    | Peran seorang pelaku DALAM SATU KEJADIAN — bukan jabatannya
+    | sehari-hari. Kasir yang kebetulan ikut mengantar tercatat sebagai
+    | kurir untuk complaint itu. (API-19)
+    */
+    'responsible_roles' => [
+        'kasir'         => 'Kasir',
+        'produksi'      => 'Produksi / Cuci',
+        'kurir'         => 'Kurir',
+        'customer_care' => 'Customer Care',
+        'lainnya'       => 'Lainnya',
+    ],
+
     'divisions' => [
         'produksi' => 'Operasional Cuci / Produksi',
         'kurir'    => 'Kurir / Antar Jemput',

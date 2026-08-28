@@ -7,6 +7,7 @@ use App\Exceptions\NeviraInputRejected;
 use App\Exceptions\NeviraOutletMismatch;
 use App\Exceptions\NeviraRateLimited;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
 use Throwable;
 
@@ -81,10 +82,62 @@ class NeviraGate
         }
     }
 
+    /**
+     * Daftar karyawan satu outlet, untuk memilih pelaku complaint. (API-19)
+     *
+     * Lewat gerbang yang sama seperti data order — bukan pintu baru:
+     *
+     *   1. peran      — nama dan NIP karyawan bukan konsumsi kasir.
+     *   2. batas laju — dihitung di jatah yang sama dengan panggilan lain.
+     *   3. cache      — daftar karyawan hampir tidak berubah, sementara
+     *                   halaman complaint dibuka berkali-kali. Tanpa cache,
+     *                   membuka satu complaint lima kali menghabiskan
+     *                   seperempat jatah panggilan menit itu.
+     *
+     * Kegagalan mengembalikan daftar kosong, bukan melempar: daftar ini
+     * mempercepat pemilihan, dan halaman complaint tetap harus terbuka
+     * walau NEVIRA sedang mati. Isian bebas tetap tersedia.
+     *
+     * @return array<int,array{staff_id:?string,name:string,nip:?string,role_id:mixed}>
+     */
+    public function outletStaff(User $user, ?string $neviraOutletId): array
+    {
+        $this->pastikanBolehLihatKaryawan($user);
+
+        if (blank($neviraOutletId) || ! $this->isConfigured()) {
+            return [];
+        }
+
+        $kunci = 'nevira.outlet_staff.'.$neviraOutletId;
+        $tersimpan = Cache::get($kunci);
+
+        if (is_array($tersimpan)) {
+            return $tersimpan;
+        }
+
+        try {
+            $this->pastikanBelumMelewatiBatas($user);
+            $staff = $this->client->summarizeStaff($this->client->usersByOutlet((string) $neviraOutletId));
+        } catch (Throwable) {
+            return [];
+        }
+
+        Cache::put($kunci, $staff, now()->addMinutes((int) config('nevira.outlet_staff_ttl_minutes')));
+
+        return $staff;
+    }
+
     private function pastikanBoleh(User $user): void
     {
         if (! $user->canCreateComplaint()) {
             throw new NeviraAccessDenied('Peran '.$user->role.' tidak berkepentingan dengan data order NEVIRA.');
+        }
+    }
+
+    private function pastikanBolehLihatKaryawan(User $user): void
+    {
+        if (! $user->canSeeStaffAttribution()) {
+            throw new NeviraAccessDenied('Peran '.$user->role.' tidak berkepentingan dengan data karyawan.');
         }
     }
 

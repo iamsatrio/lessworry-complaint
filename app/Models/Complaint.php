@@ -41,7 +41,6 @@ class Complaint extends Model
             'due_resolution_at' => 'datetime',
             'first_response_at' => 'datetime',
             'resolved_at'      => 'datetime',
-            'responsibility_set_at' => 'datetime',
             'lock_version'     => 'integer',
         ];
     }
@@ -61,9 +60,16 @@ class Complaint extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function responsibilitySetter()
+    /**
+     * Orang-orang yang DITETAPKAN terlibat dalam complaint ini. (API-19)
+     *
+     * Beberapa baris untuk satu complaint itu wajar — satu keluhan sering
+     * melibatkan kasir penerima, petugas cuci, dan kurir sekaligus. Kosong
+     * juga wajar: complaint tanpa pelaku tidak pernah dipaksa.
+     */
+    public function responsibles()
     {
-        return $this->belongsTo(User::class, 'responsibility_set_by');
+        return $this->hasMany(ComplaintResponsible::class)->orderBy('id');
     }
 
     /**
@@ -181,7 +187,21 @@ class Complaint extends Model
 
     public function hasResponsibility(): bool
     {
-        return filled($this->responsible_staff_name);
+        return $this->responsibles()->exists();
+    }
+
+    /**
+     * Id outlet menurut NEVIRA — dari nota kalau sudah tertarik, kalau belum
+     * dari pemetaan outlet complaint ini. Dipakai untuk menyaring daftar
+     * karyawan supaya petugas tidak menyisir seluruh perusahaan.
+     */
+    public function neviraOutletId(): ?string
+    {
+        $dariNota = $this->nevira_snapshot['outlet_id'] ?? null;
+
+        return filled($dariNota)
+            ? (string) $dariNota
+            : ($this->outlet?->nevira_outlet_id ?: null);
     }
 
     public function activities()

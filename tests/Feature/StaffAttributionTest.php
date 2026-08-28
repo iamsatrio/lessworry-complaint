@@ -107,19 +107,19 @@ class StaffAttributionTest extends TestCase
         }
     }
 
-    public function test_kasir_tidak_bisa_menetapkan_penanggung_jawab(): void
+    public function test_kasir_tidak_bisa_menetapkan_pelaku(): void
     {
         $outlet = Outlet::create(['name' => 'Outlet A']);
         $kasir = $this->userAs('kasir', $outlet);
         $c = $this->withTrail();
         $c->forceFill(['outlet_id' => $outlet->id])->save();
 
-        $this->actingAs($kasir)->put('/complaints/'.$c->id.'/responsibility', [
-            'responsible_staff_name' => 'Budi',
-            'responsibility_note'    => 'coba-coba',
+        $this->actingAs($kasir)->post('/complaints/'.$c->id.'/pelaku', [
+            'manual_nama' => 'Budi',
+            'alasan'      => 'coba-coba',
         ])->assertForbidden();
 
-        $this->assertNull($c->fresh()->responsible_staff_name);
+        $this->assertSame(0, $c->responsibles()->count());
     }
 
     /* ---------- Aturan penetapan ---------- */
@@ -129,11 +129,11 @@ class StaffAttributionTest extends TestCase
         $cc = $this->userAs('customer_care');
         $c = $this->withTrail();
 
-        $this->actingAs($cc)->put('/complaints/'.$c->id.'/responsibility', [
-            'responsible_staff_name' => 'Budi',
-        ])->assertSessionHasErrors('responsibility_note');
+        $this->actingAs($cc)->post('/complaints/'.$c->id.'/pelaku', [
+            'manual_nama' => 'Budi',
+        ])->assertSessionHasErrors('alasan');
 
-        $this->assertNull($c->fresh()->responsible_staff_name);
+        $this->assertSame(0, $c->responsibles()->count());
     }
 
     public function test_penetapan_menyimpan_siapa_yang_menetapkan_dan_kapan(): void
@@ -141,19 +141,17 @@ class StaffAttributionTest extends TestCase
         $cc = $this->userAs('customer_care');
         $c = $this->withTrail();
 
-        $this->actingAs($cc)->put('/complaints/'.$c->id.'/responsibility', [
-            'responsible_staff_name' => 'Budi',
-            'responsible_staff_nip'  => 'LW/02',
-            'responsible_stage'      => 'Cuci',
-            'responsibility_note'    => 'Noda kerah masih ada setelah tahap cuci.',
+        $this->actingAs($cc)->post('/complaints/'.$c->id.'/pelaku', [
+            'pelaku' => ['staff:244'],
+            'alasan' => 'Noda kerah masih ada setelah tahap cuci.',
         ])->assertRedirect();
 
-        $c->refresh();
+        $pelaku = $c->responsibles()->sole();
 
-        $this->assertSame('Budi', $c->responsible_staff_name);
-        $this->assertSame('Cuci', $c->responsible_stage);
-        $this->assertSame($cc->id, $c->responsibility_set_by);
-        $this->assertNotNull($c->responsibility_set_at);
+        $this->assertSame('Budi', $pelaku->staff_name);
+        $this->assertSame('Cuci', $pelaku->stage);
+        $this->assertSame($cc->id, $pelaku->set_by);
+        $this->assertNotNull($pelaku->set_at);
     }
 
     public function test_penetapan_tercatat_di_riwayat_beserta_alasan(): void
@@ -161,9 +159,9 @@ class StaffAttributionTest extends TestCase
         $cc = $this->userAs('customer_care');
         $c = $this->withTrail();
 
-        $this->actingAs($cc)->put('/complaints/'.$c->id.'/responsibility', [
-            'responsible_staff_name' => 'Budi',
-            'responsibility_note'    => 'Noda kerah masih ada.',
+        $this->actingAs($cc)->post('/complaints/'.$c->id.'/pelaku', [
+            'pelaku' => ['staff:244'],
+            'alasan' => 'Noda kerah masih ada.',
         ])->assertSessionHasNoErrors();
 
         $note = $c->activities()->orderByDesc('id')->first()?->note;
@@ -178,18 +176,15 @@ class StaffAttributionTest extends TestCase
         $cc = $this->userAs('customer_care');
         $c = $this->withTrail();
 
-        $this->actingAs($cc)->put('/complaints/'.$c->id.'/responsibility', [
-            'responsible_staff_name' => 'Budi', 'responsibility_note' => 'Awal.',
+        $this->actingAs($cc)->post('/complaints/'.$c->id.'/pelaku', [
+            'pelaku' => ['staff:244'], 'alasan' => 'Awal.',
         ]);
 
-        $this->actingAs($cc)->put('/complaints/'.$c->id.'/responsibility', [
-            'responsible_staff_name' => '',
-        ]);
+        $pelaku = $c->responsibles()->sole();
 
-        $c->refresh();
+        $this->actingAs($cc)->delete('/complaints/'.$c->id.'/pelaku/'.$pelaku->id);
 
-        $this->assertNull($c->responsible_staff_name);
-        $this->assertNull($c->responsibility_set_by);
+        $this->assertSame(0, $c->responsibles()->count());
         $this->assertStringContainsString('dicabut', $c->activities()->latest('id')->first()->note);
     }
 
@@ -201,9 +196,9 @@ class StaffAttributionTest extends TestCase
         $kasir = $this->userAs('kasir', $outlet);
 
         $c = $this->makeComplaint(['outlet_id' => $outlet->id]);
-        $c->forceFill([
-            'responsible_staff_name' => 'Budi', 'responsibility_note' => 'x',
-        ])->save();
+        $c->responsibles()->create([
+            'staff_name' => 'Budi', 'role' => 'produksi', 'reason' => 'x', 'set_at' => now(),
+        ]);
 
         $response = $this->actingAs($kasir)->get('/reports');
 
@@ -218,7 +213,9 @@ class StaffAttributionTest extends TestCase
         $kasir = $this->userAs('kasir', $outlet);
 
         $c = $this->makeComplaint(['outlet_id' => $outlet->id]);
-        $c->forceFill(['responsible_staff_name' => 'Budi', 'responsibility_note' => 'x'])->save();
+        $c->responsibles()->create([
+            'staff_name' => 'Budi', 'role' => 'produksi', 'reason' => 'x', 'set_at' => now(),
+        ]);
 
         $csv = $this->actingAs($kasir)->get('/reports/export')->streamedContent();
 
@@ -231,7 +228,9 @@ class StaffAttributionTest extends TestCase
         $supervisor = $this->userAs('supervisor');
 
         $c = $this->makeComplaint();
-        $c->forceFill(['responsible_staff_name' => 'Budi', 'responsibility_note' => 'x'])->save();
+        $c->responsibles()->create([
+            'staff_name' => 'Budi', 'role' => 'produksi', 'reason' => 'x', 'set_at' => now(),
+        ]);
 
         $csv = $this->actingAs($supervisor)->get('/reports/export')->streamedContent();
 

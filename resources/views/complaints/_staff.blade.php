@@ -39,84 +39,133 @@
   @endif
 </div>
 
-@if(auth()->user()->canAssignResponsibility())
+@if(auth()->user()->canAssignResponsibility() && $kandidat)
 <div class="card">
-  <div class="eyebrow">Penanggung jawab akar masalah</div>
+  <div class="eyebrow">Pelaku complaint ini</div>
 
-  @if($complaint->hasResponsibility())
-    <div class="panel" style="margin-top:0">
-      <b class="display" style="font-size:15px">{{ $complaint->responsible_staff_name }}</b>
-      @if($complaint->responsible_staff_nip)
-        <span class="muted small" style="font-family:var(--mono)"> · {{ $complaint->responsible_staff_nip }}</span>
-      @endif
-      @if($complaint->responsible_stage)<div class="small">Tahap: {{ $complaint->responsible_stage }}</div>@endif
-      @if($complaint->responsibility_note)
-        <div style="margin-top:8px;white-space:pre-wrap">{{ $complaint->responsibility_note }}</div>
-      @endif
-      <div class="muted small" style="margin-top:10px">
-        Ditetapkan {{ $complaint->responsibilitySetter?->name ?? 'seseorang' }},
-        {{ $complaint->responsibility_set_at?->translatedFormat('d M Y, H:i') }}
+  @forelse($complaint->responsibles as $pelaku)
+    <div class="panel" style="margin-top:0;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">
+        <div>
+          <b class="display" style="font-size:15px">{{ $pelaku->staff_name }}</b>
+          @if($pelaku->staff_nip)
+            <span class="muted small" style="font-family:var(--mono)"> · {{ $pelaku->staff_nip }}</span>
+          @endif
+        </div>
+        <span class="badge">{{ $pelaku->roleLabel() }}@if($pelaku->stage) · {{ $pelaku->stage }}@endif</span>
       </div>
+
+      <div style="margin-top:8px;white-space:pre-wrap">{{ $pelaku->reason }}</div>
+
+      <div class="muted small" style="margin-top:10px">
+        Ditetapkan {{ $pelaku->setter?->name ?? 'seseorang' }},
+        {{ $pelaku->set_at?->translatedFormat('d M Y, H:i') }}
+      </div>
+
+      <details class="link-editor" style="margin-top:10px">
+        <summary>Ubah atau cabut</summary>
+        <form method="POST" action="{{ route('complaints.responsibles.update',[$complaint,$pelaku]) }}" style="margin-top:12px">
+          @csrf @method('PUT')
+          <label for="peran-{{ $pelaku->id }}">Peran dalam kejadian ini</label>
+          <select id="peran-{{ $pelaku->id }}" name="peran">
+            @foreach(config('complaint.responsible_roles') as $k=>$v)
+              <option value="{{ $k }}" @selected($pelaku->role===$k)>{{ $v }}</option>
+            @endforeach
+          </select>
+          <label for="alasan-{{ $pelaku->id }}">Alasan <span class="req">*</span></label>
+          <textarea id="alasan-{{ $pelaku->id }}" name="alasan" style="min-height:70px">{{ $pelaku->reason }}</textarea>
+          <div style="margin-top:12px"><button class="ghost">Simpan Perubahan</button></div>
+        </form>
+        <form method="POST" action="{{ route('complaints.responsibles.destroy',[$complaint,$pelaku]) }}" style="margin-top:10px">
+          @csrf @method('DELETE')
+          <button class="ghost">Cabut Penetapan</button>
+        </form>
+      </details>
     </div>
-  @else
-    <p class="muted" style="margin:0 0 10px">Belum ditetapkan.</p>
-  @endif
+  @empty
+    <p class="muted" style="margin:0 0 10px">
+      Belum ada pelaku yang ditetapkan. Complaint tanpa pelaku juga wajar — jangan menunjuk orang
+      hanya supaya kolomnya terisi.
+    </p>
+  @endforelse
 
-  <details class="link-editor" style="margin-top:10px">
-    <summary>{{ $complaint->hasResponsibility() ? 'Ubah atau cabut penetapan' : 'Tetapkan penanggung jawab' }}</summary>
-    <form method="POST" action="{{ route('complaints.responsibility',$complaint) }}" style="margin-top:12px">
-      @csrf @method('PUT')
+  <details class="link-editor" @if($complaint->responsibles->isEmpty()) open @endif style="margin-top:10px">
+    <summary>Tambah pelaku</summary>
 
-      @if(!empty($handlers))
-        <label for="pick">Pilih dari yang menangani order</label>
-        <select id="pick" onchange="isiDariDaftar(this)">
-          <option value="">— isi manual di bawah —</option>
-          @foreach($handlers as $h)
-            <option value="{{ json_encode($h) }}">{{ $h['name'] }} — {{ $h['stage'] }}</option>
+    <form method="POST" action="{{ route('complaints.responsibles.store',$complaint) }}" style="margin-top:12px">
+      @csrf
+
+      @foreach($kandidat->groups() as $grup)
+        <div style="margin-top:14px">
+          <div class="eyebrow">{{ $grup['label'] }}</div>
+          @foreach($grup['items'] as $item)
+            <div style="display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);flex-wrap:wrap">
+              <label style="display:flex;gap:8px;align-items:center;flex:1;min-width:180px;margin:0">
+                <input type="checkbox" name="pelaku[]" value="{{ $item['key'] }}"
+                       @checked(in_array($item['key'], (array) old('pelaku', []), true))>
+                <span>
+                  <b class="display">{{ $item['name'] }}</b>
+                  @if($item['nip'])
+                    <span class="muted small" style="font-family:var(--mono)"> · {{ $item['nip'] }}</span>
+                  @endif
+                  @if($item['stage'])<div class="muted small">{{ $item['stage'] }}</div>@endif
+                </span>
+              </label>
+              <select name="peran[{{ $item['key'] }}]" style="max-width:190px;margin:0">
+                @foreach(config('complaint.responsible_roles') as $k=>$v)
+                  {{-- Dibaca sebagai indeks array, bukan lewat notasi titik:
+                       kunci kandidat bisa memuat titik (nama disingkat). --}}
+                  <option value="{{ $k }}" @selected((old('peran', [])[$item['key']] ?? $item['role'])===$k)>{{ $v }}</option>
+                @endforeach
+              </select>
+            </div>
+          @endforeach
+        </div>
+      @endforeach
+
+      @if(empty($kandidat->groups()))
+        <p class="muted" style="margin:12px 0 0">
+          Belum ada nama yang bisa ditawarkan — complaint ini belum tertaut ke order, atau daftar
+          karyawan outletnya sedang tidak bisa ditarik dari NEVIRA. Isi manual di bawah.
+        </p>
+      @endif
+
+      <details style="margin-top:14px">
+        <summary class="muted small">Orang yang tidak ada di daftar</summary>
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label for="mnama">Nama</label>
+            <input id="mnama" name="manual_nama" value="{{ old('manual_nama') }}" placeholder="mis. kurir dari outlet lain">
+          </div>
+          <div>
+            <label for="mnip">NIP</label>
+            <input id="mnip" name="manual_nip" value="{{ old('manual_nip') }}">
+          </div>
+        </div>
+        <label for="mperan">Peran dalam kejadian ini</label>
+        <select id="mperan" name="manual_peran">
+          @foreach(config('complaint.responsible_roles') as $k=>$v)
+            <option value="{{ $k }}" @selected(old('manual_peran')===$k)>{{ $v }}</option>
           @endforeach
         </select>
-      @endif
+      </details>
 
-      <label for="rname">Nama karyawan</label>
-      <input id="rname" name="responsible_staff_name" value="{{ $complaint->responsible_staff_name }}"
-             placeholder="Kosongkan untuk mencabut penetapan">
-
-      <div class="row" style="margin-top:0">
-        <div><label for="rnip">NIP</label>
-          <input id="rnip" name="responsible_staff_nip" value="{{ $complaint->responsible_staff_nip }}">
-        </div>
-        <div><label for="rstage">Tahap</label>
-          <input id="rstage" name="responsible_stage" value="{{ $complaint->responsible_stage }}"
-                 placeholder="Cuci, Pengemasan, Kasir…">
-        </div>
-      </div>
-      <input type="hidden" id="rid" name="responsible_staff_id" value="{{ $complaint->responsible_staff_id }}">
-
-      <label for="rnote">Alasan <span class="req">*</span></label>
-      <textarea id="rnote" name="responsibility_note" style="min-height:76px"
-        placeholder="Apa yang ditemukan saat ditelusuri?">{{ $complaint->responsibility_note }}</textarea>
+      <label for="alasan" style="margin-top:14px">Alasan <span class="req">*</span></label>
+      <textarea id="alasan" name="alasan" style="min-height:76px"
+        placeholder="Apa yang ditemukan saat ditelusuri?">{{ old('alasan') }}</textarea>
       <p class="hint">
-        Wajib diisi. Penetapan tanpa alasan tidak bisa ditinjau ulang, dan menempel di catatan
-        kerja orang. Tulis temuannya, bukan kesan.
+        Wajib diisi, dan berlaku untuk semua yang dicentang sekaligus. Penetapan tanpa alasan tidak
+        bisa ditinjau ulang, dan menempel di catatan kerja orang. Tulis temuannya, bukan kesan.
       </p>
 
-      <div style="margin-top:14px"><button class="ghost">Simpan Penetapan</button></div>
+      <div style="margin-top:14px"><button class="ghost">Tetapkan Pelaku</button></div>
     </form>
   </details>
 
   <p class="hint" style="margin-top:14px">
-    Tercatat siapa yang menetapkan dan kapan. Perubahan masuk riwayat complaint.
+    Satu complaint boleh punya beberapa pelaku — kasir yang menerima, petugas yang mencuci, kurir
+    yang mengantar. Tercatat siapa yang menetapkan dan kapan; setiap penambahan, perubahan, dan
+    pencabutan masuk riwayat complaint.
   </p>
 </div>
-
-<script>
-function isiDariDaftar(sel){
-  if(!sel.value) return;
-  const h = JSON.parse(sel.value);
-  document.getElementById('rname').value  = h.name ?? '';
-  document.getElementById('rnip').value   = h.nip ?? '';
-  document.getElementById('rstage').value = h.stage ?? '';
-  document.getElementById('rid').value    = h.staff_id ?? '';
-}
-</script>
 @endif

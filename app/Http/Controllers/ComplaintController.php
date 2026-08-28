@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Complaint;
 use App\Models\ComplaintActivity;
 use App\Models\ComplaintAttachment;
+use App\Models\ComplaintResponsible;
 use App\Models\Outlet;
 use App\Models\User;
 use App\Exceptions\NeviraAccessDenied;
 use App\Exceptions\NeviraException;
+use App\Services\KandidatPelaku;
 use App\Services\NeviraGate;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -214,23 +216,51 @@ class ComplaintController extends Controller
 
     public function show(Complaint $complaint)
     {
-        abort_unless(Auth::user()->canView($complaint), 403);
+        $user = Auth::user();
+        abort_unless($user->canView($complaint), 403);
 
-        $complaint->load(['outlet', 'assignee', 'creator', 'activities.user', 'attachments']);
+        $complaint->load(['outlet', 'assignee', 'creator', 'activities.user', 'attachments', 'responsibles.setter']);
+
+        // Daftar pegawai hanya untuk peran yang memang menetapkan
+        // penanggung jawab. Sebelumnya setiap kasir menerima nama dan
+        // peran seluruh pegawai perusahaan, termasuk outlet lain.
+        // (API-14 #6)
+        $penggunaSistem = $user->canAssignResponsibility() ? $this->penggunaSistem() : collect();
 
         return view('complaints.show', [
             'complaint' => $complaint,
-            'kembaran'  => $complaint->kembaranNota(Auth::user()),
-            // Daftar pegawai hanya untuk peran yang memang menetapkan
-            // penanggung jawab. Sebelumnya setiap kasir menerima nama dan
-            // peran seluruh pegawai perusahaan, termasuk outlet lain.
-            // (API-14 #6)
-            'handlers'  => Auth::user()->canAssignResponsibility()
-                ? User::where('is_active', true)
-                    ->whereIn('role', ['kasir', 'customer_care', 'supervisor'])
-                    ->orderBy('name')->get()
-                : collect(),
+            'kembaran'  => $complaint->kembaranNota($user),
+            'handlers'  => $penggunaSistem,
+            // Kandidat pelaku disusun server: orang dari nota ini, karyawan
+            // outletnya, lalu pengguna sistem. Kasir tidak pernah menerimanya
+            // — daftar nama karyawan bukan konsumsinya. (API-19)
+            'kandidat'  => $user->canAssignResponsibility()
+                ? KandidatPelaku::untuk($complaint, $this->karyawanOutlet($user, $complaint), $penggunaSistem)
+                : null,
         ]);
+    }
+
+    /** Pengguna sistem complaint yang bisa ditugasi atau ditetapkan sebagai pelaku. */
+    private function penggunaSistem()
+    {
+        return User::where('is_active', true)
+            ->whereIn('role', ['kasir', 'customer_care', 'supervisor'])
+            ->orderBy('name')->get();
+    }
+
+    /**
+     * Karyawan outlet nota ini, lewat NeviraGate.
+     *
+     * Outlet complaint sudah ditentukan otomatis dari nota, jadi daftarnya
+     * langsung tersaring — petugas tidak perlu memilih outlet dulu.
+     */
+    private function karyawanOutlet(User $user, Complaint $complaint): array
+    {
+        try {
+            return $this->nevira->outletStaff($user, $complaint->neviraOutletId());
+        } catch (NeviraAccessDenied) {
+            return [];
+        }
     }
 
     /** Ubah status, dengan pencatatan riwayat dan penegakan wewenang. */
@@ -356,7 +386,7 @@ class ComplaintController extends Controller
      * ditulisnya sendiri berbunyi "Penanggung jawab diperbarui" — kasir yang
      * dikeluhkan bisa memindahkan namanya ke rekannya, dan pengguna divisi
      * bisa melempar complaint ke divisi lain sampai lenyap dari antrean
-     * semua orang. Wewenangnya sama dengan /responsibility. (API-14 #3)
+     * semua orang. Wewenangnya sama dengan penetapan pelaku. (API-14 #3)
      */
     public function assign(Request $request, Complaint $complaint)
     {
@@ -474,91 +504,202 @@ class ComplaintController extends Controller
     }
 
     /**
-     * Tetapkan siapa yang bertanggung jawab atas akar masalah complaint.
+     * Tetapkan satu atau beberapa orang sebagai pelaku complaint ini. (API-19)
      *
      * Sistem TIDAK menyimpulkan ini sendiri. NEVIRA hanya memberi tahu siapa
-     * mengerjakan tahap apa; menautkan keluhan ke satu orang adalah penilaian,
-     * dan penilaian harus punya nama pembuatnya.
+     * mengerjakan tahap apa; menautkan keluhan ke orang adalah penilaian, dan
+     * penilaian harus punya nama pembuatnya serta alasannya.
      *
-     * Karena itu setiap penetapan menyimpan siapa yang menetapkan, kapan, dan
-     * alasannya — lalu ikut tercatat di riwayat complaint.
+     * Yang dikirim browser hanya KUNCI kandidat — nama, NIP, dan id NEVIRA
+     * dibaca server dari daftarnya sendiri. Itu yang membuat pengisian cukup
+     * satu centang plus satu alasan, dan sekaligus menutup jalan menyuntikkan
+     * nama karyawan sembarangan lewat form.
      */
-    public function setResponsibility(Request $request, Complaint $complaint)
+    public function addResponsible(Request $request, Complaint $complaint)
     {
         $user = $request->user();
         abort_unless($user->canView($complaint), 403);
         abort_unless($user->canAssignResponsibility(), 403);
 
+        $peranSah = array_keys(config('complaint.responsible_roles'));
+
         $data = $request->validate([
-            'responsible_staff_name' => ['nullable', 'string', 'max:120'],
-            'responsible_staff_nip'  => ['nullable', 'string', 'max:40'],
-            'responsible_staff_id'   => ['nullable', 'integer'],
-            'responsible_stage'      => ['nullable', 'string', 'max:80'],
-            'responsibility_note'    => ['required_with:responsible_staff_name', 'nullable', 'string', 'max:2000'],
+            'pelaku'       => ['required_without:manual_nama', 'array'],
+            'pelaku.*'     => ['string', 'max:190'],
+            'peran'        => ['array'],
+            'peran.*'      => [Rule::in($peranSah)],
+            'manual_nama'  => ['nullable', 'string', 'max:120'],
+            'manual_nip'   => ['nullable', 'string', 'max:40'],
+            'manual_peran' => ['nullable', Rule::in($peranSah)],
+            // Alasan wajib, tanpa pengecualian. Menunjuk orang tanpa alasan
+            // tidak bisa ditinjau ulang dan menempel di catatan kerjanya.
+            'alasan'       => ['required', 'string', 'max:2000'],
         ], [
-            'responsibility_note.required_with' => 'Tulis alasannya. Menunjuk orang tanpa alasan tidak bisa ditinjau ulang.',
+            'pelaku.required_without' => 'Pilih siapa yang terlibat, atau tulis namanya di isian bebas.',
+            'alasan.required'         => 'Tulis alasannya. Menunjuk orang tanpa alasan tidak bisa ditinjau ulang.',
         ], [
-            'responsible_staff_name' => 'nama karyawan',
-            'responsibility_note'    => 'alasan',
+            'pelaku'      => 'pelaku',
+            'alasan'      => 'alasan',
+            'manual_nama' => 'nama karyawan',
         ]);
 
-        $name = trim((string) ($data['responsible_staff_name'] ?? ''));
-        $previous = $complaint->responsible_staff_name;
+        $daftar = KandidatPelaku::untuk(
+            $complaint,
+            $this->karyawanOutlet($user, $complaint),
+            $this->penggunaSistem()
+        );
 
-        if ($name === '') {
-            DB::transaction(function () use ($complaint, $user, $previous) {
-                $complaint->forceFill([
-                    'responsible_staff_id'   => null,
-                    'responsible_staff_name' => null,
-                    'responsible_staff_nip'  => null,
-                    'responsible_stage'      => null,
-                    'responsibility_note'    => null,
-                    'responsibility_set_by'  => null,
-                    'responsibility_set_at'  => null,
-                ])->save();
+        $dipilih = [];
 
-                if ($previous) {
-                    ComplaintActivity::create([
-                        'complaint_id' => $complaint->id,
-                        'user_id'      => $user->id,
-                        'type'         => 'note',
-                        'note'         => 'Penetapan penanggung jawab ('.$previous.') dicabut.',
-                    ]);
-                }
-            });
+        foreach ($data['pelaku'] ?? [] as $kunci) {
+            $kandidat = $daftar->find($kunci);
 
-            return back()->with('status', 'Penetapan penanggung jawab dicabut.');
+            if (! $kandidat) {
+                // Daftar kandidat disusun ulang tiap permintaan; kalau NEVIRA
+                // sedang mati, karyawan outlet tidak ada di dalamnya. Ditolak
+                // dengan terang, bukan diam-diam dilewati — pelaku yang
+                // dicentang lalu tidak tersimpan adalah kehilangan data.
+                return back()->withInput()->withErrors([
+                    'pelaku' => 'Ada pilihan yang tidak lagi dikenali — daftarnya mungkin berubah. '
+                        .'Muat ulang halaman ini, lalu pilih lagi.',
+                ]);
+            }
+
+            $dipilih[] = [
+                'staff_id' => $kandidat['staff_id'],
+                'name'     => $kandidat['name'],
+                'nip'      => $kandidat['nip'],
+                'role'     => $data['peran'][$kunci] ?? $kandidat['role'],
+                'stage'    => $kandidat['stage'],
+            ];
         }
 
-        $stage  = $data['responsible_stage'] ?? null;
-        $reason = $data['responsibility_note'] ?? null;
+        // Isian bebas tetap ada untuk orang yang tidak ada di daftar
+        // (mis. kurir outlet lain) — tapi bukan jalur utamanya.
+        if (filled($data['manual_nama'] ?? null)) {
+            $dipilih[] = [
+                'staff_id' => null,
+                'name'     => trim($data['manual_nama']),
+                'nip'      => $data['manual_nip'] ?? null,
+                'role'     => $data['manual_peran'] ?? 'lainnya',
+                'stage'    => null,
+            ];
+        }
+
+        $sudahAda = $complaint->responsibles()->get()->map->identity()->all();
+        $baru = [];
+
+        foreach ($dipilih as $calon) {
+            $identity = ComplaintResponsible::identityFor($calon['staff_id'], $calon['nip'], $calon['name']);
+
+            if (in_array($identity, $sudahAda, true)) {
+                continue;
+            }
+
+            $sudahAda[] = $identity;
+            $baru[] = $calon;
+        }
+
+        if ($baru === []) {
+            return back()->with('status', 'Semua yang dipilih sudah tercatat sebagai pelaku complaint ini.');
+        }
 
         // Penetapan dan jejaknya harus jatuh bersama. Penetapan yang tersimpan
         // tanpa catatan riwayat adalah tuduhan tanpa asal-usul.
-        DB::transaction(function () use ($complaint, $data, $user, $name, $previous, $stage, $reason) {
-            $complaint->forceFill([
-                'responsible_staff_id'   => $data['responsible_staff_id'] ?? null,
-                'responsible_staff_name' => $name,
-                'responsible_staff_nip'  => $data['responsible_staff_nip'] ?? null,
-                'responsible_stage'      => $stage,
-                'responsibility_note'    => $reason,
-                'responsibility_set_by'  => $user->id,
-                'responsibility_set_at'  => now(),
+        DB::transaction(function () use ($complaint, $baru, $user, $data) {
+            foreach ($baru as $calon) {
+                $complaint->responsibles()->create([
+                    'nevira_user_id' => $calon['staff_id'],
+                    'staff_name'     => $calon['name'],
+                    'staff_nip'      => $calon['nip'],
+                    'role'           => $calon['role'],
+                    'stage'          => $calon['stage'],
+                    'reason'         => $data['alasan'],
+                    'set_by'         => $user->id,
+                    'set_at'         => now(),
+                ]);
+            }
+
+            ComplaintActivity::create([
+                'complaint_id' => $complaint->id,
+                'user_id'      => $user->id,
+                // Jenis tersendiri, bukan 'note': isinya nama karyawan, dan
+                // riwayat complaint dibaca juga oleh kasir. Yang boleh
+                // melihatnya disaring di tampilan. (API-19)
+                'type'         => 'responsible',
+                'note'         => 'Pelaku ditetapkan: '.$this->sebutPelaku($baru).'. Alasan: '.$data['alasan'],
+            ]);
+        });
+
+        return back()->with('status', count($baru).' pelaku ditetapkan.');
+    }
+
+    /** Ubah peran atau alasan seorang pelaku. Perubahan ikut ke riwayat. */
+    public function updateResponsible(Request $request, Complaint $complaint, ComplaintResponsible $responsible)
+    {
+        $user = $request->user();
+        abort_unless($user->canView($complaint), 403);
+        abort_unless($user->canAssignResponsibility(), 403);
+        abort_unless($responsible->complaint_id === $complaint->id, 404);
+
+        $data = $request->validate([
+            'peran'  => ['required', Rule::in(array_keys(config('complaint.responsible_roles')))],
+            'alasan' => ['required', 'string', 'max:2000'],
+        ], [
+            'alasan.required' => 'Tulis alasannya. Menunjuk orang tanpa alasan tidak bisa ditinjau ulang.',
+        ], ['peran' => 'peran', 'alasan' => 'alasan']);
+
+        DB::transaction(function () use ($complaint, $responsible, $data, $user) {
+            $responsible->forceFill([
+                'role'   => $data['peran'],
+                'reason' => $data['alasan'],
+                'set_by' => $user->id,
+                'set_at' => now(),
             ])->save();
 
             ComplaintActivity::create([
                 'complaint_id' => $complaint->id,
                 'user_id'      => $user->id,
-                'type'         => 'note',
-                'note'         => ($previous && $previous !== $name)
-                    ? 'Penanggung jawab diubah dari '.$previous.' ke '.$name.'. Alasan: '.$reason
-                    : 'Penanggung jawab ditetapkan: '.$name
-                        .($stage ? ' (tahap '.$stage.')' : '')
-                        .'. Alasan: '.$reason,
+                'type'         => 'responsible',
+                'note'         => 'Penetapan pelaku '.$responsible->staff_name.' diperbarui ('
+                    .$responsible->roleLabel().'). Alasan: '.$data['alasan'],
             ]);
         });
 
-        return back()->with('status', 'Penanggung jawab ditetapkan: '.$name.'.');
+        return back()->with('status', 'Penetapan '.$responsible->staff_name.' diperbarui.');
+    }
+
+    /** Cabut penetapan seorang pelaku. Pencabutan juga masuk riwayat. */
+    public function destroyResponsible(Request $request, Complaint $complaint, ComplaintResponsible $responsible)
+    {
+        $user = $request->user();
+        abort_unless($user->canView($complaint), 403);
+        abort_unless($user->canAssignResponsibility(), 403);
+        abort_unless($responsible->complaint_id === $complaint->id, 404);
+
+        $nama = $responsible->staff_name;
+
+        DB::transaction(function () use ($complaint, $responsible, $user, $nama) {
+            $responsible->delete();
+
+            ComplaintActivity::create([
+                'complaint_id' => $complaint->id,
+                'user_id'      => $user->id,
+                'type'         => 'responsible',
+                'note'         => 'Penetapan pelaku ('.$nama.') dicabut.',
+            ]);
+        });
+
+        return back()->with('status', 'Penetapan '.$nama.' dicabut.');
+    }
+
+    private function sebutPelaku(array $pelaku): string
+    {
+        return collect($pelaku)->map(function ($p) {
+            $peran = config('complaint.responsible_roles.'.$p['role'], $p['role']);
+
+            return $p['name'].' ('.$peran.($p['stage'] ? ' · '.$p['stage'] : '').')';
+        })->implode(', ');
     }
 
     /**

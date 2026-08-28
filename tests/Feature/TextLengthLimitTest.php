@@ -82,13 +82,23 @@ class TextLengthLimitTest extends TestCase
         ])->assertSessionHasErrors('note');
     }
 
-    public function test_alasan_penetapan_penanggung_jawab_dibatasi(): void
+    public function test_alasan_penetapan_pelaku_dibatasi(): void
     {
         $complaint = $this->complaint();
 
-        $this->actingAs($this->cc())->put('/complaints/'.$complaint->id.'/responsibility', [
-            'responsible_staff_name' => 'Budi',
-            'responsibility_note'    => str_repeat('a', 2_000_000),
-        ])->assertSessionHasErrors('responsibility_note');
+        $this->actingAs($this->cc())->post('/complaints/'.$complaint->id.'/pelaku', [
+            'manual_nama' => 'Budi',
+            'alasan'      => str_repeat('a', 2_000_000),
+        ])->assertSessionHasErrors('alasan');
+    }
+
+    public function test_nama_pelaku_manual_dibatasi(): void
+    {
+        $complaint = $this->complaint();
+
+        $this->actingAs($this->cc())->post('/complaints/'.$complaint->id.'/pelaku', [
+            'manual_nama' => str_repeat('a', 5_000),
+            'alasan'      => 'Alasan wajar.',
+        ])->assertSessionHasErrors('manual_nama');
     }
 }
