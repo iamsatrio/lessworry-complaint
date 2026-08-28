@@ -20,9 +20,27 @@ class ResponsibleMigrationTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Migrasi yang diuji, disebut lewat path.
+     *
+     * Bukan `--step 1`: begitu ada migrasi lain menyusul, langkah terakhir
+     * bukan lagi yang ini dan test-nya diam-diam menguji hal lain.
+     */
+    private const MIGRASI = 'database/migrations/2026_08_28_100000_replace_single_responsibility_with_responsibles.php';
+
+    private function mundur(): void
+    {
+        Artisan::call('migrate:rollback', ['--path' => self::MIGRASI]);
+    }
+
+    private function maju(): void
+    {
+        Artisan::call('migrate', ['--path' => self::MIGRASI]);
+    }
+
     public function test_penetapan_lama_dipindahkan_ke_tabel_pelaku(): void
     {
-        Artisan::call('migrate:rollback', ['--step' => 1]);
+        $this->mundur();
 
         $this->assertTrue(Schema::hasColumn('complaints', 'responsible_staff_name'),
             'rollback tidak mengembalikan skema lama, test ini tidak menguji apa pun');
@@ -48,7 +66,7 @@ class ResponsibleMigrationTest extends TestCase
             'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        Artisan::call('migrate');
+        $this->maju();
 
         $this->assertFalse(Schema::hasColumn('complaints', 'responsible_staff_name'),
             'kolom tunggal masih ada setelah diganti tabel penghubung');
@@ -66,7 +84,7 @@ class ResponsibleMigrationTest extends TestCase
 
     public function test_complaint_tanpa_penetapan_tidak_menghasilkan_baris_pelaku(): void
     {
-        Artisan::call('migrate:rollback', ['--step' => 1]);
+        $this->mundur();
 
         DB::table('complaints')->insert([
             'ticket_number' => 'LW-20260101-002',
@@ -76,7 +94,7 @@ class ResponsibleMigrationTest extends TestCase
             'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        Artisan::call('migrate');
+        $this->maju();
 
         $this->assertSame(0, DB::table('complaint_responsibles')->count());
     }

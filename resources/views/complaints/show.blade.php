@@ -24,11 +24,12 @@
     <div class="card">
       <div class="eyebrow">Keluhan</div>
       <p style="white-space:pre-wrap;margin:0;font-size:16px">{{ $complaint->description }}</p>
-      @if($complaint->attachments->isNotEmpty())
+      @php $lampiranKeluhan = $complaint->attachments->whereNull('complaint_activity_id'); @endphp
+      @if($lampiranKeluhan->isNotEmpty())
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
-        @foreach($complaint->attachments as $a)
+        @foreach($lampiranKeluhan as $a)
           <a href="{{ route('complaints.attachment', [$complaint, $a]) }}" target="_blank" rel="noopener">
-            <img src="{{ route('complaints.attachment', [$complaint, $a]) }}" alt="{{ $a->original_name }}"
+            <img src="{{ route('complaints.attachment.thumb', [$complaint, $a]) }}" alt="{{ $a->original_name }}"
                  style="height:96px;border-radius:10px;border:1px solid var(--line)">
           </a>
         @endforeach
@@ -66,14 +67,36 @@
                 → <b>{{ config('complaint.statuses.'.$a->to_status, $a->to_status) }}</b></div>
             @endif
             @if($a->note)<div style="white-space:pre-wrap">{{ $a->note }}</div>@endif
+            @if($a->attachments->isNotEmpty())
+              {{-- Versi kecil dulu; yang penuh hanya saat diklik. Membuka
+                   halaman complaint tidak boleh berarti mengunduh semua foto
+                   ukuran penuh di perangkat outlet. (API-20) --}}
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+                @foreach($a->attachments as $foto)
+                  <a href="{{ route('complaints.attachment', [$complaint, $foto]) }}" target="_blank" rel="noopener">
+                    <img src="{{ route('complaints.attachment.thumb', [$complaint, $foto]) }}"
+                         alt="{{ $foto->original_name }}" loading="lazy"
+                         title="{{ $foto->original_name }}@if($foto->sizeLabel()) · {{ $foto->sizeLabel() }}@endif"
+                         style="height:76px;border-radius:8px;border:1px solid var(--line)">
+                  </a>
+                @endforeach
+              </div>
+            @endif
           </div>
         @empty<p class="muted">Belum ada aktivitas.</p>@endforelse
       </div>
-      <form method="POST" action="{{ route('complaints.note',$complaint) }}" style="margin-top:18px">
+      <form method="POST" action="{{ route('complaints.note',$complaint) }}" enctype="multipart/form-data" style="margin-top:18px">
         @csrf
         <label for="note">Tambah catatan</label>
         <textarea id="note" name="note" required style="min-height:80px"
-          placeholder="Apa yang sudah kamu lakukan untuk complaint ini?"></textarea>
+          placeholder="Apa yang sudah kamu lakukan untuk complaint ini?">{{ old('note') }}</textarea>
+        <label for="photos">Foto bukti</label>
+        <input id="photos" type="file" name="photos[]" accept="image/jpeg,image/png,image/webp" multiple>
+        <p class="hint">
+          Maksimal {{ App\Http\Controllers\ComplaintController::FOTO_PER_CATATAN }} foto,
+          {{ (int) (App\Http\Controllers\ComplaintController::FOTO_MAKS_KB / 1024) }} MB per foto.
+          Fotonya dikecilkan otomatis dan data lokasi dari kamera dibuang sebelum disimpan.
+        </p>
         <div style="margin-top:12px"><button class="ghost">Simpan Catatan</button></div>
       </form>
     </div>

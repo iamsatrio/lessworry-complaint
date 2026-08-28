@@ -10,7 +10,9 @@ use App\Models\Outlet;
 use App\Models\User;
 use App\Exceptions\NeviraAccessDenied;
 use App\Exceptions\NeviraException;
+use App\Rules\GambarSungguhan;
 use App\Services\KandidatPelaku;
+use App\Services\PenyimpanFoto;
 use App\Services\NeviraGate;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -21,7 +23,13 @@ use Illuminate\Validation\Rule;
 
 class ComplaintController extends Controller
 {
-    public function __construct(private NeviraGate $nevira) {}
+    /** Batas unggahan foto per catatan penanganan. (API-20) */
+    public const FOTO_PER_CATATAN = 5;
+
+    /** Foto kamera HP 3–8 MB; di atas ini hampir pasti bukan foto bukti. */
+    public const FOTO_MAKS_KB = 8192;
+
+    public function __construct(private NeviraGate $nevira, private PenyimpanFoto $foto) {}
 
     /** Papan kerja: complaint terbuka, disaring per peran. */
     public function index(Request $request)
@@ -94,7 +102,7 @@ class ComplaintController extends Controller
             // Batas panjang: tanpa ini 2 juta karakter tersimpan utuh dan
             // ikut termuat di papan kerja maupun halaman detail. (API-8 T8)
             'description'           => ['required', 'string', 'max:5000'],
-            'attachments.*'         => ['nullable', 'image', 'max:5120'],
+            'attachments.*'         => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', new GambarSungguhan],
         ], [
             'nevira_transaction_number.required_without' => 'Isi nomor nota NEVIRA, atau pilih alasan kenapa complaint ini tidak punya nota.',
             'nota_exemption.required_without'            => 'Pilih alasan kenapa complaint ini tidak punya nomor nota.',
@@ -117,13 +125,15 @@ class ComplaintController extends Controller
         // tidak menulis unggahan yang sama dua kali. Disk privat, bukan
         // 'public': foto bukti berisi barang dan kadang wajah pelanggan; di
         // disk publik siapa pun yang memegang URL bisa membukanya tanpa login.
-        $berkas = [];
-        foreach ($request->file('attachments', []) as $file) {
-            $berkas[] = [
-                'file'          => $file,
-                'original_name' => $file->getClientOriginalName(),
-            ];
-        }
+        // Dikecilkan dan dibuang EXIF-nya lewat penyimpan yang sama dengan
+        // foto catatan penanganan: foto pelanggan dari ponsel membawa
+        // koordinat GPS di mana pun ia diunggah. (API-20)
+        //
+        // Ditulis SEBELUM transaksi, jadi nomor complaint-nya belum ada dan
+        // berkasnya masuk ke folder intake. Itu disengaja: percobaan ulang
+        // saat nomor tiket bentrok tidak boleh menulis unggahan yang sama
+        // dua kali.
+        [$berkas, $gagalFoto] = $this->simpanFoto($request->file('attachments', []), 'complaints/intake');
 
         $complaint = $this->simpanMeskiNomorBentrok(function () use ($data, $user, $berkas) {
             return DB::transaction(function () use ($data, $user, $berkas) {
@@ -144,10 +154,7 @@ class ComplaintController extends Controller
                 ]);
 
                 foreach ($berkas as $b) {
-                    $complaint->attachments()->create([
-                        'path'          => $b['file']->store('complaints/'.$complaint->id, 'local'),
-                        'original_name' => $b['original_name'],
-                    ]);
+                    $complaint->attachments()->create($b);
                 }
 
                 return $complaint;
@@ -219,7 +226,7 @@ class ComplaintController extends Controller
         $user = Auth::user();
         abort_unless($user->canView($complaint), 403);
 
-        $complaint->load(['outlet', 'assignee', 'creator', 'activities.user', 'attachments', 'responsibles.setter']);
+        $complaint->load(['outlet', 'assignee', 'creator', 'activities.user', 'activities.attachments', 'attachments', 'responsibles.setter']);
 
         // Daftar pegawai hanya untuk peran yang memang menetapkan
         // penanggung jawab. Sebelumnya setiap kasir menerima nama dan
@@ -419,24 +426,87 @@ class ComplaintController extends Controller
         return back()->with('status', 'Penugasan diperbarui.');
     }
 
+    /**
+     * Tambah catatan penanganan, dengan foto bukti kalau ada. (API-20)
+     *
+     * Foto sering justru yang menentukan: noda yang tersisa setelah cuci
+     * ulang, kondisi barang saat diserahkan kembali. Berkasnya dikecilkan
+     * dan dibersihkan dari EXIF sebelum disimpan — lihat PenyimpanFoto.
+     */
     public function addNote(Request $request, Complaint $complaint)
     {
-        abort_unless($request->user()->canView($complaint), 403);
+        $user = $request->user();
+        abort_unless($user->canView($complaint), 403);
 
-        $data = $request->validate(['note' => ['required', 'string', 'max:2000']]);
+        $data = $request->validate([
+            'note'     => ['required', 'string', 'max:2000'],
+            'photos'   => ['array', 'max:'.self::FOTO_PER_CATATAN],
+            // Isi berkas yang menentukan, bukan ekstensinya: aturan image
+            // membaca berkasnya, dan PenyimpanFoto memeriksanya sekali lagi.
+            // HEIC sengaja tidak diterima — gd tidak bisa membacanya, jadi
+            // ia akan tersimpan apa adanya berikut EXIF-nya.
+            'photos.*' => ['file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.self::FOTO_MAKS_KB, new GambarSungguhan],
+        ], [
+            'photos.max'     => 'Maksimal '.self::FOTO_PER_CATATAN.' foto per catatan.',
+            'photos.*.image' => 'Berkas :position bukan gambar. Unggah foto (JPG, PNG, atau WebP).',
+            'photos.*.mimes' => 'Berkas :position bukan gambar. Unggah foto (JPG, PNG, atau WebP).',
+            'photos.*.max'   => 'Foto :position lebih dari '.(int) (self::FOTO_MAKS_KB / 1024).' MB.',
+        ], ['photos' => 'foto']);
 
-        ComplaintActivity::create([
-            'complaint_id' => $complaint->id,
-            'user_id'      => $request->user()->id,
-            'type'         => 'note',
-            'note'         => $data['note'],
-        ]);
+        // Berkas ditulis sebelum barisnya dibuat, dan kegagalannya tidak
+        // menjatuhkan catatan: petugas sudah mengetik temuannya, dan
+        // membuangnya karena satu foto gagal adalah kehilangan data.
+        [$berkas, $gagal] = $this->simpanFoto($request->file('photos', []), 'complaints/'.$complaint->id);
+
+        DB::transaction(function () use ($complaint, $data, $user, $berkas) {
+            $activity = ComplaintActivity::create([
+                'complaint_id' => $complaint->id,
+                'user_id'      => $user->id,
+                'type'         => 'note',
+                'note'         => $data['note'],
+            ]);
+
+            foreach ($berkas as $b) {
+                $complaint->attachments()->create($b + ['complaint_activity_id' => $activity->id]);
+            }
+        });
 
         if ($complaint->first_response_at === null) {
             $complaint->forceFill(['first_response_at' => now()])->save();
         }
 
-        return back()->with('status', 'Catatan ditambahkan.');
+        $pesan = 'Catatan ditambahkan.';
+
+        if ($gagal > 0) {
+            return back()->with('status', $pesan)
+                ->with('warning', $gagal.' foto gagal disimpan. Catatannya tetap tersimpan — coba unggah ulang fotonya.');
+        }
+
+        return back()->with('status', $pesan);
+    }
+
+    /**
+     * Simpan sekumpulan foto, kembalikan atribut lampiran dan berapa yang gagal.
+     *
+     * @return array{0:array<int,array<string,mixed>>,1:int}
+     */
+    private function simpanFoto(array $files, string $dir): array
+    {
+        $berkas = [];
+        $gagal  = 0;
+
+        foreach (array_filter($files) as $file) {
+            try {
+                $berkas[] = $this->foto->simpan($file, $dir);
+            } catch (\Throwable $e) {
+                // Foto yang tidak bisa disimpan sama sekali dilewati, bukan
+                // diam-diam: pemanggilnya memberi tahu petugas.
+                report($e);
+                $gagal++;
+            }
+        }
+
+        return [$berkas, $gagal];
     }
 
     /**
@@ -715,6 +785,28 @@ class ComplaintController extends Controller
         abort_unless(Storage::disk('local')->exists($attachment->path), 404);
 
         return Storage::disk('local')->response($attachment->path, $attachment->original_name, [
+            'Cache-Control' => 'private, max-age=0, no-store',
+        ]);
+    }
+
+    /**
+     * Versi kecil untuk lini masa. (API-20)
+     *
+     * Wewenangnya diperiksa persis sama dengan berkas penuh — kalau tidak,
+     * versi kecil jadi jalan memutar untuk melihat foto yang sama.
+     */
+    public function attachmentThumb(Request $request, Complaint $complaint, ComplaintAttachment $attachment)
+    {
+        abort_unless($request->user()->canView($complaint), 403);
+        abort_unless($attachment->complaint_id === $complaint->id, 404);
+
+        // Foto yang kompresinya gagal tidak punya versi kecil; yang disajikan
+        // berkas penuhnya, bukan 404 yang membuat lini masa terlihat rusak.
+        $path = $attachment->thumb_path ?: $attachment->path;
+
+        abort_unless(Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->response($path, $attachment->original_name, [
             'Cache-Control' => 'private, max-age=0, no-store',
         ]);
     }

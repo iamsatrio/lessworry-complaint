@@ -40,6 +40,7 @@ Route::middleware(['auth', 'auth.session', 'active', 'password.changed'])->group
     Route::post('/complaints/{complaint}/resync', [ComplaintController::class, 'resync'])->name('complaints.resync');
     Route::put('/complaints/{complaint}/link', [ComplaintController::class, 'updateLink'])->name('complaints.link');
     Route::get('/complaints/{complaint}/lampiran/{attachment}', [ComplaintController::class, 'attachment'])->name('complaints.attachment');
+    Route::get('/complaints/{complaint}/lampiran/{attachment}/kecil', [ComplaintController::class, 'attachmentThumb'])->name('complaints.attachment.thumb');
     // Pelaku complaint — beberapa orang per complaint, wewenangnya dicek
     // di controller (Customer Care dan supervisor saja). (API-19)
     Route::post('/complaints/{complaint}/pelaku', [ComplaintController::class, 'addResponsible'])->name('complaints.responsibles.store');

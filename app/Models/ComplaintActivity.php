@@ -13,6 +13,12 @@ class ComplaintActivity extends Model
         return $this->belongsTo(User::class);
     }
 
+    /** Foto bukti yang menempel pada catatan ini. (API-20) */
+    public function attachments()
+    {
+        return $this->hasMany(ComplaintAttachment::class, 'complaint_activity_id');
+    }
+
     public function complaint()
     {
         return $this->belongsTo(Complaint::class);

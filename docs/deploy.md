@@ -16,8 +16,17 @@ Daftar periksa sebelum sistem ini menyentuh data pelanggan sungguhan.
       sekali di produksi. Akun demo memakai password `password`.
 - [ ] `SESSION_SECURE_COOKIE=true` supaya cookie sesi tidak pernah lewat HTTP.
 - [ ] Kredensial NEVIRA diisi dari service account, bukan akun pribadi.
-- [ ] `php artisan storage:link` supaya foto bukti bisa dibuka.
 - [ ] Izin tulis untuk `storage/` dan `bootstrap/cache/`.
+      Foto bukti disimpan di disk privat (`storage/app/private`) dan disajikan
+      lewat rute yang memeriksa wewenang — `storage:link` TIDAK diperlukan
+      untuknya, dan symlink publik justru pernah jadi celahnya.
+- [ ] Ekstensi PHP `gd` aktif. Kompresi foto memakainya: tanpa gd, foto tetap
+      tersimpan tapi apa adanya — ukuran penuh berikut EXIF-nya, dan EXIF
+      ponsel memuat koordinat GPS.
+- [ ] Batas unggahan server disamakan dengan batas aplikasi (8 MB per foto):
+      `upload_max_filesize` dan `post_max_size` minimal `10M` di PHP, dan
+      `client_max_body_size 10m;` di nginx. Kalau servernya menolak lebih dulu,
+      petugas menerima 413 tanpa penjelasan alih-alih pesan dari aplikasi.
 
 ## Pengaturan sesi
 

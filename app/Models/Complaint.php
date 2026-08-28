@@ -215,6 +215,16 @@ class Complaint extends Model
     }
 
     /**
+     * Lampiran yang menempel pada keluhannya sendiri, bukan pada catatan
+     * penanganan. Tanpa pemisahan ini, foto tindak lanjut ikut muncul di
+     * kartu keluhan seolah-olah dikirim pelanggan sejak awal. (API-20)
+     */
+    public function intakeAttachments()
+    {
+        return $this->hasMany(ComplaintAttachment::class)->whereNull('complaint_activity_id');
+    }
+
+    /**
      * Complaint lain untuk nomor nota yang sama, sebatas yang boleh dilihat
      * pengguna ini. (API-8 T7)
      *
