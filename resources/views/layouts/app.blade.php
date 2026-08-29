@@ -236,6 +236,17 @@ details.filters .body{padding:0 22px 20px}
 </head>
 <body>
 @auth
+<script>
+/* Kunci draft form intake — terikat pengguna, bukan perangkat. Perangkat
+   outlet dipakai bergantian; kunci bersama membuat isian petugas sebelumnya
+   muncul di form petugas berikutnya. */
+window.LW_DRAFT_KEY = @json('lw_complaint_draft:'.auth()->user()->draftKey());
+@if(session('bersihkan_draft'))
+/* Complaint benar-benar tersimpan — baru di sini draftnya dibuang. Menghapus
+   saat form dikirim membuat isian hilang justru ketika simpannya gagal. */
+try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
+@endif
+</script>
 <header class="top">
   <div class="topin">
     <div class="brand">Less Worry<span>Complaint</span></div>

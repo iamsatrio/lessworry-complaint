@@ -102,6 +102,19 @@ class User extends Authenticatable
         return $this->role === 'supervisor';
     }
 
+    /**
+     * Penanda draft form intake di penyimpanan perangkat.
+     *
+     * Perangkat outlet dipakai bergantian, jadi draft harus terikat pengguna:
+     * tanpa itu keluhan pelanggan yang diketik petugas sebelumnya muncul lagi
+     * di form petugas berikutnya. Diturunkan lewat hash supaya id pengguna
+     * tidak ikut tertulis ke perangkat bersama.
+     */
+    public function draftKey(): string
+    {
+        return substr(hash_hmac('sha256', 'draft-intake:'.$this->id, (string) config('app.key')), 0, 16);
+    }
+
     public function compensationLimit(): int
     {
         return (int) config('complaint.compensation_limit.'.$this->role, 0);

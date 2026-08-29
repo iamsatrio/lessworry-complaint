@@ -47,6 +47,11 @@ class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
+        // Titipan untuk halaman masuk: buang draft complaint yang tertinggal
+        // di perangkat outlet. Petugas berikutnya tidak boleh menemukan
+        // keluhan dan identitas pelanggan yang dicatat petugas sebelumnya.
+        $request->session()->flash('bersihkan_semua_draft', true);
+
         return redirect()->route('login');
     }
 }

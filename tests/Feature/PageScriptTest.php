@@ -32,8 +32,15 @@ class PageScriptTest extends TestCase
         ]);
     }
 
-    /** Ambil semua id yang dipanggil skrip, lalu pastikan ada di markup. */
-    private function assertScriptIdsExist(string $html, string $halaman): void
+    /**
+     * Ambil semua id yang dipanggil skrip, lalu pastikan ada di markup.
+     *
+     * $wajibAdaRujukan: halaman yang skripnya memang menyetir elemen. Nol
+     * rujukan di situ berarti pola penangkapnya yang tidak lagi cocok, bukan
+     * halamannya yang bersih. Halaman yang tidak menyetir elemen apa pun —
+     * skrip satu-satunya di sana milik layout — lewat dengan false.
+     */
+    private function assertScriptIdsExist(string $html, string $halaman, bool $wajibAdaRujukan = true): void
     {
         // Tangkap dua bentuk: getElementById('x') dan helper el('x').
         preg_match_all("/(?:getElementById|\bel)\(\s*'([^']+)'\s*\)/", $html, $dipanggil);
@@ -53,7 +60,9 @@ class PageScriptTest extends TestCase
             return;
         }
 
-        $this->assertNotEmpty($dipanggil, "Tidak ada rujukan elemen di $halaman — pola test perlu ditinjau.");
+        if ($wajibAdaRujukan) {
+            $this->assertNotEmpty($dipanggil, "Tidak ada rujukan elemen di $halaman — pola test perlu ditinjau.");
+        }
 
         foreach ($dipanggil as $id) {
             $this->assertContains(
@@ -88,7 +97,7 @@ class PageScriptTest extends TestCase
 
         $html = $this->actingAs($cc)->get('/complaints/'.$complaint->id)->assertOk()->getContent();
 
-        $this->assertScriptIdsExist($html, 'complaints/show');
+        $this->assertScriptIdsExist($html, 'complaints/show', wajibAdaRujukan: false);
     }
 
     /* ---------- Kolom yang dibutuhkan aturan nota harus benar-benar ada ---------- */

@@ -5,6 +5,24 @@
 <h1>Catat keluhan pelanggan</h1>
 <p class="lede">Isi seadanya dulu — yang penting keluhannya masuk. Detail bisa dilengkapi setelah pelanggan pergi.</p>
 
+@php
+  // Server sudah mengembalikan isian (validasi gagal): draft lama tidak boleh
+  // ikut ditawarkan, nanti dua sumber isian bertabrakan di layar yang sama.
+  $terisi = filled(old('description')) || filled(old('reporter_name'));
+@endphp
+
+{{-- Draft yang dipulihkan tidak boleh senyap. Isian yang muncul sendiri tidak
+     bisa dibedakan dari kolom yang memang sudah begitu — dan complaint bisa
+     tersimpan atas nama pelapor pelanggan sebelumnya. --}}
+<div class="flash warn" id="draft-tawar" style="display:none">
+  <b>Ada isian yang belum tersimpan dari sebelumnya.</b>
+  <div class="small" id="draft-kapan"></div>
+  <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+    <button type="button" class="ghost shrink" id="draft-lanjut">Lanjutkan isian itu</button>
+    <button type="button" class="ghost shrink" id="draft-buang">Buang, mulai baru</button>
+  </div>
+</div>
+
 <form method="POST" action="{{ route('complaints.store') }}" enctype="multipart/form-data" id="f">
 @csrf
 
@@ -135,23 +153,63 @@ if (cat) cat.addEventListener('change', () => fillSub());
 fillSub(@json(old('sub_category')));
 
 /* ---------- Draft lokal: isian tidak hilang kalau koneksi outlet putus ---------- */
-const KEY = 'lw_complaint_draft';
-if (form) {
-  try{
-    const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
-    for (const [k,v] of Object.entries(saved)) {
-      const f = form.elements[k];
-      if (f && f.type !== 'file' && !f.value) f.value = v;
-    }
-    if (saved.category && cat) { cat.value = saved.category; fillSub(saved.sub_category); }
-  }catch(e){}
+// Kunci diumumkan layout dan terikat pengguna (User::draftKey). Perangkat
+// outlet dipakai bergantian: kunci bersama membuat keluhan dan identitas
+// pelanggan yang dicatat petugas sebelumnya muncul di form petugas berikutnya.
+const KEY        = window.LW_DRAFT_KEY || 'lw_complaint_draft';
+const tawar      = el('draft-tawar');
+const draftKapan = el('draft-kapan');
+const btnLanjut  = el('draft-lanjut');
+const btnBuang   = el('draft-buang');
+const TERISI     = @json($terisi);
 
-  form.addEventListener('input', () => {
-    const d = {};
-    for (const f of form.elements) if (f.name && f.type !== 'file' && f.type !== 'hidden') d[f.name] = f.value;
-    localStorage.setItem(KEY, JSON.stringify(d));
+function bacaDraft(){
+  try{ return JSON.parse(localStorage.getItem(KEY) || 'null'); }catch(e){ return null; }
+}
+function buangDraft(){ try{ localStorage.removeItem(KEY); }catch(e){} }
+
+function simpanDraft(){
+  if (!form) return;
+  const isi = {};
+  for (const f of form.elements) if (f.name && f.type !== 'file' && f.type !== 'hidden') isi[f.name] = f.value;
+  try{ localStorage.setItem(KEY, JSON.stringify({isi, waktu: Date.now()})); }catch(e){}
+}
+
+function pakaiDraft(d){
+  if (!d || !d.isi || !form) return;
+  for (const [k,v] of Object.entries(d.isi)) {
+    const f = form.elements[k];
+    if (f && f.type !== 'file') f.value = v;
+  }
+  if (d.isi.category && cat) { cat.value = d.isi.category; fillSub(d.isi.sub_category); }
+}
+
+if (form) {
+  const draft = bacaDraft();
+  const adaIsi = !!(draft && draft.isi && Object.values(draft.isi).some(v => v && String(v).trim() !== ''));
+
+  // Ditawarkan, tidak diterapkan diam-diam.
+  if (adaIsi && !TERISI && tawar) {
+    tawar.style.display = 'block';
+    if (draftKapan && draft.waktu) {
+      draftKapan.textContent = 'Tersimpan di perangkat ini pada ' + new Date(draft.waktu).toLocaleString('id-ID') + '.';
+    }
+  }
+
+  if (btnLanjut) btnLanjut.addEventListener('click', () => {
+    pakaiDraft(draft);
+    if (tawar) tawar.style.display = 'none';
   });
-  form.addEventListener('submit', () => localStorage.removeItem(KEY));
+  if (btnBuang) btnBuang.addEventListener('click', () => {
+    buangDraft();
+    if (tawar) tawar.style.display = 'none';
+  });
+
+  form.addEventListener('input', simpanDraft);
+  form.addEventListener('change', simpanDraft);
+  // Draft TIDAK dihapus saat form dikirim: dikirim bukan berarti tersimpan.
+  // Penghapusannya dilakukan layout setelah server memastikan complaint
+  // punya nomor tiket.
 }
 
 /* ---------- Nota dan alasan tidak boleh terisi dua-duanya ---------- */

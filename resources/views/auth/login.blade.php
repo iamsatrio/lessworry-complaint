@@ -20,4 +20,20 @@
   </div>
   <p class="muted small" style="text-align:center">Lupa password? Hubungi supervisor outletmu.</p>
 </div>
+@if(session('bersihkan_semua_draft'))
+<script>
+/* Petugas keluar dengan sengaja: draft complaint miliknya tidak boleh
+   tertinggal di perangkat outlet untuk petugas berikutnya.
+
+   Hanya dijalankan sesudah keluar, bukan setiap kali halaman masuk terbuka:
+   sesi yang habis di tengah pengisian juga mendarat di sini, dan draft itu
+   justru harus selamat. */
+try{
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const k = localStorage.key(i);
+    if (k && k.indexOf('lw_complaint_draft') === 0) localStorage.removeItem(k);
+  }
+}catch(e){}
+</script>
+@endif
 @endsection

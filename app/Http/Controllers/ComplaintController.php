@@ -169,7 +169,11 @@ class ComplaintController extends Controller
 
         $redirect = redirect()
             ->route('complaints.show', $complaint)
-            ->with('status', 'Complaint '.$complaint->ticket_number.' tercatat.');
+            ->with('status', 'Complaint '.$complaint->ticket_number.' tercatat.')
+            // Baru di sini draft di perangkat boleh dibuang: complaint ini
+            // sudah punya nomor tiket. Draft yang dihapus saat form dikirim
+            // ikut hilang justru ketika simpannya gagal.
+            ->with('bersihkan_draft', true);
 
         // Peringatan, bukan larangan: satu nota boleh punya dua keluhan
         // berbeda. Yang tidak boleh adalah petugas tidak tahu. (API-8 T7)
