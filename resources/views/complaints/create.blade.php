@@ -46,6 +46,11 @@
   <div class="row">
     <div><label for="cat">Kategori <span class="req">*</span></label>
       <select id="cat" name="category" required>
+        {{-- Tanpa opsi kosong, opsi pertama selalu terpilih dan `required`
+             tidak menuntut apa pun: complaint salah kategori tersimpan diam-diam.
+             Kategori adalah kolom yang menentukan pola keluhan bisa dilihat
+             atau tidak, dan kategori yang salah terlihat seperti data benar. --}}
+        <option value="" disabled @selected(blank($nilai('category')))>— pilih kategori —</option>
         @foreach(config('complaint.categories') as $k=>$v)
           <option value="{{ $k }}" @selected($nilai('category')===$k)>{{ $v['label'] }}</option>
         @endforeach
