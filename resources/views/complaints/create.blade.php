@@ -6,10 +6,25 @@
 <p class="lede">Isi seadanya dulu — yang penting keluhannya masuk. Detail bisa dilengkapi setelah pelanggan pergi.</p>
 
 @php
-  // Server sudah mengembalikan isian (validasi gagal): draft lama tidak boleh
-  // ikut ditawarkan, nanti dua sumber isian bertabrakan di layar yang sama.
-  $terisi = filled(old('description')) || filled(old('reporter_name'));
+  // Isian yang dikembalikan LANGSUNG oleh server, bukan lewat flash session.
+  // Saat sesinya yang mati, flash ikut mati bersamanya — lihat SesiKedaluwarsa.
+  $kembali = $kembali ?? [];
+  $gagal   = $gagal ?? null;
+  $nilai   = fn (string $k, $d = null) => $kembali[$k] ?? old($k, $d);
+
+  // Server sudah mengembalikan isian: draft lama tidak boleh ikut ditawarkan,
+  // nanti dua sumber isian bertabrakan di layar yang sama.
+  $terisi = filled($kembali) || filled(old('description')) || filled(old('reporter_name'));
 @endphp
+
+@if($gagal)
+  {{-- Form yang gagal disimpan tidak boleh terlihat seperti form kosong siap
+       pakai. Blok ini dicetak di halaman yang dibalas, bukan dititipkan ke sesi. --}}
+  <div class="err" id="gagal-simpan" role="alert">
+    <b style="font-size:16px">Complaint ini BELUM tersimpan.</b>
+    <p style="margin:8px 0 0">{{ $gagal }}</p>
+  </div>
+@endif
 
 {{-- Draft yang dipulihkan tidak boleh senyap. Isian yang muncul sendiri tidak
      bisa dibedakan dari kolom yang memang sudah begitu — dan complaint bisa
@@ -32,7 +47,7 @@
     <div><label for="cat">Kategori <span class="req">*</span></label>
       <select id="cat" name="category" required>
         @foreach(config('complaint.categories') as $k=>$v)
-          <option value="{{ $k }}" @selected(old('category')===$k)>{{ $v['label'] }}</option>
+          <option value="{{ $k }}" @selected($nilai('category')===$k)>{{ $v['label'] }}</option>
         @endforeach
       </select>
     </div>
@@ -40,13 +55,13 @@
     <div><label for="pri">Prioritas <span class="req">*</span></label>
       <select id="pri" name="priority" required>
         @foreach(config('complaint.priorities') as $k=>$v)
-          <option value="{{ $k }}" @selected((old('priority') ?? 'medium')===$k)>{{ $v }}</option>
+          <option value="{{ $k }}" @selected(($nilai('priority') ?? 'medium')===$k)>{{ $v }}</option>
         @endforeach
       </select>
     </div>
   </div>
   <label for="desc">Isi keluhan <span class="req">*</span></label>
-  <textarea id="desc" name="description" required placeholder="Tulis keluhan pelanggan apa adanya, pakai kalimatnya sendiri.">{{ old('description') }}</textarea>
+  <textarea id="desc" name="description" required placeholder="Tulis keluhan pelanggan apa adanya, pakai kalimatnya sendiri.">{{ $nilai('description') }}</textarea>
   <p class="hint">Tulis apa yang pelanggan katakan, bukan tafsiranmu. Itu yang menolong saat kasusnya ditelusuri nanti.</p>
 
   <label for="att">Foto bukti</label>
@@ -60,7 +75,7 @@
       <div><label for="ch">Masuk lewat <span class="req">*</span></label>
         <select id="ch" name="channel" required>
           @foreach(config('complaint.channels') as $k=>$v)
-            <option value="{{ $k }}" @selected(old('channel')===$k)>{{ $v }}</option>
+            <option value="{{ $k }}" @selected($nilai('channel')===$k)>{{ $v }}</option>
           @endforeach
         </select>
       </div>
@@ -68,7 +83,7 @@
       <div><label for="out">Outlet</label>
         <select id="out" name="outlet_id">
           <option value="">Terisi sendiri dari nota</option>
-          @foreach($outlets as $o)<option value="{{ $o->id }}" @selected(old('outlet_id')==$o->id)>{{ $o->name }}</option>@endforeach
+          @foreach($outlets as $o)<option value="{{ $o->id }}" @selected($nilai('outlet_id')==$o->id)>{{ $o->name }}</option>@endforeach
         </select>
         <p class="hint" id="out-hint" style="display:none"></p>
       </div>
@@ -79,7 +94,7 @@
          pengisian otomatis jadi terasa tidak jalan. --}}
     <label for="nv">Nomor nota NEVIRA <span class="req">*</span></label>
     <div style="display:flex;gap:10px">
-      <input id="nv" name="nevira_transaction_number" value="{{ old('nevira_transaction_number') }}"
+      <input id="nv" name="nevira_transaction_number" value="{{ $nilai('nevira_transaction_number') }}"
              placeholder="Salin dari struk, mis. INV/118/1787749345365/1">
       <button type="button" class="ghost shrink" id="cek">Cek</button>
     </div>
@@ -90,14 +105,14 @@
     <select id="exempt" name="nota_exemption">
       <option value="">— complaint ini punya nomor nota —</option>
       @foreach(config('complaint.nota_exemptions') as $k=>$v)
-        <option value="{{ $k }}" @selected(old('nota_exemption')===$k)>{{ $v }}</option>
+        <option value="{{ $k }}" @selected($nilai('nota_exemption')===$k)>{{ $v }}</option>
       @endforeach
     </select>
 
     <label for="rn">Nama pelapor <span class="req">*</span></label>
-    <input id="rn" name="reporter_name" value="{{ old('reporter_name') }}" required>
+    <input id="rn" name="reporter_name" value="{{ $nilai('reporter_name') }}" required>
     <label for="rp">Nomor telepon</label>
-    <input id="rp" name="reporter_phone" value="{{ old('reporter_phone') }}" inputmode="tel" placeholder="08xxxxxxxxxx">
+    <input id="rp" name="reporter_phone" value="{{ $nilai('reporter_phone') }}" inputmode="tel" placeholder="08xxxxxxxxxx">
     <div id="pakai" style="display:none;margin-top:10px">
       <button type="button" class="ghost" id="btn-pakai" style="padding:9px 16px;min-height:40px;font-size:13.5px">
         Pakai data pelanggan dari nota
@@ -112,7 +127,7 @@
 </div>
 
 <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
-  <button>Simpan Complaint</button>
+  <button>{{ $gagal ? 'Coba Simpan Lagi' : 'Simpan Complaint' }}</button>
   <a href="{{ route('complaints.index') }}" class="btn ghost">Batal</a>
   <span class="muted small" style="flex:1;min-width:200px">Nomor tiket dibuat otomatis setelah disimpan.</span>
 </div>
@@ -150,7 +165,7 @@ function fillSub(keep){
   if (keep) sub.value = keep;
 }
 if (cat) cat.addEventListener('change', () => fillSub());
-fillSub(@json(old('sub_category')));
+fillSub(@json($nilai('sub_category')));
 
 /* ---------- Draft lokal: isian tidak hilang kalau koneksi outlet putus ---------- */
 // Kunci diumumkan layout dan terikat pengguna (User::draftKey). Perangkat

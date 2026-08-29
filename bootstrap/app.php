@@ -28,9 +28,14 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         /*
-        | Token CSRF basi tidak boleh berujung halaman "Page Expired" kosong.
-        | Yang terjadi di lapangan: petugas menekan Simpan, semua isiannya
-        | hilang, dan tidak ada keterangan apa pun tentang apa yang salah.
+        | Token CSRF basi tidak boleh berujung halaman "Page Expired" kosong,
+        | dan tidak boleh berujung halaman yang terlihat seperti simpan yang
+        | berhasil. Yang terjadi di lapangan: petugas menekan Simpan, kembali
+        | ke form dengan isian utuh, tanpa keterangan apa pun — dan pergi
+        | mengira complaintnya sudah masuk.
+        |
+        | Jawabannya dirender langsung, bukan dialihkan: pesan yang dititipkan
+        | ke flash session ikut mati bersama sesinya. Lihat SesiKedaluwarsa.
         |
         | Laravel sudah mengubah TokenMismatchException jadi HTTP 419 sebelum
         | render callback dipanggil, jadi ditangani di lapisan responsnya.
@@ -50,12 +55,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 ], 419);
             }
 
-            return redirect()->back()
-                ->withInput($request->except(['_token', 'password', 'password_confirmation']))
-                ->withErrors([
-                    'session' => 'Halaman ini sudah kedaluwarsa — biasanya karena dibuka terlalu lama '
-                        .'atau kamu masuk ulang di tab lain. Isianmu masih ada di bawah; tekan Simpan sekali lagi.',
-                ]);
+            return app(\App\Http\Responses\SesiKedaluwarsa::class)->render($request);
         });
         //
     })->create();

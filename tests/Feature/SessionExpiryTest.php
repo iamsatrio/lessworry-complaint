@@ -24,37 +24,109 @@ class SessionExpiryTest extends TestCase
         ]);
     }
 
-    public function test_penangan_token_basi_menjaga_isian_dan_memberi_pesan(): void
+    /**
+     * Permintaan yang sudah terpasang rutenya, seperti yang sampai ke
+     * penangan galat di produksi. Tanpa rute terpasang, penangan tidak bisa
+     * membedakan simpan complaint dari permintaan lain.
+     */
+    private function simpanYangKedaluwarsa(array $isian): \Illuminate\Http\Request
     {
-        $user = $this->cc();
+        $request = \Illuminate\Http\Request::create('/complaints', 'POST', $isian);
+        $request->setLaravelSession(app('session.store'));
+        $request->setRouteResolver(fn () => app('router')->getRoutes()->getByName('complaints.store'));
 
-        $this->actingAs($user)->from('/complaints/create');
+        return $request;
+    }
 
-        $request = \Illuminate\Http\Request::create('/complaints', 'POST', [
+    private function renderKedaluwarsa(\Illuminate\Http\Request $request)
+    {
+        return app(\Illuminate\Contracts\Debug\ExceptionHandler::class)
+            ->render($request, new TokenMismatchException('CSRF token mismatch.'));
+    }
+
+    private function isian(): array
+    {
+        return [
             '_token' => 'basi',
+            'channel' => 'kasir',
             'reporter_name' => 'Ibu Sari',
             'description' => 'Baju masih kotor di bagian kerah',
             'password' => 'rahasia',
-        ]);
-        $request->setLaravelSession(app('session.store'));
+        ];
+    }
 
-        $handler = app(\Illuminate\Contracts\Debug\ExceptionHandler::class);
-        $response = $handler->render($request, new TokenMismatchException('CSRF token mismatch.'));
+    /* ---------- Simpan yang gagal harus terlihat gagal ---------- */
 
-        $this->assertSame(302, $response->getStatusCode());
+    public function test_simpan_gagal_tidak_dialihkan_lewat_flash_sesi(): void
+    {
+        // Pesannya dulu dititipkan ke flash session lalu dialihkan. Yang rusak
+        // justru sesinya: rantai pengalihan menghabiskan flash itu sebelum
+        // sampai ke layar, dan petugas melihat form tanpa keterangan apa pun.
+        $user = $this->cc();
+        $this->actingAs($user);
 
-        $input = session()->getOldInput();
+        $response = $this->renderKedaluwarsa($this->simpanYangKedaluwarsa($this->isian()));
 
-        $this->assertSame('Ibu Sari', $input['reporter_name'] ?? null);
-        $this->assertSame('Baju masih kotor di bagian kerah', $input['description'] ?? null);
+        $this->assertSame(419, $response->getStatusCode(),
+            'Kegagalan simpan masih dijawab dengan pengalihan — pesannya bisa hilang di jalan.');
+        $this->assertFalse($response->isRedirect());
+    }
 
-        // Rahasia tidak boleh ikut dikembalikan ke form.
-        $this->assertArrayNotHasKey('password', $input);
-        $this->assertArrayNotHasKey('_token', $input);
+    public function test_simpan_gagal_dirender_dengan_peringatan_dan_isian_utuh(): void
+    {
+        $user = $this->cc();
+        $this->actingAs($user);
 
-        $errors = session('errors');
-        $this->assertNotNull($errors);
-        $this->assertStringContainsString('kedaluwarsa', $errors->first('session'));
+        $html = $this->renderKedaluwarsa($this->simpanYangKedaluwarsa($this->isian()))->getContent();
+
+        $this->assertStringContainsString('BELUM tersimpan', $html,
+            'Tidak ada keterangan bahwa complaint gagal disimpan.');
+
+        // Form yang gagal disimpan tidak boleh terlihat seperti form kosong
+        // siap pakai: tombolnya menyebutkan bahwa ini percobaan ulang.
+        $this->assertStringContainsString('Coba Simpan Lagi', $html);
+
+        // Isian dikembalikan langsung ke markup, bukan lewat sesi.
+        $this->assertStringContainsString('Baju masih kotor di bagian kerah', $html);
+        $this->assertStringContainsString('Ibu Sari', $html);
+
+        $this->assertStringNotContainsString('rahasia', $html);
+        $this->assertStringNotContainsString('value="basi"', $html);
+    }
+
+    public function test_sesi_yang_sudah_mati_tetap_memberi_tahu_complaint_tidak_masuk(): void
+    {
+        // Sesi habis: petugasnya tidak dikenali lagi, jadi formnya tidak bisa
+        // dirender ulang. Yang tidak boleh hilang adalah kepastian bahwa
+        // complaint itu tidak masuk — dulu di sini halamannya lompat ke
+        // /login tanpa pesan apa pun.
+        $response = $this->renderKedaluwarsa($this->simpanYangKedaluwarsa($this->isian()));
+
+        $this->assertSame(419, $response->getStatusCode());
+        $this->assertFalse($response->isRedirect());
+
+        $html = $response->getContent();
+
+        $this->assertStringContainsString('BELUM tersimpan', $html);
+        $this->assertStringContainsString(route('login'), $html);
+    }
+
+    public function test_halaman_sesi_mati_tidak_menampilkan_data_pelanggan(): void
+    {
+        // Petugasnya sudah tidak dikenali; halaman ini terbuka di perangkat
+        // outlet yang dipakai bergantian. Isian pelanggan tetap aman di draft
+        // perangkat — yang terkunci per pengguna — bukan tercetak di layar.
+        $html = $this->renderKedaluwarsa($this->simpanYangKedaluwarsa($this->isian()))->getContent();
+
+        $this->assertStringNotContainsString('Ibu Sari', $html);
+        $this->assertStringNotContainsString('Baju masih kotor di bagian kerah', $html);
+    }
+
+    public function test_halaman_sesi_mati_tidak_boleh_disimpan_browser(): void
+    {
+        $response = $this->renderKedaluwarsa($this->simpanYangKedaluwarsa($this->isian()));
+
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
     }
 
     public function test_permintaan_json_dapat_pesan_bukan_halaman_html(): void
