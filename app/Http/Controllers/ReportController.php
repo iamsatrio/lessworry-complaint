@@ -34,8 +34,20 @@ class ReportController extends Controller
             'resolved'    => $resolved->count(),
             'overdue'     => $complaints->filter->isOverdue()->count(),
             'compensation' => $complaints->sum('compensation_amount'),
+            // Tiket Close tetap bisa dipisah: yang benar-benar selesai dan
+            // yang ditolak. Kemampuannya tidak hilang bersama statusnya —
+            // hanya pindah ke close_reason. (API-18 #6)
+            'closedDone'   => $complaints->where('status', 'close')->where('close_reason', 'selesai')->count(),
+            'closedReject' => $complaints->where('status', 'close')->where('close_reason', 'ditolak')->count(),
             'avgMinutes'  => $resolved->isEmpty() ? null : (int) round($resolved->avg(fn ($c) => $c->resolutionMinutes())),
             'byCategory'  => $complaints->groupBy('category')->map->count()->sortDesc(),
+            'byBobot'     => $complaints->groupBy('bobot')->map->count()->sortDesc(),
+            // Layanan dan tindak lanjut ada supaya bisa DIKELOMPOKKAN, bukan
+            // sekadar tersimpan: itu yang membuat "layanan mana yang paling
+            // sering bermasalah" bisa dijawab tanpa menghitung tangan.
+            'byLayanan'   => $complaints->groupBy(fn ($c) => $c->layanan ?: 'tidak_dicatat')->map->count()->sortDesc(),
+            'byTindakLanjut' => $complaints->whereNotNull('tindak_lanjut')
+                ->groupBy('tindak_lanjut')->map->count()->sortDesc(),
             'byChannel'   => $complaints->groupBy('channel')->map->count()->sortDesc(),
             'byOutlet'    => $complaints->groupBy(fn ($c) => $c->outlet?->name ?? 'Tanpa outlet')->map->count()->sortDesc(),
             // Rekap per karyawan hanya untuk yang berwenang melihatnya.
@@ -86,7 +98,7 @@ class ReportController extends Controller
                 // Nomor nota, bukan id internal NEVIRA. CSV rekap diteruskan
                 // lewat WhatsApp dan email; pengenal internal sistem lain
                 // tidak boleh ikut keluar. (API-8 T2)
-                'Nomor Nota', 'Kategori', 'Prioritas', 'Status',
+                'Nomor Nota', 'Kategori', 'Bobot', 'Layanan', 'Status', 'Alasan Penutupan', 'Tindak Lanjut',
                 'Penanggung Jawab', 'Selesai', 'Menit Penyelesaian', 'Kompensasi', 'Lewat SLA',
                 ...($showStaff ? ['Karyawan Penanggung Jawab', 'NIP', 'Peran', 'Alasan'] : []),
             ]);
@@ -101,8 +113,11 @@ class ReportController extends Controller
                     $c->reporter_phone,
                     $c->nevira_transaction_number,
                     $c->categoryLabel(),
-                    $c->priority,
+                    $c->bobotLabel(),
+                    $c->layananLabel(),
                     $c->statusLabel(),
+                    $c->closeReasonLabel(),
+                    $c->tindakLanjutLabel(),
                     $c->assignee?->name,
                     $c->resolved_at?->format('Y-m-d H:i'),
                     $c->resolutionMinutes(),

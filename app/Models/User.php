@@ -75,10 +75,28 @@ class User extends Authenticatable
         return in_array($this->role, ['kasir', 'customer_care', 'supervisor'], true);
     }
 
-    /** Hanya CC dan supervisor yang boleh menutup complaint. */
-    public function canResolve(): bool
+    /**
+     * Siapa yang boleh menutup complaint. (API-25, keputusan API-18 nomor 1)
+     *
+     * Customer Care dan supervisor: selalu. Kasir: hanya complaint berbobot
+     * Ringan — itu 58% kasus, dan menahannya di antrean Customer Care hanya
+     * memindahkan pekerjaan yang sudah selesai di outlet.
+     *
+     * Batas kompensasi TIDAK diperiksa di sini. Itu batas yang berdiri
+     * sendiri dan ditegakkan terpisah di ComplaintController: complaint
+     * Ringan berkompensasi Rp 200.000 tetap tidak boleh ditutup kasir.
+     */
+    public function canResolve(?Complaint $complaint = null): bool
     {
-        return in_array($this->role, ['customer_care', 'supervisor'], true);
+        if (in_array($this->role, ['customer_care', 'supervisor'], true)) {
+            return true;
+        }
+
+        if (! $this->isKasir()) {
+            return false;
+        }
+
+        return $complaint !== null && $complaint->bobot === 'ringan';
     }
 
     /**

@@ -12,43 +12,113 @@ return [
     ],
 
     /*
-    | Kategori baku. Nilai awal — final ditetapkan di issue API-6.
+    | Kategori — taksonomi yang benar-benar dipakai tim. (API-25, keputusan
+    | API-18 nomor 5)
+    |
+    | Urutannya mengikuti porsi kemunculan pada 1.032 baris data nyata, supaya
+    | pilihan yang paling sering dipakai berada paling dekat dengan jempol.
+    | `Salah Tagih` dan `Sikap Petugas` dibuang: nol kemunculan.
+    |
+    | Sub-kategori yang dulu menumpang di bawah `hasil_cuci` sudah naik jadi
+    | kategori sendiri (Kurang Bersih, Berbau) — tidak boleh muncul dua kali.
     */
     'categories' => [
-        'hasil_cuci'    => ['label' => 'Hasil Cuci', 'sub' => ['Masih kotor', 'Bau', 'Luntur', 'Rusak/sobek', 'Menyusut']],
-        'barang_hilang' => ['label' => 'Barang Hilang', 'sub' => ['Item kurang', 'Tertukar pelanggan lain']],
-        'keterlambatan' => ['label' => 'Keterlambatan', 'sub' => ['Telat selesai', 'Telat antar', 'Telat jemput']],
-        'salah_tagih'   => ['label' => 'Salah Tagih', 'sub' => ['Harga tidak sesuai', 'Berat tidak sesuai', 'Promo tidak masuk']],
-        'sikap_petugas' => ['label' => 'Sikap Petugas', 'sub' => ['Pelayanan kasir', 'Pelayanan kurir']],
-        'lainnya'       => ['label' => 'Lainnya', 'sub' => []],
-    ],
-
-    'priorities' => [
-        'urgent' => 'Mendesak',
-        'high'   => 'Tinggi',
-        'medium' => 'Sedang',
-        'low'    => 'Rendah',
+        'barang_rusak'    => ['label' => 'Barang Rusak',    'sub' => ['Luntur', 'Rusak/sobek', 'Menyusut']],
+        'kurang_bersih'   => ['label' => 'Kurang Bersih',   'sub' => []],
+        'barang_hilang'   => ['label' => 'Barang Hilang',   'sub' => ['Item kurang']],
+        'berbau'          => ['label' => 'Berbau',          'sub' => []],
+        'kurang_rapih'    => ['label' => 'Kurang Rapih',    'sub' => []],
+        'barang_tertukar' => ['label' => 'Barang Tertukar', 'sub' => []],
+        'terlambat'       => ['label' => 'Terlambat',       'sub' => ['Telat selesai', 'Telat antar', 'Telat jemput']],
+        'lainnya'         => ['label' => 'Lainnya',         'sub' => []],
     ],
 
     /*
-    | SLA dalam menit. Nilai awal — final ditetapkan di API-6.
+    | Bobot keluhan — tiga tingkat, sama dengan dropdown yang sudah dipakai
+    | tim (Ringan 58% · Sedang 12% · Berat 30%).
+    |
+    | Ini MENGGANTIKAN `priority` empat tingkat, bukan menambahinya. Dua sumbu
+    | penilaian berarti dua kasir menilai keluhan yang sama secara berbeda.
+    */
+    'bobot' => [
+        'ringan' => 'Ringan',
+        'sedang' => 'Sedang',
+        'berat'  => 'Berat',
+    ],
+
+    /*
+    | SLA. Respon pertama satu angka untuk semua bobot — janji 1x24 jam itu
+    | sudah beredar ke pelanggan. Penyelesaian dihitung dalam HARI, bukan jam:
+    | penyelesaian nyata tim diukur dalam hari, dan target berjam-jam membuat
+    | seluruh papan merah di hari pertama lalu berhenti dibaca. (API-18 #3)
     */
     'sla' => [
-        'urgent' => ['response' => 30,   'resolution' => 240],
-        'high'   => ['response' => 60,   'resolution' => 480],
-        'medium' => ['response' => 240,  'resolution' => 1440],
-        'low'    => ['response' => 480,  'resolution' => 2880],
+        'response_hours'  => 24,
+        'resolution_days' => [
+            'ringan' => 2,
+            'sedang' => 3,
+            'berat'  => 5,
+        ],
     ],
 
+    /*
+    | Status yang dilihat pengguna tinggal tiga — kosakata yang sudah dipakai
+    | tim. "Menunggu Pelanggan" dan "Ditolak" turun jadi penanda di bawah ini,
+    | bukan status tersendiri. (API-18 #6)
+    */
     'statuses' => [
-        'baru'               => 'Baru',
-        'ditangani'          => 'Sedang Ditangani',
-        'menunggu_pelanggan' => 'Menunggu Pelanggan',
-        'selesai'            => 'Selesai',
-        'ditolak'            => 'Ditolak',
+        'open'     => 'Open',
+        'handling' => 'Handling',
+        'close'    => 'Close',
     ],
 
-    'open_statuses' => ['baru', 'ditangani', 'menunggu_pelanggan'],
+    'open_statuses' => ['open', 'handling'],
+
+    /*
+    | Alasan penutupan. Tiketnya tetap Close; laporan tetap bisa memisahkan
+    | yang selesai dari yang tidak berdasar.
+    */
+    'close_reasons' => [
+        'selesai' => 'Selesai',
+        'ditolak' => 'Ditolak',
+    ],
+
+    /*
+    | Alasan jeda. Tiket tetap berstatus Handling, tapi hitungan SLA berhenti
+    | selama jeda dan tenggatnya mundur sebanyak lama jeda saat dilanjutkan.
+    */
+    'pause_reasons' => [
+        'menunggu_pelanggan' => 'Menunggu Pelanggan',
+    ],
+
+    /*
+    | Layanan yang dikeluhkan. Sudah dipakai tim; Kiloan 61%. Wajib diisi saat
+    | intake supaya laporan bisa menunjukkan layanan mana yang paling sering
+    | bermasalah.
+    */
+    'layanan' => [
+        'kiloan'           => 'Kiloan',
+        'satuan_cloth'     => 'Satuan Cloth',
+        'satuan_bedding'   => 'Satuan Bedding',
+        'satuan_non_cloth' => 'Satuan Non Cloth',
+    ],
+
+    /*
+    | Tindak lanjut penyelesaian — dropdown, bukan teks bebas. Teks bebas
+    | membuat "mana yang paling lama" harus dihitung tangan. Diisi saat
+    | penyelesaian, bukan saat intake.
+    */
+    'tindak_lanjut' => [
+        'proses_ulang'   => 'Proses Ulang',
+        'compensate'     => 'Compensate',
+        'terkonfirmasi'  => 'Terkonfirmasi',
+        'voucher'        => 'Voucher',
+        'delivery_ulang' => 'Delivery Ulang',
+        'pickup_ulang'   => 'Pickup Ulang',
+        'tracking'       => 'Tracking',
+        'repaint'        => 'Repaint',
+        'repair'         => 'Repair',
+    ],
 
     /*
     | Nomor nota NEVIRA wajib diisi, dengan dua pengecualian yang sah.
@@ -65,7 +135,7 @@ return [
     | Dipakai untuk menyarankan pengecualian, bukan memberlakukannya diam-diam.
     */
     'no_nota_yet' => [
-        'keterlambatan' => ['Telat jemput'],
+        'terlambat' => ['Telat jemput'],
     ],
 
     // Transaksi lebih tua dari ini dianggap boleh tanpa nota.
@@ -91,7 +161,8 @@ return [
     ],
 
     /*
-    | Batas wewenang kompensasi per peran, dalam rupiah. Final di API-6.
+    | Batas wewenang kompensasi per peran, dalam rupiah. Berlaku saat mengubah
+    | angkanya, DAN saat menutup complaint yang memegang angka itu. (API-25)
     */
     'compensation_limit' => [
         'kasir'          => 50000,

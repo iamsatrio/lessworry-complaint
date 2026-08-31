@@ -33,13 +33,13 @@ class DuplicateReceiptTest extends TestCase
     private function complaint(?string $nota = self::NOTA, ?Outlet $outlet = null): Complaint
     {
         $complaint = new Complaint([
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
             'nevira_transaction_number' => $nota,
             'outlet_id' => $outlet?->id,
         ]);
         $complaint->ticket_number = Complaint::nextTicketNumber();
-        $complaint->status = 'baru';
+        $complaint->status = 'open';
         $complaint->applySla();
         $complaint->save();
 
@@ -52,8 +52,8 @@ class DuplicateReceiptTest extends TestCase
         $pertama = $this->complaint();
 
         $this->actingAs($this->userAs('customer_care'))->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor Lain', 'category' => 'keterlambatan',
-            'priority' => 'medium', 'description' => 'Keluhan berbeda untuk nota yang sama',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor Lain', 'category' => 'terlambat',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'Keluhan berbeda untuk nota yang sama',
             'nevira_transaction_number' => self::NOTA,
         ])->assertRedirect();
 
@@ -68,8 +68,8 @@ class DuplicateReceiptTest extends TestCase
         $pertama = $this->complaint();
 
         $this->actingAs($this->userAs('customer_care'))->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor Lain', 'category' => 'keterlambatan',
-            'priority' => 'medium', 'description' => 'Keluhan berbeda',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor Lain', 'category' => 'terlambat',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'Keluhan berbeda',
             'nevira_transaction_number' => self::NOTA,
         ])->assertSessionHas('warning', fn ($pesan) => str_contains($pesan, $pertama->ticket_number));
     }

@@ -50,7 +50,7 @@ class ComplaintController extends Controller
                 ->orderBy('due_resolution_at');
         }
 
-        foreach (['category', 'priority', 'channel', 'outlet_id'] as $filter) {
+        foreach (['category', 'bobot', 'channel', 'outlet_id', 'layanan'] as $filter) {
             if ($request->filled($filter)) {
                 $query->where($filter, $request->input($filter));
             }
@@ -98,7 +98,10 @@ class ComplaintController extends Controller
             'outlet_id'             => ['nullable', 'exists:outlets,id'],
             'category'              => ['required', Rule::in(array_keys(config('complaint.categories')))],
             'sub_category'          => ['nullable', 'string', 'max:120'],
-            'priority'              => ['required', Rule::in(array_keys(config('complaint.priorities')))],
+            'bobot'                 => ['required', Rule::in(array_keys(config('complaint.bobot')))],
+            // Layanan wajib: tanpanya laporan tidak bisa menunjukkan layanan
+            // mana yang paling sering bermasalah, dan itu gunanya kolom ini.
+            'layanan'               => ['required', Rule::in(array_keys(config('complaint.layanan')))],
             // Batas panjang: tanpa ini 2 juta karakter tersimpan utuh dan
             // ikut termuat di papan kerja maupun halaman detail. (API-8 T8)
             'description'           => ['required', 'string', 'max:5000'],
@@ -139,7 +142,7 @@ class ComplaintController extends Controller
             return DB::transaction(function () use ($data, $user, $berkas) {
                 $complaint = new Complaint($data);
                 $complaint->ticket_number = Complaint::nextTicketNumber();
-                $complaint->status = 'baru';
+                $complaint->status = 'open';
                 $complaint->created_by = $user->id;
                 $complaint->created_at = now();
                 $complaint->applySla();
@@ -149,7 +152,7 @@ class ComplaintController extends Controller
                     'complaint_id' => $complaint->id,
                     'user_id'      => $user->id,
                     'type'         => 'created',
-                    'to_status'    => 'baru',
+                    'to_status'    => 'open',
                     'note'         => 'Complaint dibuat lewat '.$complaint->channelLabel(),
                 ]);
 
@@ -282,6 +285,16 @@ class ComplaintController extends Controller
 
         $data = $request->validate([
             'status'              => ['required', Rule::in(array_keys(config('complaint.statuses')))],
+            // Tiket Close harus menyebut alasannya. Tanpa ini laporan tidak
+            // bisa lagi memisahkan yang selesai dari yang ditolak — kemampuan
+            // yang dulu dipegang status "Ditolak". (API-18 #6)
+            'close_reason'        => [
+                Rule::requiredIf(fn () => $request->input('status') === 'close'),
+                'nullable',
+                Rule::in(array_keys(config('complaint.close_reasons'))),
+            ],
+            'pause_reason'        => ['nullable', Rule::in(array_keys(config('complaint.pause_reasons')))],
+            'tindak_lanjut'       => ['nullable', Rule::in(array_keys(config('complaint.tindak_lanjut')))],
             // Versi yang dilihat petugas saat halaman dibuka. Tanpa ini,
             // penyimpanan dari halaman basi menimpa keputusan orang lain
             // tanpa peringatan ke siapa pun. (API-8 T6)
@@ -292,7 +305,8 @@ class ComplaintController extends Controller
             'compensation_amount' => ['nullable', 'integer', 'min:0'],
         ], [
             'lock_version.required' => 'Muat ulang halaman complaint ini sebelum menyimpan.',
-        ], ['lock_version' => 'penanda versi']);
+            'close_reason.required' => 'Sebutkan complaint ini ditutup karena selesai atau ditolak.',
+        ], ['lock_version' => 'penanda versi', 'close_reason' => 'alasan penutupan']);
 
         if ((int) $data['lock_version'] !== (int) $complaint->lock_version) {
             // withInput() penting: petugas sudah mengetik resolusi panjang,
@@ -305,11 +319,29 @@ class ComplaintController extends Controller
             ]);
         }
 
-        $closing = in_array($data['status'], ['selesai', 'ditolak'], true);
+        $closing = $data['status'] === 'close';
 
-        if ($closing && ! $user->canResolve()) {
-            return back()->withErrors(['status' => 'Peranmu tidak berwenang menutup complaint.']);
+        if ($closing && ! $user->canResolve($complaint)) {
+            return back()->withInput()->withErrors(['status' => $user->isKasir()
+                ? 'Kasir hanya boleh menutup complaint berbobot Ringan. Complaint ini '
+                    .$complaint->bobotLabel().' — teruskan ke Customer Care.'
+                : 'Peranmu tidak berwenang menutup complaint.']);
         }
+
+        // Jeda hanya masuk akal pada tiket yang sedang ditangani. Tiket Open
+        // yang belum dipegang siapa pun tidak sedang menunggu pelanggan.
+        if ($request->filled('pause_reason') && $data['status'] !== 'handling') {
+            return back()->withInput()->withErrors([
+                'pause_reason' => 'Jeda hanya berlaku untuk complaint yang sedang ditangani (Handling).',
+            ]);
+        }
+
+        // Form yang tidak mengirim kolom ini sama sekali tidak sedang
+        // mengubah jedanya. Yang memindahkan tiket keluar dari Handling
+        // selalu melanjutkannya kembali — termasuk saat menutup.
+        $mintaJeda = $data['status'] === 'handling'
+            ? ($request->has('pause_reason') ? ($data['pause_reason'] ?? null) : $complaint->pause_reason)
+            : null;
 
         // Batas wewenang kompensasi berlaku dua arah. Batas atas sudah
         // dijaga; yang tidak adalah penurunan — kasir bisa memangkas angka
@@ -337,13 +369,43 @@ class ComplaintController extends Controller
             ]);
         }
 
+        // Batas kompensasi berlaku juga saat MENUTUP, bukan hanya saat
+        // mengubah angkanya. Tanpa pemeriksaan ini kasir bisa menutup
+        // complaint Ringan berkompensasi Rp 200.000 hanya karena angkanya
+        // sudah ada di sana sebelum ia membuka halaman. (API-25 #5)
+        if ($closing && $compensation > $batas) {
+            return back()->withInput()->withErrors([
+                'compensation_amount' => 'Complaint ini berkompensasi Rp '.number_format($compensation, 0, ',', '.')
+                    .', di atas batas wewenang '.$user->roleLabel()
+                    .' (Rp '.number_format($batas, 0, ',', '.').'). Penutupannya naik ke yang berwenang di angka itu.',
+            ]);
+        }
+
         $from = $complaint->status;
 
-        DB::transaction(function () use ($complaint, $data, $user, $from, $closing, $compensation, $sekarang) {
+        DB::transaction(function () use ($request, $complaint, $data, $user, $from, $closing, $compensation, $sekarang, $mintaJeda) {
             $complaint->status = $data['status'];
             $complaint->lock_version = (int) $complaint->lock_version + 1;
             $complaint->resolution = $data['resolution'] ?? $complaint->resolution;
             $complaint->root_cause = $data['root_cause'] ?? $complaint->root_cause;
+            $complaint->close_reason = $closing ? $data['close_reason'] : null;
+
+            if ($request->has('tindak_lanjut')) {
+                $complaint->tindak_lanjut = $data['tindak_lanjut'] ?? null;
+            }
+
+            // Jeda dan lanjut. Menutup complaint selalu mengakhiri jeda —
+            // tiket yang sudah Close tidak sedang menunggu siapa pun.
+            $jeda = null;
+
+            if ($mintaJeda && ! $closing) {
+                $sudahDijeda = $complaint->paused_at !== null;
+                $complaint->pause($mintaJeda);
+                $jeda = $sudahDijeda ? null : 'mulai';
+            } elseif ($complaint->paused_at !== null) {
+                $menit = $complaint->resume();
+                $jeda = $menit > 0 ? 'lanjut:'.$menit : 'lanjut:0';
+            }
 
             // Nilai yang sama artinya tidak ada perubahan; 0 yang dikirim
             // sengaja memang mengosongkan kompensasi.
@@ -372,6 +434,25 @@ class ComplaintController extends Controller
                 'note'         => $data['note'] ?? null,
             ]);
 
+            // Jeda memundurkan tenggat, jadi ia harus punya jejaknya sendiri.
+            if ($jeda === 'mulai') {
+                ComplaintActivity::create([
+                    'complaint_id' => $complaint->id,
+                    'user_id'      => $user->id,
+                    'type'         => 'note',
+                    'note'         => 'SLA dijeda: '.$complaint->pauseReasonLabel().'.',
+                ]);
+            } elseif ($jeda !== null && str_starts_with($jeda, 'lanjut:')) {
+                $menit = (int) substr($jeda, 7);
+                ComplaintActivity::create([
+                    'complaint_id' => $complaint->id,
+                    'user_id'      => $user->id,
+                    'type'         => 'note',
+                    'note'         => 'SLA dilanjutkan setelah dijeda '.Complaint::humanMinutes($menit)
+                        .'. Tenggat mundur sebanyak itu.',
+                ]);
+            }
+
             // Uang yang berpindah harus punya jejak sendiri. Riwayat dulu
             // hanya mencatat perubahan status, jadi nilai kompensasi bisa
             // bergerak tanpa siapa pun bisa menelusurinya. (API-14 #10)
@@ -386,7 +467,7 @@ class ComplaintController extends Controller
             }
         });
 
-        return back()->with('status', 'Status diperbarui: '.$complaint->statusLabel());
+        return back()->with('status', 'Status diperbarui: '.$complaint->fresh()->statusDisplay());
     }
 
     /**

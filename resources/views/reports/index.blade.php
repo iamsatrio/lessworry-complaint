@@ -30,26 +30,47 @@
 
 <div class="grid g4" style="margin-bottom:18px">
   <div class="stat"><div class="n">{{ $total }}</div><div class="l">Total Complaint</div></div>
-  <div class="stat ok"><div class="n">{{ $resolved }}</div><div class="l">Selesai</div></div>
+  <div class="stat ok"><div class="n">{{ $closedDone }}</div><div class="l">Ditutup Selesai</div></div>
   <div class="stat {{ $overdue > 0 ? 'danger' : '' }}"><div class="n">{{ $overdue }}</div><div class="l">Lewat Tenggat</div></div>
   <div class="stat accent"><div class="n">Rp {{ number_format($compensation,0,',','.') }}</div><div class="l">Kompensasi Dibayar</div></div>
+</div>
+
+{{-- "Ditolak" bukan lagi status tersendiri, tapi kemampuan memisahkannya
+     tidak boleh hilang — hanya pindah ke alasan penutupan. (API-18 #6) --}}
+<div class="grid g4" style="margin-bottom:18px">
+  <div class="stat"><div class="n">{{ $closedReject }}</div><div class="l">Ditutup Ditolak</div></div>
+  <div class="stat"><div class="n">{{ $total - $closedDone - $closedReject }}</div><div class="l">Masih Terbuka</div></div>
 </div>
 
 @if($avgMinutes !== null)
 <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
   <span class="muted">Rata-rata waktu penyelesaian</span>
-  <b class="display" style="font-size:20px;color:var(--teal-deep)">{{ intdiv($avgMinutes,60) }} jam {{ $avgMinutes%60 }} menit</b>
+  <b class="display" style="font-size:20px;color:var(--teal-deep)">{{ \App\Models\Complaint::humanMinutes($avgMinutes) }}</b>
 </div>
 @endif
 
 <div class="grid g2">
-  @foreach([['Kategori keluhan',$byCategory,'complaint.categories'],['Kanal masuk',$byChannel,'complaint.channels'],['Per outlet',$byOutlet,null]] as [$title,$data,$cfg])
+  @foreach([
+    ['Kategori keluhan',$byCategory,'complaint.categories'],
+    ['Bobot',$byBobot,'complaint.bobot'],
+    ['Layanan yang dikeluhkan',$byLayanan,'complaint.layanan'],
+    ['Tindak lanjut',$byTindakLanjut,'complaint.tindak_lanjut'],
+    ['Kanal masuk',$byChannel,'complaint.channels'],
+    ['Per outlet',$byOutlet,null],
+  ] as [$title,$data,$cfg])
   <div class="card">
     <div class="eyebrow">{{ $title }}</div>
     @forelse($data as $key => $count)
+      @php
+        $label = $key === 'tidak_dicatat'
+          ? 'Tidak dicatat'
+          : ($cfg
+              ? ($cfg === 'complaint.categories' ? config($cfg.'.'.$key.'.label', $key) : config($cfg.'.'.$key, $key))
+              : $key);
+      @endphp
       <div class="meter-row">
         <div class="lab">
-          <span>{{ $cfg ? ($cfg==='complaint.categories' ? config($cfg.'.'.$key.'.label',$key) : config($cfg.'.'.$key,$key)) : $key }}</span>
+          <span>{{ $label }}</span>
           <b>{{ $count }}</b>
         </div>
         <div class="bar"><i style="width:{{ $data->max() ? ($count/$data->max()*100) : 0 }}%"></i></div>
@@ -95,7 +116,7 @@
     @forelse($repeat as $phone => $info)
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)">
         <span>{{ $info['name'] }} <span class="muted small" style="font-family:var(--mono)">{{ $phone }}</span></span>
-        <b class="badge p-high">{{ $info['count'] }} kali</b>
+        <b class="badge w-sedang">{{ $info['count'] }} kali</b>
       </div>
     @empty
       <p class="muted" style="margin:0">Tidak ada pelanggan yang komplain lebih dari sekali pada periode ini.</p>

@@ -87,8 +87,8 @@ class PageScriptTest extends TestCase
         $cc = $this->userAs('customer_care');
 
         $complaint = new Complaint([
-            'channel' => 'wa_cc', 'reporter_name' => 'P', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'status' => 'baru', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'P', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'status' => 'open', 'description' => 'x',
         ]);
         $complaint->ticket_number = Complaint::nextTicketNumber();
         $complaint->created_at = now();

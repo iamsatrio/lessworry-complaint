@@ -32,11 +32,11 @@ class ConcurrentEditTest extends TestCase
     private function complaint(): Complaint
     {
         $complaint = new Complaint([
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
         ]);
         $complaint->ticket_number = Complaint::nextTicketNumber();
-        $complaint->status = 'ditangani';
+        $complaint->status = 'handling';
         $complaint->applySla();
         $complaint->save();
 
@@ -51,20 +51,20 @@ class ConcurrentEditTest extends TestCase
         // CC menyimpan lebih dulu.
         $this->actingAs($this->userAs('customer_care'))
             ->post('/complaints/'.$complaint->id.'/status', [
-                'status' => 'selesai', 'lock_version' => $versiDibuka,
+                'status' => 'close', 'close_reason' => 'selesai', 'lock_version' => $versiDibuka,
                 'resolution' => 'Diganti baru, kompensasi diberikan',
             ])->assertSessionHasNoErrors();
 
         // Supervisor menyimpan dari halaman yang dibuka sebelum itu.
         $this->actingAs($this->userAs('supervisor'))
             ->post('/complaints/'.$complaint->id.'/status', [
-                'status' => 'ditolak', 'lock_version' => $versiDibuka,
+                'status' => 'close', 'close_reason' => 'ditolak', 'lock_version' => $versiDibuka,
                 'resolution' => 'Klaim tidak terbukti',
             ])->assertSessionHasErrors('lock_version');
 
         $complaint->refresh();
 
-        $this->assertSame('selesai', $complaint->status);
+        $this->assertSame('selesai', $complaint->close_reason);
         $this->assertSame('Diganti baru, kompensasi diberikan', $complaint->resolution,
             'resolusi yang ditulis lebih dulu tertimpa tanpa peringatan');
     }
@@ -75,7 +75,7 @@ class ConcurrentEditTest extends TestCase
 
         $this->actingAs($this->userAs('customer_care'))
             ->post('/complaints/'.$complaint->id.'/status', [
-                'status' => 'selesai', 'lock_version' => $complaint->lock_version,
+                'status' => 'close', 'close_reason' => 'selesai', 'lock_version' => $complaint->lock_version,
                 'resolution' => 'Diganti baru',
             ])->assertSessionHasNoErrors();
 
@@ -84,13 +84,13 @@ class ConcurrentEditTest extends TestCase
         // Supervisor memuat ulang dulu, baru menyimpan.
         $this->actingAs($this->userAs('supervisor'))
             ->post('/complaints/'.$complaint->id.'/status', [
-                'status' => 'ditolak', 'lock_version' => $complaint->lock_version,
+                'status' => 'close', 'close_reason' => 'ditolak', 'lock_version' => $complaint->lock_version,
                 'resolution' => 'Ditinjau ulang: klaim tidak terbukti',
             ])->assertSessionHasNoErrors();
 
         $complaint->refresh();
 
-        $this->assertSame('ditolak', $complaint->status);
+        $this->assertSame('ditolak', $complaint->close_reason);
         $this->assertSame('Ditinjau ulang: klaim tidak terbukti', $complaint->resolution);
     }
 
@@ -101,7 +101,7 @@ class ConcurrentEditTest extends TestCase
 
         $this->actingAs($this->userAs('customer_care'))
             ->post('/complaints/'.$complaint->id.'/status', [
-                'status' => 'menunggu_pelanggan', 'lock_version' => $awal,
+                'status' => 'handling', 'pause_reason' => 'menunggu_pelanggan', 'lock_version' => $awal,
             ]);
 
         $this->assertSame($awal + 1, $complaint->fresh()->lock_version);
@@ -123,12 +123,12 @@ class ConcurrentEditTest extends TestCase
 
         $this->actingAs($this->userAs('customer_care'))
             ->post('/complaints/'.$complaint->id.'/status', [
-                'status' => 'selesai', 'lock_version' => $versiDibuka,
+                'status' => 'close', 'close_reason' => 'selesai', 'lock_version' => $versiDibuka,
             ]);
 
         $this->actingAs($this->userAs('supervisor'))
             ->post('/complaints/'.$complaint->id.'/status', [
-                'status' => 'ditolak', 'lock_version' => $versiDibuka,
+                'status' => 'close', 'close_reason' => 'ditolak', 'lock_version' => $versiDibuka,
                 'resolution' => 'Ketikan panjang yang tidak boleh hilang',
             ])->assertSessionHasInput('resolution', 'Ketikan panjang yang tidak boleh hilang');
     }

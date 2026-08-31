@@ -19,7 +19,7 @@ class Complaint extends Model
     protected $fillable = [
         'channel', 'reporter_name', 'reporter_phone',
         'nevira_transaction_number', 'nota_exemption',
-        'outlet_id', 'category', 'sub_category', 'priority',
+        'outlet_id', 'category', 'sub_category', 'bobot', 'layanan',
         'description', 'assigned_to', 'forwarded_division',
     ];
 
@@ -40,6 +40,7 @@ class Complaint extends Model
             'due_response_at'  => 'datetime',
             'due_resolution_at' => 'datetime',
             'first_response_at' => 'datetime',
+            'paused_at'        => 'datetime',
             'resolved_at'      => 'datetime',
             'lock_version'     => 'integer',
         ];
@@ -281,13 +282,19 @@ class Complaint extends Model
 
     /* ---------- SLA ---------- */
 
+    /**
+     * Tenggat dihitung dari bobot: respon pertama satu angka untuk semua
+     * (janji 1x24 jam yang sudah beredar ke pelanggan), penyelesaian dalam
+     * HARI menurut bobot. (API-18 #3)
+     */
     public function applySla(): void
     {
-        $sla = config('complaint.sla.'.$this->priority) ?? config('complaint.sla.medium');
         $base = $this->created_at ?? now();
+        $hari = config('complaint.sla.resolution_days.'.$this->bobot)
+            ?? config('complaint.sla.resolution_days.sedang');
 
-        $this->due_response_at = $base->copy()->addMinutes($sla['response']);
-        $this->due_resolution_at = $base->copy()->addMinutes($sla['resolution']);
+        $this->due_response_at = $base->copy()->addHours((int) config('complaint.sla.response_hours'));
+        $this->due_resolution_at = $base->copy()->addDays((int) $hari);
     }
 
     public function isOpen(): bool
@@ -295,9 +302,70 @@ class Complaint extends Model
         return in_array($this->status, config('complaint.open_statuses'), true);
     }
 
+    /**
+     * Tiket yang dijeda tetap Handling di papan, tapi jam SLA-nya berhenti.
+     * Jedanya penanda, bukan status. (API-18 #6)
+     */
+    public function isPaused(): bool
+    {
+        return $this->paused_at !== null && $this->isOpen();
+    }
+
+    /** Lama jeda yang sedang berjalan, dalam menit. */
+    public function pauseMinutes(): int
+    {
+        return $this->paused_at === null
+            ? 0
+            : (int) round($this->paused_at->diffInMinutes(now()));
+    }
+
+    /**
+     * Mulai jeda. Tidak menumpuk: memanggilnya dua kali tidak memundurkan
+     * titik awal jeda, jadi tenggatnya tidak bisa dimundurkan berulang-ulang
+     * hanya dengan menyimpan form yang sama.
+     */
+    public function pause(string $reason): void
+    {
+        if ($this->paused_at !== null) {
+            $this->pause_reason = $reason;
+
+            return;
+        }
+
+        $this->paused_at = now();
+        $this->pause_reason = $reason;
+    }
+
+    /**
+     * Lanjutkan: tenggat mundur sebanyak lama jeda. Yang berhenti adalah
+     * hitungan SLA, bukan tiketnya.
+     */
+    public function resume(): int
+    {
+        if ($this->paused_at === null) {
+            return 0;
+        }
+
+        $menit = $this->pauseMinutes();
+
+        if ($this->due_response_at !== null) {
+            $this->due_response_at = $this->due_response_at->copy()->addMinutes($menit);
+        }
+
+        if ($this->due_resolution_at !== null) {
+            $this->due_resolution_at = $this->due_resolution_at->copy()->addMinutes($menit);
+        }
+
+        $this->paused_at = null;
+        $this->pause_reason = null;
+
+        return $menit;
+    }
+
     public function isOverdue(): bool
     {
         return $this->isOpen()
+            && ! $this->isPaused()
             && $this->due_resolution_at !== null
             && $this->due_resolution_at->isPast();
     }
@@ -305,6 +373,7 @@ class Complaint extends Model
     public function isResponseOverdue(): bool
     {
         return $this->isOpen()
+            && ! $this->isPaused()
             && $this->first_response_at === null
             && $this->due_response_at !== null
             && $this->due_response_at->isPast();
@@ -328,7 +397,7 @@ class Complaint extends Model
                 'state' => 'done',
                 'label' => $minutes === null
                     ? 'Ditutup'
-                    : 'Selesai '.$this->humanMinutes($minutes),
+                    : 'Selesai '.self::humanMinutes($minutes),
                 'pct'   => 100,
             ];
         }
@@ -339,12 +408,24 @@ class Complaint extends Model
 
         $start = $this->created_at ?? now();
         $total = max(1, (int) round($start->diffInMinutes($this->due_resolution_at)));
-        $left  = (int) round(now()->diffInMinutes($this->due_resolution_at, false));
+
+        // Selama dijeda, jam berhenti di titik jeda — bukan terus berjalan
+        // lalu tiba-tiba merah karena pelanggan yang belum membalas.
+        $acuan = $this->isPaused() ? $this->paused_at : now();
+        $left  = (int) round($acuan->diffInMinutes($this->due_resolution_at, false));
+
+        if ($this->isPaused()) {
+            return [
+                'state' => 'paused',
+                'label' => 'Dijeda · '.$this->pauseReasonLabel(),
+                'pct'   => (int) max(3, min(100, round(max($left, 0) / $total * 100))),
+            ];
+        }
 
         if ($left <= 0) {
             return [
                 'state' => 'late',
-                'label' => 'Telat '.$this->humanMinutes(abs($left)),
+                'label' => 'Telat '.self::humanMinutes(abs($left)),
                 'pct'   => 100,
             ];
         }
@@ -353,12 +434,12 @@ class Complaint extends Model
 
         return [
             'state' => $pct <= 25 ? 'warn' : '',
-            'label' => 'Sisa '.$this->humanMinutes($left),
+            'label' => 'Sisa '.self::humanMinutes($left),
             'pct'   => $pct,
         ];
     }
 
-    private function humanMinutes(int $minutes): string
+    public static function humanMinutes(int $minutes): string
     {
         if ($minutes < 60) {
             return $minutes.' mnt';
@@ -417,6 +498,56 @@ class Complaint extends Model
     public function statusLabel(): string
     {
         return config('complaint.statuses.'.$this->status, $this->status);
+    }
+
+    public function bobotLabel(): string
+    {
+        return config('complaint.bobot.'.$this->bobot, $this->bobot);
+    }
+
+    public function layananLabel(): ?string
+    {
+        return $this->layanan
+            ? config('complaint.layanan.'.$this->layanan, $this->layanan)
+            : null;
+    }
+
+    public function tindakLanjutLabel(): ?string
+    {
+        return $this->tindak_lanjut
+            ? config('complaint.tindak_lanjut.'.$this->tindak_lanjut, $this->tindak_lanjut)
+            : null;
+    }
+
+    public function closeReasonLabel(): ?string
+    {
+        return $this->close_reason
+            ? config('complaint.close_reasons.'.$this->close_reason, $this->close_reason)
+            : null;
+    }
+
+    public function pauseReasonLabel(): ?string
+    {
+        return $this->pause_reason
+            ? config('complaint.pause_reasons.'.$this->pause_reason, $this->pause_reason)
+            : null;
+    }
+
+    /**
+     * Status siap tampil, penandanya ikut: papan harus bisa membedakan
+     * "Handling" dari "Handling, dijeda" tanpa menambah status keenam.
+     */
+    public function statusDisplay(): string
+    {
+        if ($this->isPaused()) {
+            return $this->statusLabel().' · '.$this->pauseReasonLabel();
+        }
+
+        if ($this->status === 'close' && $this->close_reason) {
+            return $this->statusLabel().' · '.$this->closeReasonLabel();
+        }
+
+        return $this->statusLabel();
     }
 
     public function channelLabel(): string

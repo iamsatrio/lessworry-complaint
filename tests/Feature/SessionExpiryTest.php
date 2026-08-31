@@ -158,8 +158,8 @@ class SessionExpiryTest extends TestCase
         $user = $this->cc();
 
         $complaint = new Complaint([
-            'channel' => 'wa_cc', 'reporter_name' => 'P', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'P', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
         ]);
         $complaint->ticket_number = Complaint::nextTicketNumber();
         $complaint->created_at = now();

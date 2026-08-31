@@ -30,10 +30,10 @@ class ComplaintTest extends TestCase
     private function makeComplaint(array $attrs = []): Complaint
     {
         $c = new Complaint(array_merge([
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelanggan', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'Keluhan uji',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelanggan', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'Keluhan uji',
         ], $attrs));
-        $c->status = $attrs['status'] ?? 'baru';
+        $c->status = $attrs['status'] ?? 'open';
         $c->ticket_number = Complaint::nextTicketNumber();
         $c->created_at = now();
         $c->applySla();
@@ -100,8 +100,8 @@ class ComplaintTest extends TestCase
         $kasir = $this->userAs('kasir', $a);
 
         $this->actingAs($kasir)->post('/complaints', [
-            'channel' => 'kasir', 'reporter_name' => 'Budi', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'Noda tidak hilang',
+            'channel' => 'kasir', 'reporter_name' => 'Budi', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'Noda tidak hilang',
             'outlet_id' => $b->id, 'nota_exemption' => 'lebih_sebulan',
         ]);
 
@@ -126,10 +126,10 @@ class ComplaintTest extends TestCase
         $complaint = $this->makeComplaint(['outlet_id' => $a->id]);
 
         $this->actingAs($kasir)
-            ->post('/complaints/'.$complaint->id.'/status', ['lock_version' => $complaint->fresh()->lock_version, 'status' => 'selesai'])
+            ->post('/complaints/'.$complaint->id.'/status', ['lock_version' => $complaint->fresh()->lock_version, 'status' => 'close', 'close_reason' => 'selesai'])
             ->assertSessionHasErrors('status');
 
-        $this->assertSame('baru', $complaint->fresh()->status);
+        $this->assertSame('open', $complaint->fresh()->status);
     }
 
     public function test_kompensasi_di_atas_batas_wewenang_ditolak(): void
@@ -139,7 +139,7 @@ class ComplaintTest extends TestCase
         $complaint = $this->makeComplaint(['outlet_id' => $a->id]);
 
         $this->actingAs($kasir)->post('/complaints/'.$complaint->id.'/status', [
-            'lock_version' => $complaint->fresh()->lock_version, 'status' => 'ditangani', 'compensation_amount' => 500000,
+            'lock_version' => $complaint->fresh()->lock_version, 'status' => 'handling', 'compensation_amount' => 500000,
         ])->assertSessionHasErrors('compensation_amount');
 
         $this->assertSame(0, (int) $complaint->fresh()->compensation_amount);
@@ -151,24 +151,54 @@ class ComplaintTest extends TestCase
         $complaint = $this->makeComplaint();
 
         $this->actingAs($supervisor)->post('/complaints/'.$complaint->id.'/status', [
-            'lock_version' => $complaint->fresh()->lock_version, 'status' => 'selesai', 'resolution' => 'Dicuci ulang gratis',
+            'lock_version' => $complaint->fresh()->lock_version, 'status' => 'close', 'close_reason' => 'selesai', 'resolution' => 'Dicuci ulang gratis',
         ]);
 
         $complaint->refresh();
 
-        $this->assertSame('selesai', $complaint->status);
+        $this->assertSame('close', $complaint->status);
+        $this->assertSame('selesai', $complaint->close_reason);
         $this->assertNotNull($complaint->resolved_at);
         $this->assertSame(1, $complaint->activities()->where('type', 'status_change')->count());
     }
 
-    /* ---------- SLA (API-6) ---------- */
+    /* ---------- SLA (API-6, disetel ulang di API-25) ---------- */
 
-    public function test_tenggat_sla_mengikuti_prioritas(): void
+    /**
+     * Pengganti test lama yang mengunci SLA pada `priority`. Sumbunya
+     * berganti jadi bobot dan satuannya jadi hari; yang diuji tetap sama —
+     * tenggat mengikuti berat-ringannya keluhan.
+     */
+    public function test_tenggat_penyelesaian_mengikuti_bobot_dalam_hari(): void
     {
-        $urgent = $this->makeComplaint(['priority' => 'urgent']);
+        $hari = [
+            'ringan' => 2,
+            'sedang' => 3,
+            'berat'  => 5,
+        ];
 
-        $this->assertSame(30, (int) $urgent->created_at->diffInMinutes($urgent->due_response_at));
-        $this->assertSame(240, (int) $urgent->created_at->diffInMinutes($urgent->due_resolution_at));
+        foreach ($hari as $bobot => $target) {
+            $complaint = $this->makeComplaint(['bobot' => $bobot, 'layanan' => 'kiloan']);
+
+            $this->assertSame(
+                $target * 24 * 60,
+                (int) $complaint->created_at->diffInMinutes($complaint->due_resolution_at),
+                "Tenggat penyelesaian complaint $bobot seharusnya $target hari."
+            );
+        }
+    }
+
+    /** Janji publik 1x24 jam berlaku sama untuk semua bobot. */
+    public function test_tenggat_respon_pertama_selalu_24_jam(): void
+    {
+        foreach (['ringan', 'sedang', 'berat'] as $bobot) {
+            $complaint = $this->makeComplaint(['bobot' => $bobot, 'layanan' => 'kiloan']);
+
+            $this->assertSame(
+                24 * 60,
+                (int) $complaint->created_at->diffInMinutes($complaint->due_response_at)
+            );
+        }
     }
 
     public function test_complaint_terbuka_yang_lewat_tenggat_ditandai(): void
@@ -178,7 +208,7 @@ class ComplaintTest extends TestCase
 
         $this->assertTrue($complaint->isOverdue());
 
-        $complaint->forceFill(['status' => 'selesai', 'resolved_at' => now()])->save();
+        $complaint->forceFill(['status' => 'close', 'close_reason' => 'selesai', 'resolved_at' => now()])->save();
 
         $this->assertFalse($complaint->fresh()->isOverdue());
     }
@@ -193,8 +223,8 @@ class ComplaintTest extends TestCase
         $cc = $this->userAs('customer_care');
 
         $this->actingAs($cc)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Sinta', 'category' => 'keterlambatan',
-            'priority' => 'high', 'description' => 'Telat 2 hari',
+            'channel' => 'wa_cc', 'reporter_name' => 'Sinta', 'category' => 'terlambat',
+            'bobot' => 'berat', 'layanan' => 'kiloan', 'description' => 'Telat 2 hari',
             'nevira_transaction_number' => 'TRX-1',
         ]);
 
@@ -232,8 +262,8 @@ class ComplaintTest extends TestCase
         $cc = $this->userAs('customer_care');
 
         $this->actingAs($cc)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Ibu Rina', 'category' => 'salah_tagih',
-            'priority' => 'medium', 'description' => 'Tagihan tidak sesuai',
+            'channel' => 'wa_cc', 'reporter_name' => 'Ibu Rina', 'category' => 'lainnya',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'Tagihan tidak sesuai',
             'nevira_transaction_number' => 'INV/119/000123',
         ]);
 
@@ -292,8 +322,8 @@ class ComplaintTest extends TestCase
         $cc = $this->userAs('customer_care');
 
         $this->actingAs($cc)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Deni', 'category' => 'sikap_petugas',
-            'priority' => 'low', 'description' => 'Kasir kurang ramah',
+            'channel' => 'wa_cc', 'reporter_name' => 'Deni', 'category' => 'lainnya',
+            'bobot' => 'ringan', 'layanan' => 'kiloan', 'description' => 'Kasir kurang ramah',
         ])->assertSessionHasErrors('nevira_transaction_number');
 
         $this->assertSame(0, Complaint::count());
@@ -304,8 +334,8 @@ class ComplaintTest extends TestCase
         $cc = $this->userAs('customer_care');
 
         $this->actingAs($cc)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Deni', 'category' => 'keterlambatan',
-            'sub_category' => 'Telat jemput', 'priority' => 'high',
+            'channel' => 'wa_cc', 'reporter_name' => 'Deni', 'category' => 'terlambat',
+            'sub_category' => 'Telat jemput', 'bobot' => 'berat', 'layanan' => 'kiloan',
             'description' => 'Kurir belum datang menjemput',
             'nota_exemption' => 'belum_terbit',
         ])->assertRedirect();
@@ -325,8 +355,8 @@ class ComplaintTest extends TestCase
         $cc = $this->userAs('customer_care');
 
         $this->actingAs($cc)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Deni', 'category' => 'hasil_cuci',
-            'priority' => 'low', 'description' => 'x', 'nota_exemption' => 'malas-ngetik',
+            'channel' => 'wa_cc', 'reporter_name' => 'Deni', 'category' => 'kurang_bersih',
+            'bobot' => 'ringan', 'layanan' => 'kiloan', 'description' => 'x', 'nota_exemption' => 'malas-ngetik',
         ])->assertSessionHasErrors('nota_exemption');
     }
 
@@ -336,8 +366,8 @@ class ComplaintTest extends TestCase
         $cc = $this->userAs('customer_care');
 
         $this->actingAs($cc)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Deni', 'category' => 'hasil_cuci',
-            'priority' => 'low', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'Deni', 'category' => 'kurang_bersih',
+            'bobot' => 'ringan', 'layanan' => 'kiloan', 'description' => 'x',
             'nevira_transaction_number' => '31197', 'nota_exemption' => 'lebih_sebulan',
         ])->assertRedirect();
 
