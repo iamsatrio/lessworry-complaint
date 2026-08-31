@@ -4,6 +4,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ComplaintController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\NeviraLookupController;
+use App\Http\Controllers\NeviraPhoneSearchController;
 use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\UserController;
@@ -51,6 +52,13 @@ Route::middleware(['auth', 'auth.session', 'active', 'password.changed'])->group
     Route::get('/nevira/lookup', NeviraLookupController::class)
         ->middleware('throttle:20,1')
         ->name('nevira.lookup');
+
+    // Cari nota lewat nomor telepon pelanggan, supaya kasir memilih alih-alih
+    // mengetik 24 karakter. Dibatasi sama seperti lookup — jatah NEVIRA-nya
+    // sendiri dihitung NeviraGate, lintas rute. (API-26)
+    Route::get('/nevira/cari-nota', NeviraPhoneSearchController::class)
+        ->middleware('throttle:20,1')
+        ->name('nevira.cari-nota');
 
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');

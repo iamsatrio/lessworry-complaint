@@ -206,9 +206,72 @@ class NeviraClient
      */
     public function searchTransactions(string $keyword, int $limit = 5): array
     {
-        $payload = $this->get('/transactions', ['keyword' => $keyword, 'limit' => $limit]);
+        return $this->searchTransactionsPage($keyword, $limit)['data'] ?? [];
+    }
 
-        return $payload['data'] ?? [];
+    /**
+     * Sama seperti searchTransactions(), tapi mengembalikan pembungkusnya
+     * sekalian — `total` dipakai untuk memberitahu petugas bahwa masih ada
+     * nota lain di luar yang ditampilkan.
+     *
+     * `start_date` / `end_date` diterima NEVIRA dan menyaring berdasarkan
+     * tanggal transaksi (diuji ke api.nevira.id 2026-08-31; nama parameter
+     * lain seperti `date_from` diabaikan diam-diam, jadi jangan dipakai).
+     *
+     * Urutan bawaan NEVIRA sudah terbaru dulu.
+     *
+     * @return array{data:array,total:int}
+     */
+    public function searchTransactionsPage(
+        string $keyword,
+        int $limit = 5,
+        ?string $startDate = null,
+        ?string $endDate = null,
+    ): array {
+        $query = ['keyword' => $keyword, 'limit' => $limit];
+
+        // Dikirim berpasangan saja. NEVIRA mengembalikan nol baris kalau
+        // hanya salah satunya ada, dan nol baris terbaca seperti "pelanggan
+        // ini tidak punya nota" — padahal filternya yang timpang.
+        if (filled($startDate) && filled($endDate)) {
+            $query['start_date'] = $startDate;
+            $query['end_date']   = $endDate;
+        }
+
+        $payload = $this->get('/transactions', $query);
+
+        return [
+            'data'  => $payload['data'] ?? [],
+            'total' => (int) ($payload['total'] ?? count($payload['data'] ?? [])),
+        ];
+    }
+
+    /**
+     * Ringkas baris hasil pencarian jadi bentuk yang cukup untuk MEMILIH
+     * nota — bukan untuk melihat isinya.
+     *
+     * Sengaja tidak memuat nama, telepon, atau alamat pelanggan: yang
+     * memanggil sudah memegang nomor teleponnya, dan mengirim ulang
+     * identitas pelanggan ke browser hanya menambah tempat data itu bisa
+     * bocor. Id internal transaksi juga tidak ikut, sama seperti di
+     * summarizeTransaction().
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function summarizeSearchRows(array $rows): array
+    {
+        return collect($rows)
+            ->map(fn ($row) => [
+                'invoice'     => $row['transaction_number'] ?? null,
+                'created_at'  => $row['created_at'] ?? null,
+                'grand_total' => $row['grand_total'] ?? null,
+                'status'      => $row['status'] ?? null,
+                'outlet_name' => $row['outlet_name'] ?? ($row['outlet']['outlet_name'] ?? null),
+                'layanan'     => collect($row['services'] ?? [])
+                    ->map(fn ($s) => $s['service_name'] ?? ($s['service']['service_name'] ?? null))
+                    ->filter()->unique()->values()->all(),
+            ])
+            ->values()->all();
     }
 
     /**

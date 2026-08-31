@@ -94,6 +94,29 @@
       </div>
       @endif
     </div>
+    {{-- Jalur cepat: pelanggan menyebutkan nomor teleponnya, petugas MEMILIH
+         notanya. Nomor nota 24 karakter yang diketik tangan sambil pelanggan
+         menunggu adalah sumber salah ketik yang paling sering. Mengetik nomor
+         notanya langsung tetap ada di bawah sebagai jalur kedua. (API-26) --}}
+    <label for="telp-cari">Cari nota lewat nomor telepon pelanggan</label>
+    <div style="display:flex;gap:10px">
+      {{-- Tanpa atribut name: nomor ini alat cari, bukan isian complaint.
+           Ia juga tidak boleh ikut tersimpan ke draft di perangkat outlet. --}}
+      <input id="telp-cari" inputmode="tel" autocomplete="off" placeholder="08xxxxxxxxxx">
+      <button type="button" class="ghost shrink" id="telp-btn">Cari nota</button>
+    </div>
+    <div id="telp-box" class="panel" style="display:none"></div>
+    <div id="telp-tanggal" style="display:none;margin-top:10px">
+      <p class="hint" style="margin-top:0">Pelanggan ini punya lebih dari 5 nota. Persempit dengan tanggal transaksi:</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <input id="telp-dari" type="date" style="max-width:190px">
+        <span class="muted small">sampai</span>
+        <input id="telp-sampai" type="date" style="max-width:190px">
+        <button type="button" class="ghost shrink" id="telp-ulang">Cari lagi</button>
+      </div>
+    </div>
+    <p class="hint">Kalau notanya sudah di tangan, lewati ini dan ketik nomornya di bawah.</p>
+
     {{-- Nota didahulukan: begitu diisi, identitas pelapor terisi sendiri.
          Kalau nama diketik lebih dulu, sistem tidak menimpanya, dan
          pengisian otomatis jadi terasa tidak jalan. --}}
@@ -346,5 +369,98 @@ if (nvInput) {
   nvInput.addEventListener('blur', cekNota);
   nvInput.addEventListener('paste', () => setTimeout(cekNota, 60));
 }
+
+/* ---------- Cari nota lewat nomor telepon pelanggan (API-26) ---------- */
+const telpCari   = el('telp-cari');
+const telpBtn    = el('telp-btn');
+const telpBox    = el('telp-box');
+const telpTanggal= el('telp-tanggal');
+const telpDari   = el('telp-dari');
+const telpSampai = el('telp-sampai');
+const telpUlang  = el('telp-ulang');
+
+const tanggalId = s => {
+  if (!s) return '—';
+  // "2026-08-26 20:02:25" tidak diurai sama di semua browser. Diambil
+  // potongannya, bukan diserahkan ke Date().
+  const [t] = String(s).split(' ');
+  const [y, m, d] = t.split('-');
+  return (y && m && d) ? `${d}/${m}/${y}` : t;
+};
+
+// Memilih nota HARUS berakhir sama persis seperti mengetiknya: kolom nota
+// terisi, lalu jalur pemeriksaan yang sama dijalankan. Kalau di sini datanya
+// ditulis sendiri ke layar, pemeriksaan outlet dan peringatan nota tua
+// terlewat — dua jalur dengan hasil berbeda untuk hal yang sama.
+function pilihNota(invoice){
+  if (!nvInput) return;
+  nvInput.value = invoice;
+  if (exempt) exempt.value = '';
+  if (telpBox) telpBox.style.display = 'none';
+  if (telpTanggal) telpTanggal.style.display = 'none';
+  terakhirDicek = '';
+  cekNota();
+  nvInput.focus();
+}
+
+async function cariLewatTelepon(){
+  if (!telpCari || !telpBox) return;
+  const telp = telpCari.value.trim();
+  if (!telp) return;
+
+  const q = new URLSearchParams({phone: telp});
+  if (telpDari?.value && telpSampai?.value) { q.set('from', telpDari.value); q.set('to', telpSampai.value); }
+
+  if (telpBtn) { telpBtn.disabled = true; telpBtn.textContent = 'Mencari…'; }
+  telpBox.style.display = 'block'; telpBox.className = 'panel'; telpBox.textContent = 'Mencari nota pelanggan…';
+
+  try{
+    const r = await fetch(`{{ route('nevira.cari-nota') }}?${q}`, {headers:{'Accept':'application/json'}});
+    const j = await r.json();
+
+    if (!j.ok) {
+      telpBox.className = 'panel bad';
+      // 422 dari validasi punya bentuknya sendiri; keduanya diringkas jadi
+      // satu kalimat supaya petugas tidak melihat JSON mentah.
+      telpBox.textContent = j.message
+        || Object.values(j.errors || {}).flat().join(' ')
+        || 'Pencarian gagal. Ketik nomor notanya langsung.';
+      if (telpTanggal) telpTanggal.style.display = 'none';
+      return;
+    }
+
+    telpBox.className = 'panel good';
+    telpBox.innerHTML = '<b>Nota pelanggan ini</b><div class="small" style="margin-bottom:6px">'
+      + 'Pilih yang dikeluhkan — kolom nomor nota akan terisi sendiri.</div>';
+
+    for (const d of j.data) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ghost';
+      b.style.cssText = 'display:block;width:100%;text-align:left;margin-top:8px;padding:10px 12px;min-height:44px';
+      b.innerHTML = `<b>${d.invoice ?? '—'}</b><br>`
+        + `<span class="small">${tanggalId(d.created_at)} · ${rupiah(d.grand_total)}`
+        + `${d.layanan && d.layanan.length ? ' · ' + d.layanan.join(', ') : ''}`
+        + `${d.outlet_name ? ' · ' + d.outlet_name : ''}</span>`;
+      b.addEventListener('click', () => pilihNota(d.invoice));
+      telpBox.appendChild(b);
+    }
+
+    // Rentang tanggal hanya ditawarkan saat memang ada yang tidak muat.
+    if (telpTanggal) telpTanggal.style.display = j.lebih ? 'block' : 'none';
+  }catch(e){
+    telpBox.className = 'panel bad';
+    telpBox.textContent = 'Server tidak merespons. Ketik nomor notanya langsung.';
+  }finally{
+    if (telpBtn) { telpBtn.disabled = false; telpBtn.textContent = 'Cari nota'; }
+  }
+}
+
+if (telpBtn)   telpBtn.addEventListener('click', cariLewatTelepon);
+if (telpUlang) telpUlang.addEventListener('click', cariLewatTelepon);
+if (telpCari)  telpCari.addEventListener('keydown', e => {
+  // Enter di kotak ini mencari, bukan mengirim complaint setengah jadi.
+  if (e.key === 'Enter') { e.preventDefault(); cariLewatTelepon(); }
+});
 </script>
 @endsection

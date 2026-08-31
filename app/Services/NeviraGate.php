@@ -67,6 +67,111 @@ class NeviraGate
         ];
     }
 
+    /** Nota terbaru yang ditawarkan ke petugas dalam satu pencarian. (API-26) */
+    public const NOTA_PER_PENCARIAN = 5;
+
+    /**
+     * Baris yang ditarik dari NEVIRA sebelum disaring.
+     *
+     * Lebih besar dari yang ditampilkan karena pencarian NEVIRA mencocokkan
+     * SEBAGIAN: nomor pelanggan lain yang kebetulan memuat potongan yang sama
+     * ikut terbawa, dan baris itu dibuang di sini. Tanpa cadangan ini,
+     * penyaringan bisa menyisakan kurang dari lima padahal notanya ada.
+     */
+    private const AMBIL_SEBELUM_DISARING = 30;
+
+    /**
+     * Cari nota lewat nomor telepon pelanggan, supaya petugas memilih
+     * alih-alih mengetik 24 karakter sambil pelanggan menunggu. (API-26)
+     *
+     * Lewat gerbang yang sama seperti jalur nota — peran, batas laju, dan
+     * lingkup outlet berlaku persis sama. Ini pintu baru ke data yang sama,
+     * jadi ia tidak boleh punya aturan sendiri.
+     *
+     * Dua pengaman yang khas jalur ini:
+     *
+     *   1. Panjang minimum. Pencarian NEVIRA mencocokkan sebagian, jadi
+     *      kata kunci pendek mengembalikan transaksi milik puluhan pelanggan.
+     *      Lihat NomorTelepon::MIN_DIGIT.
+     *   2. Cocok persis pada nomornya. Yang dikembalikan hanya nota yang
+     *      nomor pelanggannya benar-benar sama dengan yang dicari. Tanpa ini
+     *      kotak pencarian berubah jadi alat menyisir daftar pelanggan
+     *      NEVIRA — persis yang dicegah aturan cocok-persis pada nomor nota.
+     *
+     * @return array{rows:array<int,array<string,mixed>>,lebih:bool}
+     *
+     * @throws \App\Exceptions\NeviraException
+     */
+    public function cariNotaLewatTelepon(
+        User $user,
+        string $telepon,
+        ?string $dari = null,
+        ?string $sampai = null,
+    ): array {
+        $this->pastikanBoleh($user);
+
+        $inti = NomorTelepon::inti($telepon);
+
+        if ($inti === null) {
+            throw new NeviraInputRejected(
+                'Masukkan nomor telepon pelanggan selengkapnya (contoh: 081234567890). '
+                .'Potongan nomor tidak dicari — hasilnya akan berisi pelanggan lain.'
+            );
+        }
+
+        $outletKasir = $this->outletKasirAtauTolak($user);
+
+        $this->pastikanBelumMelewatiBatas($user);
+
+        $halaman = $this->client->searchTransactionsPage(
+            $inti,
+            self::AMBIL_SEBELUM_DISARING,
+            $dari,
+            $sampai,
+        );
+
+        $cocok = collect($halaman['data'])
+            ->filter(fn ($row) => is_array($row)
+                && NomorTelepon::sama($inti, $row['customer']['phone'] ?? null))
+            // Kasir hanya boleh nota outletnya sendiri — aturan yang sama
+            // dengan pastikanOutletCocok(), hanya di sini ia menyaring daftar
+            // alih-alih menolak satu nota.
+            ->filter(fn ($row) => $outletKasir === null
+                || (string) ($row['id_outlet'] ?? '') === $outletKasir)
+            ->values();
+
+        return [
+            'rows'  => $this->client->summarizeSearchRows($cocok->take(self::NOTA_PER_PENCARIAN)->all()),
+            'lebih' => $cocok->count() > self::NOTA_PER_PENCARIAN,
+        ];
+    }
+
+    /**
+     * Id outlet NEVIRA yang boleh dilihat pengguna ini, atau null kalau ia
+     * boleh melihat semua outlet.
+     *
+     * Kasir yang outletnya belum dipetakan tidak bisa dibandingkan sama
+     * sekali — ditolak, bukan diloloskan dengan daftar kosong yang terbaca
+     * seperti "pelanggan ini tidak punya nota".
+     */
+    private function outletKasirAtauTolak(User $user): ?string
+    {
+        if (! $user->isKasir()) {
+            return null;
+        }
+
+        $outlet = $user->outlet?->nevira_outlet_id;
+
+        if (blank($outlet)) {
+            throw new NeviraOutletMismatch(
+                'Outletmu belum dipetakan ke NEVIRA, jadi nota tidak bisa dicari dari sini. '
+                .'Minta supervisor menjalankan pemetaan outlet.'
+            );
+        }
+
+        return (string) $outlet;
+    }
+
     /**
      * Perjalanan kurir untuk order yang SUDAH lolos resolve().
      *
