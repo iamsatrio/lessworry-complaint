@@ -9,6 +9,11 @@ return Application::configure(basePath: dirname(__DIR__))
         web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        // /health dipasang di sini, bukan di routes/web.php: rutenya tidak
+        // boleh memakai middleware web. Alasannya ditulis di routes/health.php.
+        then: function () {
+            \Illuminate\Support\Facades\Route::group([], base_path('routes/health.php'));
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Berlaku untuk semua permintaan web.
