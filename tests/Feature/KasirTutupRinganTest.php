@@ -95,6 +95,73 @@ class KasirTutupRinganTest extends TestCase
         $this->assertSame('handling', $complaint->fresh()->status);
     }
 
+    /** Angka di atas batas yang DIKIRIM di request, bukan yang sudah tersimpan. */
+    public function test_kasir_ditolak_menaikkan_kompensasi_di_atas_batas_sambil_menutup(): void
+    {
+        $outlet = Outlet::create(['name' => 'Pusat']);
+        $complaint = $this->complaint('ringan', 0, $outlet);
+
+        $this->tutup($this->userAs('kasir', $outlet), $complaint, ['compensation_amount' => 50_001])
+            ->assertSessionHasErrors('compensation_amount');
+
+        $complaint->refresh();
+
+        $this->assertSame('handling', $complaint->status);
+        $this->assertNull($complaint->close_reason);
+        $this->assertSame(0, (int) $complaint->compensation_amount,
+            'kompensasi di atas batas ikut tersimpan meski penutupannya ditolak');
+    }
+
+    /**
+     * Jebakan yang paling mudah terlewat: kompensasi Rp 200.000 sudah
+     * tersimpan, dan kasir menutup tiket **tanpa mengirim field kompensasi
+     * sama sekali**.
+     *
+     * Pemeriksaan yang hanya berjalan saat nilainya BERUBAH akan melewatkan
+     * ini seluruhnya — tidak ada perubahan, jadi tidak ada yang diperiksa,
+     * dan complaint tertutup. Batasnya harus diuji terhadap nilai yang
+     * TERSIMPAN saat menutup.
+     */
+    public function test_kasir_ditolak_menutup_complaint_ringan_berkompensasi_besar_tanpa_mengirim_field_kompensasi(): void
+    {
+        $outlet = Outlet::create(['name' => 'Pusat']);
+        $complaint = $this->complaint('ringan', 200_000, $outlet);
+
+        $balasan = $this->actingAs($this->userAs('kasir', $outlet))
+            ->post('/complaints/'.$complaint->id.'/status', [
+                'lock_version' => $complaint->fresh()->lock_version,
+                'status'       => 'close',
+                'close_reason' => 'selesai',
+                // Sengaja: tidak ada 'compensation_amount' di payload.
+            ]);
+
+        $balasan->assertSessionHasErrors('compensation_amount');
+
+        $complaint->refresh();
+
+        $this->assertSame('handling', $complaint->status,
+            'kasir menutup complaint Rp 200.000 hanya dengan tidak mengirim field kompensasi');
+        $this->assertNull($complaint->close_reason);
+        $this->assertNull($complaint->resolved_at);
+        $this->assertSame(200_000, (int) $complaint->compensation_amount);
+    }
+
+    /** Bentuk kedua dari jebakan yang sama: form mengirim balik nilai yang sudah ada. */
+    public function test_kasir_ditolak_menutup_complaint_ringan_yang_mengirim_ulang_kompensasi_besar(): void
+    {
+        $outlet = Outlet::create(['name' => 'Pusat']);
+        $complaint = $this->complaint('ringan', 200_000, $outlet);
+
+        $this->tutup($this->userAs('kasir', $outlet), $complaint, ['compensation_amount' => 200_000])
+            ->assertSessionHasErrors('compensation_amount');
+
+        $complaint->refresh();
+
+        $this->assertSame('handling', $complaint->status);
+        $this->assertNull($complaint->close_reason);
+        $this->assertSame(200_000, (int) $complaint->compensation_amount);
+    }
+
     public function test_kasir_ditolak_menutup_complaint_sedang_dan_berat_berapa_pun_kompensasinya(): void
     {
         $outlet = Outlet::create(['name' => 'Pusat']);
@@ -106,8 +173,12 @@ class KasirTutupRinganTest extends TestCase
                 $this->tutup($this->userAs('kasir', $outlet), $complaint)
                     ->assertSessionHasErrors('status');
 
-                $this->assertSame('handling', $complaint->fresh()->status,
+                $complaint->refresh();
+
+                $this->assertSame('handling', $complaint->status,
                     "kasir berhasil menutup complaint $bobot berkompensasi $kompensasi");
+                $this->assertNull($complaint->close_reason);
+                $this->assertNull($complaint->resolved_at);
             }
         }
     }
@@ -121,7 +192,41 @@ class KasirTutupRinganTest extends TestCase
 
         $this->tutup($this->userAs('kasir', $punyaKasir), $complaint)->assertForbidden();
 
-        $this->assertSame('handling', $complaint->fresh()->status);
+        $complaint->refresh();
+
+        $this->assertSame('handling', $complaint->status);
+        $this->assertNull($complaint->close_reason);
+        $this->assertNull($complaint->resolved_at);
+    }
+
+    /**
+     * Wewenang dicabut saat sesinya masih berjalan. Kasir yang sudah masuk
+     * dan sedang membuka halaman complaint outletnya sendiri tidak boleh
+     * tetap bisa menutup tiket setelah akunnya dinonaktifkan.
+     */
+    public function test_kasir_yang_dinonaktifkan_saat_sesi_berjalan_tidak_bisa_menutup(): void
+    {
+        $outlet = Outlet::create(['name' => 'Pusat']);
+        $complaint = $this->complaint('ringan', 0, $outlet);
+        $kasir = $this->userAs('kasir', $outlet);
+
+        $this->actingAs($kasir);
+
+        // Halaman complaint-nya memang bisa dibuka — sampai di sini sah.
+        $this->get('/complaints/'.$complaint->id)->assertOk();
+
+        $kasir->forceFill(['is_active' => false])->save();
+
+        $this->post('/complaints/'.$complaint->id.'/status', [
+            'lock_version' => $complaint->fresh()->lock_version,
+            'status' => 'close', 'close_reason' => 'selesai',
+        ])->assertRedirect(route('login'));
+
+        $complaint->refresh();
+
+        $this->assertSame('handling', $complaint->status);
+        $this->assertNull($complaint->close_reason);
+        $this->assertGuest();
     }
 
     public function test_divisi_tetap_tidak_boleh_menutup_complaint_ringan(): void
