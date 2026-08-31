@@ -74,7 +74,7 @@ class DatabaseSeeder extends Seeder
         // Contoh complaint supaya papan kerja dan laporan tidak kosong saat pertama dibuka.
         // Kategori, bobot, layanan, dan status memakai taksonomi tim. (API-25)
         $samples = [
-            ['wa_cc', 'Ibu Rina', '081234567801', 'kurang_bersih', null, 'sedang', 'kiloan', 'open', null, null,
+            ['wa_cc', 'Ibu Rina', '081234567801', 'kurang_bersih', null, 'sedang', 'kiloan_cuset', 'open', null, null,
              'Kemeja putih masih ada noda di bagian kerah setelah dicuci.', $pusat->id, '-3 hours', null],
             ['kasir', 'Pak Budi', '081234567802', 'barang_hilang', 'Item kurang', 'berat', 'kiloan', 'handling', null, null,
              'Pelanggan menghitung 12 potong saat menyerahkan, yang kembali 11 potong.', $pusat->id, '-26 hours', null],
@@ -82,7 +82,7 @@ class DatabaseSeeder extends Seeder
              'Dijanjikan selesai Selasa, baru bisa diambil Kamis.', $cabang->id, '-5 days', '-4 days'],
             ['wa_cc', 'Ibu Rina', '081234567801', 'kurang_rapih', null, 'ringan', 'satuan_bedding', 'close', 'ditolak', 'terkonfirmasi',
              'Sprei terlihat kusut saat diterima.', $pusat->id, '-8 days', '-8 days'],
-            ['kasir', 'Pak Deni', '081234567804', 'berbau', null, 'sedang', 'kiloan', 'handling', null, null,
+            ['kasir', 'Pak Deni', '081234567804', 'berbau', null, 'sedang', 'kiloan_culip', 'handling', null, null,
              'Cucian bau apek. Diminta membawa kembali untuk dicuci ulang.', $cabang->id, '-2 days', null],
         ];
 

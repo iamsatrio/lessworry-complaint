@@ -79,8 +79,8 @@ class User extends Authenticatable
      * Siapa yang boleh menutup complaint. (API-25, keputusan API-18 nomor 1)
      *
      * Customer Care dan supervisor: selalu. Kasir: hanya complaint berbobot
-     * Ringan — itu 58% kasus, dan menahannya di antrean Customer Care hanya
-     * memindahkan pekerjaan yang sudah selesai di outlet.
+     * Ringan — itu 52,3% kasus pada 2026, dan menahannya di antrean Customer
+     * Care hanya memindahkan pekerjaan yang sudah selesai di outlet.
      *
      * Batas kompensasi TIDAK diperiksa di sini. Itu batas yang berdiri
      * sendiri dan ditegakkan terpisah di ComplaintController: complaint

@@ -12,8 +12,8 @@ use Tests\TestCase;
  * API-25 — kategori, bobot, SLA, dan laporan memakai taksonomi tim.
  *
  * Yang dijaga di sini bukan selera penamaan. Dua kategori yang dibuang tidak
- * pernah muncul sekali pun pada 1.032 baris data nyata, sementara `Kurang
- * Rapih` (4% kasus) tidak punya pilihan sama sekali — kasir yang mengalaminya
+ * pernah muncul sekali pun pada 545 baris data nyata, sementara `Kurang Rapih`
+ * (5,9% kasus 2026) tidak punya pilihan sama sekali — kasir yang mengalaminya
  * terpaksa memilih sesuatu yang salah, dan yang salah itu masuk laporan
  * terlihat seperti data yang benar.
  */
@@ -191,7 +191,7 @@ class TaksonomiTimTest extends TestCase
         $this->assertStringContainsString('Layanan yang dikeluhkan', $html);
         $this->assertStringContainsString('Satuan Bedding', $html);
         $this->assertStringContainsString('Tindak lanjut', $html);
-        $this->assertStringContainsString('Proses Ulang', $html);
+        $this->assertStringContainsString('Proses ulang', $html);
     }
 
     /**
@@ -223,6 +223,160 @@ class TaksonomiTimTest extends TestCase
         $this->assertStringContainsString('Ditolak', $csv);
         $this->assertStringNotContainsString('Prioritas', $csv);
         $this->assertStringContainsString('Bobot', $csv);
+    }
+
+    /* ---------- Isi dan urutan enum (koreksi dari CSV asli, 545 baris) ---------- */
+
+    /**
+     * Urutan dropdown itu bagian dari datanya, bukan selera.
+     *
+     * Kasir mengisi form sambil melayani antrean; pilihan yang paling sering
+     * dipakai harus paling dekat dengan jempol. Test ini menahan seseorang
+     * merapikan daftarnya menurut abjad suatu hari nanti — perubahan yang
+     * terlihat tidak berbahaya dan tidak akan menggagalkan apa pun selain ini.
+     */
+    public function test_urutan_kategori_mengikuti_porsi_2026(): void
+    {
+        $this->assertSame([
+            'kurang_bersih',   // 27,8%
+            'barang_rusak',    // 20,7%
+            'barang_hilang',   // 13,9%
+            'terlambat',       // 12,2%
+            'berbau',          //  8,4%
+            'lainnya',         //  7,6%
+            'kurang_rapih',    //  5,9%
+            'barang_tertukar', //  3,4%
+        ], array_keys(config('complaint.categories')));
+    }
+
+    /**
+     * Layanan punya ENAM nilai. Kiloan dicatat tim dalam tiga varian, dan
+     * menggabungkannya jadi satu membuang justru perbedaan yang mau dilihat.
+     */
+    public function test_layanan_punya_enam_nilai_termasuk_tiga_varian_kiloan(): void
+    {
+        $layanan = config('complaint.layanan');
+
+        $this->assertCount(6, $layanan);
+        $this->assertSame([
+            'kiloan_cuset', 'kiloan', 'kiloan_culip',
+            'satuan_non_cloth', 'satuan_cloth', 'satuan_bedding',
+        ], array_keys($layanan));
+
+        // Empat nilai lama tetap sah — tidak ada complaint tersimpan yang
+        // kehilangan layanannya karena daftarnya bertambah.
+        foreach (['kiloan', 'satuan_cloth', 'satuan_bedding', 'satuan_non_cloth'] as $lama) {
+            $this->assertArrayHasKey($lama, $layanan);
+        }
+    }
+
+    public function test_urutan_tindak_lanjut_mengikuti_porsi_2026(): void
+    {
+        $this->assertSame([
+            'proses_ulang',   // 38,0%
+            'tracking',       // 19,8%
+            'terkonfirmasi',  // 18,6%
+            'compensate',     // 12,7%
+            'voucher',        //  6,3%
+            'repair',         //  2,1%
+            'delivery_ulang', //  1,7%
+            'pickup_ulang',   //  0,4%
+            'repaint',        //     0% pada 2026, 2 kejadian pada 2025
+        ], array_keys(config('complaint.tindak_lanjut')));
+    }
+
+    /** Nilai baru benar-benar bisa disimpan lewat jalur intake, bukan cuma ada di config. */
+    public function test_varian_kiloan_baru_bisa_disimpan(): void
+    {
+        $cc = $this->userAs('customer_care');
+
+        foreach (['kiloan_cuset', 'kiloan_culip'] as $layanan) {
+            $this->actingAs($cc)->post('/complaints', $this->intake(['layanan' => $layanan]))
+                ->assertRedirect();
+
+            $this->assertSame($layanan, Complaint::latest('id')->first()->layanan);
+        }
+    }
+
+    /**
+     * Config boleh benar urutannya sementara view menyusunnya ulang. Yang
+     * dilihat kasir adalah HTML-nya, jadi itu yang diperiksa.
+     */
+    public function test_urutan_dropdown_di_form_sama_dengan_urutan_config(): void
+    {
+        $html = $this->actingAs($this->userAs('customer_care'))
+            ->get('/complaints/create')->assertOk()->getContent();
+
+        foreach (['cat' => 'categories', 'lay' => 'layanan'] as $id => $kunciConfig) {
+            preg_match('/<select id="'.$id.'".*?<\/select>/s', $html, $m);
+            $this->assertNotEmpty($m, "Dropdown '$id' tidak ditemukan di form intake.");
+
+            preg_match_all('/<option value="([a-z_]+)"/', $m[0], $opsi);
+
+            $this->assertSame(
+                array_keys(config('complaint.'.$kunciConfig)),
+                $opsi[1],
+                "Urutan dropdown '$id' di layar berbeda dari urutan di config."
+            );
+        }
+    }
+
+    /* ---------- 5. Complaint yang belum ditangani harus berhenti di Open ---------- */
+
+    /**
+     * Dari 545 baris data tim, `Open` tidak pernah dipakai sekali pun — sheet
+     * diisi saat complaint DITUTUP, jadi tiket yang masih menggantung tidak
+     * pernah tercatat sama sekali.
+     *
+     * Papan kerja ini akan memperlihatkan hal yang selama ini tidak terlihat
+     * siapa pun. Syaratnya `Open` harus benar-benar bisa dicapai: tiket yang
+     * dibuat tanpa penanganan berhenti di sana, dan tidak melompat ke
+     * `Handling` hanya karena pembuatnya dianggap penangannya.
+     */
+    public function test_complaint_baru_berhenti_di_open_bukan_handling(): void
+    {
+        $cc = $this->userAs('customer_care');
+
+        $this->actingAs($cc)->post('/complaints', $this->intake())->assertRedirect();
+
+        $complaint = Complaint::latest('id')->first();
+
+        $this->assertSame('open', $complaint->status);
+        $this->assertNull($complaint->assigned_to, 'complaint baru tidak boleh menugaskan pembuatnya sendiri');
+        $this->assertNull($complaint->first_response_at, 'complaint yang belum disentuh tidak boleh terhitung sudah direspon');
+        $this->assertSame('open', $complaint->activities()->where('type', 'created')->first()->to_status);
+    }
+
+    /** Menugaskan seseorang itu pencatatan, bukan penanganan — statusnya tidak ikut bergerak. */
+    public function test_menugaskan_penanggung_jawab_tidak_memindahkan_tiket_dari_open(): void
+    {
+        $cc = $this->userAs('customer_care');
+
+        $this->actingAs($cc)->post('/complaints', $this->intake())->assertRedirect();
+        $complaint = Complaint::latest('id')->first();
+
+        $this->actingAs($cc)->post('/complaints/'.$complaint->id.'/assign', [
+            'assigned_to' => $cc->id,
+        ])->assertSessionHasNoErrors();
+
+        $complaint->refresh();
+
+        $this->assertSame($cc->id, $complaint->assigned_to);
+        $this->assertSame('open', $complaint->status,
+            'tiket melompat ke Handling hanya karena ada yang ditugaskan — Open jadi status yang tidak pernah terlihat');
+    }
+
+    /** Papan kerja memang menampilkan tiket Open, bukan menyembunyikannya. */
+    public function test_papan_kerja_menampilkan_tiket_open(): void
+    {
+        $cc = $this->userAs('customer_care');
+
+        $this->actingAs($cc)->post('/complaints', $this->intake())->assertRedirect();
+        $complaint = Complaint::latest('id')->first();
+
+        $this->actingAs($cc)->get('/complaints')->assertOk()
+            ->assertSee($complaint->ticket_number, false)
+            ->assertSee('Open', false);
     }
 
     public function test_tiket_close_wajib_menyebut_alasan_penutupan(): void
