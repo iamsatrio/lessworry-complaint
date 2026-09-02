@@ -125,8 +125,21 @@ tbody tr:hover td{background:var(--mint)}
 label{display:block;font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.05em;
   text-transform:uppercase;color:var(--muted);margin:18px 0 7px}
 label .req{color:var(--danger)}
-input,select,textarea{width:100%;background:var(--surface);border:1.5px solid var(--line);color:var(--ink);
+/* Menyaring tipe itu wajib, bukan kerapian. Aturan di bawah dulu memakai
+   pemilih `input` polos, jadi width:100% dan min-height:48px ikut kena
+   checkbox — dan di dalam label yang display:flex, kotak centangnya memuai
+   memenuhi lebar barisnya. Baru ketahuan setelah API-19, karena sampai itu
+   tidak ada satu pun checkbox di aplikasi ini. */
+input:not([type=checkbox]):not([type=radio]),select,textarea{width:100%;background:var(--surface);border:1.5px solid var(--line);color:var(--ink);
   border-radius:10px;padding:12px 14px;font:16px/1.5 var(--body);min-height:48px}
+input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;flex:none;
+  padding:0;border-radius:4px;accent-color:var(--teal)}
+input[type=radio]{border-radius:50%}
+/* min-height:48px pada kolom teks itu sasaran sentuh untuk kasir di layar
+   sentuh. Kotak centang 18px menghapusnya, jadi sasarannya dipindah ke
+   LABEL yang membungkus kotak dan teksnya — mengetuk namanya tetap
+   mencentang, dan areanya kembali ≥44px. */
+label:has(> input[type=checkbox]),label:has(> input[type=radio]){min-height:44px;padding:8px 0}
 input:hover,select:hover,textarea:hover{border-color:#c4ded9}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 4px rgba(37,157,145,.14)}
 textarea{min-height:112px;resize:vertical}

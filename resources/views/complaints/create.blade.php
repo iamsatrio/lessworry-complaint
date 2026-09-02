@@ -103,7 +103,9 @@
       {{-- Tanpa atribut name: nomor ini alat cari, bukan isian complaint.
            Ia juga tidak boleh ikut tersimpan ke draft di perangkat outlet. --}}
       <input id="telp-cari" inputmode="tel" autocomplete="off" placeholder="08xxxxxxxxxx">
-      <button type="button" class="ghost shrink" id="telp-btn">Cari nota</button>
+      {{-- nowrap: "Cari nota" dua kata, dan tanpa ini tombolnya patah dua
+           baris lalu menyeret tinggi kolom di sebelahnya jadi 64px. --}}
+      <button type="button" class="ghost shrink" id="telp-btn" style="white-space:nowrap">Cari nota</button>
     </div>
     <div id="telp-box" class="panel" style="display:none"></div>
     <div id="telp-tanggal" style="display:none;margin-top:10px">
