@@ -46,6 +46,9 @@ class VerifyBackup extends Command
         $this->line('Menguji: '.basename($path).' ('.round((int) filesize($path) / 1024, 1).' KB)');
 
         try {
+            // Isinya diperiksa SEBELUM satu byte pun dijalankan.
+            $this->tolakYangBisaKeluarDatabaseSementara($path);
+
             // Dipilih dari driver yang sedang dipakai, bukan dari nama
             // berkas: dump keduanya sama-sama SQL biasa.
             $baris = DB::connection()->getDriverName() === 'sqlite'
@@ -155,6 +158,12 @@ class VerifyBackup extends Command
                 (string) config('backup.mysql'),
                 '--defaults-extra-file='.$defaults,
                 '--default-character-set='.($c['charset'] ?? 'utf8mb4'),
+                // Klien mysql MEMATUHI `USE` di dalam dump. Tanpa ini, dump
+                // yang dibuat `mysqldump --databases` — cara paling umum orang
+                // membuat dump manual — memindahkan restore ke database
+                // produksi dan menimpanya. Lapis kedua di atas pemeriksaan isi
+                // di tolakYangBisaKeluarDatabaseSementara().
+                '--one-database',
                 $temp,
             ], base_path(), null, null, (float) config('backup.timeout'));
 
@@ -191,6 +200,62 @@ class VerifyBackup extends Command
                 // Hanya database yang dibuat perintah ini beberapa baris di
                 // atas. Namanya tidak pernah datang dari luar.
                 DB::statement('DROP DATABASE IF EXISTS `'.$temp.'`');
+            }
+        }
+    }
+
+    /**
+     * Tolak dump yang bisa memindahkan dirinya keluar dari database sementara.
+     *
+     * Perintah ini memulihkan berkas yang isinya TIDAK dipercaya: berkas
+     * apa pun yang diletakkan di direktori backup dengan nama yang cocok pola
+     * akan diambil oleh `backup:verify` tanpa argumen. Memeriksa lokasi dan
+     * nama saja tidak cukup — yang menentukan ke mana barisnya masuk adalah
+     * isinya.
+     *
+     * Yang ditolak:
+     *   USE / CREATE DATABASE / CREATE SCHEMA / DROP DATABASE  (MySQL)
+     *   ATTACH DATABASE                                        (SQLite)
+     *
+     * Dump yang dihasilkan `backup:database` tidak pernah memuat satu pun —
+     * mysqldump dipanggil TANPA --databases justru supaya begitu.
+     *
+     * Dibaca baris demi baris; dumpnya sendiri tidak pernah utuh di memori.
+     */
+    private function tolakYangBisaKeluarDatabaseSementara(string $path): void
+    {
+        $terlarang = [
+            '/^\s*USE\s+[`"\']?[A-Za-z0-9_$-]+[`"\']?\s*;/i' => 'USE',
+            '/^\s*CREATE\s+(DATABASE|SCHEMA)\b/i' => 'CREATE DATABASE',
+            '/^\s*DROP\s+(DATABASE|SCHEMA)\b/i' => 'DROP DATABASE',
+            '/^\s*ATTACH\s+(DATABASE\s+)?/i' => 'ATTACH DATABASE',
+        ];
+
+        $sisa = '';
+
+        foreach ($this->potongan($path) as $potongan) {
+            $sisa .= $potongan;
+            $baris = explode("\n", $sisa);
+            $sisa = (string) array_pop($baris);
+
+            foreach ($baris as $satu) {
+                $this->periksaBaris($satu, $terlarang);
+            }
+        }
+
+        $this->periksaBaris($sisa, $terlarang);
+    }
+
+    /** @param  array<string,string>  $terlarang */
+    private function periksaBaris(string $baris, array $terlarang): void
+    {
+        foreach ($terlarang as $pola => $nama) {
+            if (preg_match($pola, $baris)) {
+                throw new \RuntimeException(
+                    'Dump ini memuat perintah "'.$nama.'" — perintah itu bisa memindahkan '
+                    .'pemulihan ke database lain, termasuk database produksi. Ditolak sebelum dijalankan. '
+                    .'Dump dari backup:database tidak pernah memuatnya.'
+                );
             }
         }
     }

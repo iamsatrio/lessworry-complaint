@@ -18,6 +18,13 @@ Daftar periksa sebelum sistem ini menyentuh data pelanggan sungguhan.
       sekali di produksi. Akun demo memakai password `password`.
 - [ ] `SESSION_SECURE_COOKIE=true` supaya cookie sesi tidak pernah lewat HTTP.
 - [ ] Kredensial NEVIRA diisi dari service account, bukan akun pribadi.
+- [ ] **`NEVIRA_ENABLED=true`.** Kalau `false`, `/health` membalas
+      `nevira: disabled` dan tetap 200 — pemantau tetap hijau walau integrasi
+      POS mati total, dan complaint diam-diam kehilangan tautan ordernya.
+- [ ] `HEALTH_CACHE_STORE` **bukan** `database`. Store bawaan produksi adalah
+      `database`; kalau `/health` ikut memakainya, database yang mati membuat
+      `/health` ikut mati — pemadaman yang paling perlu dibedakan justru yang
+      membuatnya bisu.
 - [ ] Izin tulis untuk `storage/` dan `bootstrap/cache/`.
       Foto bukti disimpan di disk privat (`storage/app/private`) dan disajikan
       lewat rute yang memeriksa wewenang — `storage:link` TIDAK diperlukan
@@ -71,6 +78,11 @@ Yang perlu ditambahkan di server hanyalah satu baris crontab:
       sama akan ikut hilang bersama mesinnya.
 - [ ] **Jalankan `backup:verify` satu kali setelah pasang**, dan catat
       tanggalnya. Ulangi tiap kuartal.
+- [ ] `backup:verify` dijalankan di mesin salinan, atau dengan pengguna
+      database terpisah — **bukan** dengan pengguna yang dipakai proses web.
+      Perintah itu butuh `CREATE`/`DROP DATABASE`; memberikannya kepada
+      pengguna web berarti setiap celah di aplikasi berujung pada kemampuan
+      menghapus database. Caranya di `deploy-care-lessworry.md`.
 
 ## Optimasi
 

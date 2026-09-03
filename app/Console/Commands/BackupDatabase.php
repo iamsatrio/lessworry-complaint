@@ -36,6 +36,9 @@ class BackupDatabase extends Command
 
     protected $description = 'Dump database ke berkas terkompresi dan buang dump yang sudah terlalu tua';
 
+    /** Umur berkas .tmp-* yang sudah pasti bukan milik proses yang berjalan. */
+    private const UMUR_SISA_JAM = 6;
+
     public function handle(BerkasBackup $berkas): int
     {
         try {
@@ -72,6 +75,8 @@ class BackupDatabase extends Command
 
     private function jalankan(BerkasBackup $berkas, string $dir): int
     {
+        $this->sapuSisaDump($dir);
+
         $driver = DB::connection()->getDriverName();
 
         if (! in_array($driver, ['mysql', 'mariadb', 'sqlite'], true)) {
@@ -259,6 +264,43 @@ class BackupDatabase extends Command
         if (gzwrite($gz, $potongan) === false) {
             throw new \RuntimeException('Gagal menulis berkas backup.');
         }
+    }
+
+    /**
+     * Buang berkas sementara yang ditinggalkan proses yang mati di tengah dump.
+     *
+     * Berkas `.tmp-*` tidak cocok pola rotasi — memang disengaja, supaya dump
+     * setengah jadi tidak pernah terbaca sebagai backup — tapi akibatnya
+     * rotasi juga tidak pernah membuangnya. Server yang di-reboot saat dump
+     * berjalan meninggalkan satu berkas berukuran penuh, selamanya.
+     *
+     * Batas umurnya jauh lebih panjang daripada dump terlama yang masuk akal,
+     * supaya berkas milik proses yang MASIH berjalan tidak ikut terbawa.
+     * Dijalankan di bawah kunci yang sama dengan dumpnya.
+     */
+    private function sapuSisaDump(string $dir): void
+    {
+        $kedaluwarsa = now()->subHours(self::UMUR_SISA_JAM)->getTimestamp();
+
+        foreach ((array) scandir($dir) as $nama) {
+            if (! is_string($nama) || ! str_starts_with($nama, '.tmp-')) {
+                continue;
+            }
+
+            $path = $dir.'/'.$nama;
+
+            if (! is_file($path) || (int) filemtime($path) > $kedaluwarsa) {
+                continue;
+            }
+
+            if (@unlink($path)) {
+                $this->line('  sapu     '.$nama.' (sisa dump yang tidak selesai)');
+            }
+        }
+
+        // Berkas .lock sengaja TIDAK ikut disapu: ukurannya nol, flock-nya
+        // sudah dilepas kernel saat prosesnya mati, dan menghapusnya justru
+        // membuat dua proses bisa memegang "kunci" pada inode yang berbeda.
     }
 
     /** Buang dump paling tua, hanya di dalam direktori backup. */

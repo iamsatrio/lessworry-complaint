@@ -265,4 +265,106 @@ class BackupTest extends TestCase
         // seluruh riwayat backup.
         $this->assertCount(10, $this->berkas());
     }
+
+    /* ---------- Dump tidak dipercaya isinya (temuan T2 di PR #2) ---------- */
+
+    private function tulisBackup(string $nama, string $sql): string
+    {
+        $path = $this->dir.'/'.$nama;
+        file_put_contents($path, gzencode($sql));
+
+        return $path;
+    }
+
+    public function test_verify_menolak_dump_yang_memuat_use(): void
+    {
+        // Persis bentuk keluaran `mysqldump --databases` — cara paling umum
+        // orang membuat dump manual. Klien mysql mematuhi USE, jadi tanpa
+        // penolakan ini restore pindah ke database produksi dan menimpanya.
+        $this->tulisBackup('db-2030-01-01-020000.sql.gz', <<<'SQL'
+        -- MySQL dump 10.13
+        USE `lessworry_care`;
+        CREATE TABLE `complaints` (`id` int);
+        SQL);
+
+        $this->artisan('backup:verify')
+            ->expectsOutputToContain('USE')
+            ->assertFailed();
+    }
+
+    public function test_verify_menolak_dump_yang_memuat_create_database(): void
+    {
+        $this->tulisBackup('db-2030-01-02-020000.sql.gz', <<<'SQL'
+        CREATE DATABASE /*!32312 IF NOT EXISTS*/ `lessworry_care`;
+        CREATE TABLE `complaints` (`id` int);
+        SQL);
+
+        $this->artisan('backup:verify')
+            ->expectsOutputToContain('CREATE DATABASE')
+            ->assertFailed();
+    }
+
+    public function test_verify_menolak_attach_dan_tidak_menyentuh_berkas_yang_dituju(): void
+    {
+        // Padanan USE di SQLite: ATTACH menempelkan berkas database lain,
+        // dan baris berikutnya menulis ke sana.
+        $sasaran = storage_path('app/sasaran-'.uniqid().'.sqlite');
+        file_put_contents($sasaran, '');
+
+        $this->tulisBackup('db-2030-01-03-020000.sql.gz', <<<SQL
+        CREATE TABLE complaints (id integer);
+        ATTACH DATABASE '{$sasaran}' AS korban;
+        CREATE TABLE korban.dirusak (id integer);
+        SQL);
+
+        try {
+            $this->artisan('backup:verify')
+                ->expectsOutputToContain('ATTACH DATABASE')
+                ->assertFailed();
+
+            // Ditolak SEBELUM satu byte pun dijalankan.
+            $this->assertSame('', (string) file_get_contents($sasaran));
+        } finally {
+            @unlink($sasaran);
+        }
+    }
+
+    public function test_dump_buatan_sendiri_tidak_pernah_memuat_perintah_yang_ditolak(): void
+    {
+        $this->complaint();
+        $this->artisan('backup:database')->assertSuccessful();
+
+        $isi = (string) file_get_contents('compress.zlib://'.$this->dir.'/'.$this->berkas()[0]);
+
+        foreach (['USE `', 'CREATE DATABASE', 'CREATE SCHEMA', 'ATTACH DATABASE'] as $terlarang) {
+            $this->assertStringNotContainsStringIgnoringCase($terlarang, $isi);
+        }
+
+        // Dan dump buatan sendiri tetap lolos pemeriksaannya.
+        $this->artisan('backup:verify')->assertSuccessful();
+    }
+
+    /* ---------- Sisa berkas sementara ---------- */
+
+    public function test_sisa_dump_yang_ditinggalkan_proses_mati_disapu(): void
+    {
+        $lama = $this->dir.'/.tmp-999-abandoned.gz';
+        file_put_contents($lama, 'dump yang tidak selesai');
+        touch($lama, now()->subHours(9)->getTimestamp());
+
+        $baru = $this->dir.'/.tmp-1000-berjalan.gz';
+        file_put_contents($baru, 'dump proses lain yang masih berjalan');
+
+        $this->complaint();
+        $this->artisan('backup:database')->assertSuccessful();
+
+        $this->assertFileDoesNotExist($lama);
+
+        // Yang baru dibiarkan: bisa jadi milik proses yang sedang menulis.
+        $this->assertFileExists($baru);
+
+        // Kunci tidak ikut disapu — menghapusnya membuat dua proses bisa
+        // memegang kunci pada inode yang berbeda.
+        $this->assertFileExists($this->dir.'/.lock');
+    }
 }

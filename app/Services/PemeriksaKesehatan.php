@@ -63,32 +63,53 @@ class PemeriksaKesehatan
         }
     }
 
+    /**
+     * Hasilnya disimpan di cache store khusus /health (config/health.php),
+     * BUKAN store bawaan.
+     *
+     * Store bawaan produksi adalah `database`. Kalau dipakai di sini, database
+     * yang mati membuat pemeriksaan ini melempar QueryException tepat setelah
+     * pemeriksaan `database` mengembalikan "error" — dan seluruh jawaban
+     * berubah jadi HTTP 500 tanpa isi. Pemadaman yang paling perlu dibedakan
+     * justru yang membuat /health bisu.
+     */
     private function nevira(): string
     {
-        return Cache::remember(self::CACHE_NEVIRA, self::NEVIRA_TTL, function () {
-            if (! config('nevira.enabled')) {
-                return 'disabled';
-            }
+        try {
+            return Cache::store(config('health.cache_store'))
+                ->remember(self::CACHE_NEVIRA, self::NEVIRA_TTL, fn () => $this->tanyaNevira());
+        } catch (Throwable) {
+            // Cachenya sendiri tidak terbaca. Dilaporkan rusak, dan SENGAJA
+            // tidak jatuh ke "panggil NEVIRA langsung": tanpa cache, setiap
+            // panggilan pemantau jadi satu panggilan ke NEVIRA — membanjirinya
+            // persis saat sistem sedang kacau.
+            return 'error';
+        }
+    }
 
-            $klien = app(NeviraClient::class);
+    private function tanyaNevira(): string
+    {
+        if (! config('nevira.enabled')) {
+            return 'disabled';
+        }
 
-            // Integrasi dinyalakan tapi kredensialnya kosong bukan pilihan,
-            // itu salah pasang. Dilaporkan sebagai error.
-            if (! $klien->isConfigured()) {
-                return 'error';
-            }
+        $klien = app(NeviraClient::class);
 
-            try {
-                $klien->me();
+        // Integrasi dinyalakan tapi kredensialnya kosong bukan pilihan,
+        // itu salah pasang. Dilaporkan sebagai error.
+        if (! $klien->isConfigured()) {
+            return 'error';
+        }
 
-                return 'ok';
-            } catch (Throwable) {
-                // Sengaja tanpa pesan: isinya bisa memuat URL dan status
-                // internal NEVIRA. Detailnya sudah masuk log lewat
-                // NeviraClient.
-                return 'error';
-            }
-        });
+        try {
+            $klien->me();
+
+            return 'ok';
+        } catch (Throwable) {
+            // Sengaja tanpa pesan: isinya bisa memuat URL dan status internal
+            // NEVIRA. Detailnya sudah masuk log lewat NeviraClient.
+            return 'error';
+        }
     }
 
     /**
