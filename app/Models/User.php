@@ -44,6 +44,11 @@ class User extends Authenticatable
 
     /* ---------- Peran (API-13) ---------- */
 
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
     public function isSupervisor(): bool
     {
         return $this->role === 'supervisor';
@@ -67,18 +72,18 @@ class User extends Authenticatable
     /** Boleh melihat seluruh outlet. */
     public function seesAllOutlets(): bool
     {
-        return in_array($this->role, ['supervisor', 'customer_care'], true);
+        return in_array($this->role, ['admin', 'supervisor', 'customer_care'], true);
     }
 
     public function canCreateComplaint(): bool
     {
-        return in_array($this->role, ['kasir', 'customer_care', 'supervisor'], true);
+        return in_array($this->role, ['kasir', 'customer_care', 'supervisor', 'admin'], true);
     }
 
-    /** Hanya CC dan supervisor yang boleh menutup complaint. */
+    /** Hanya CC, supervisor, dan admin yang boleh menutup complaint. */
     public function canResolve(): bool
     {
-        return in_array($this->role, ['customer_care', 'supervisor'], true);
+        return in_array($this->role, ['customer_care', 'supervisor', 'admin'], true);
     }
 
     /**
@@ -88,18 +93,27 @@ class User extends Authenticatable
      */
     public function canSeeStaffAttribution(): bool
     {
-        return in_array($this->role, ['customer_care', 'supervisor'], true);
+        return in_array($this->role, ['customer_care', 'supervisor', 'admin'], true);
     }
 
     /** Menetapkan penanggung jawab adalah penilaian, bukan pencatatan. */
     public function canAssignResponsibility(): bool
     {
-        return in_array($this->role, ['customer_care', 'supervisor'], true);
+        return in_array($this->role, ['customer_care', 'supervisor', 'admin'], true);
     }
 
+    /**
+     * Mengelola pengguna adalah wewenang Admin, bukan Supervisor.
+     *
+     * Supervisor memimpin pekerjaan di lapangan — melihat seluruh outlet,
+     * menutup complaint apa pun bobotnya, menyetujui kompensasi tanpa batas.
+     * Yang TIDAK dipegangnya: membuat akun, mengubah peran orang lain, dan
+     * menonaktifkan orang. Itu memisahkan wewenang operasional dari wewenang
+     * atas siapa yang boleh masuk ke sistem.
+     */
     public function canManageUsers(): bool
     {
-        return $this->role === 'supervisor';
+        return $this->role === 'admin';
     }
 
     /**
@@ -134,8 +148,11 @@ class User extends Authenticatable
         return match ($this->role) {
             'kasir'         => 'Kasir',
             'customer_care' => 'Customer Care',
-            'divisi'        => 'Divisi '.config('complaint.divisions.'.$this->division, $this->division),
+            // Divisi boleh belum diisi — jangan balas null, halaman Pengguna
+            // memanggil ini untuk setiap baris.
+            'divisi'        => (string) (config('complaint.divisions.'.$this->division, $this->division) ?: 'Produksi / Kurir'),
             'supervisor'    => 'Supervisor',
+            'admin'         => 'Admin',
             default         => $this->role,
         };
     }

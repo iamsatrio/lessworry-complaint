@@ -74,22 +74,22 @@ class SessionRevocationTest extends TestCase
             ->assertRedirect('/login');
     }
 
-    public function test_reset_password_oleh_supervisor_memutus_sesi_pegawai(): void
+    public function test_reset_password_oleh_admin_memutus_sesi_pegawai(): void
     {
-        $supervisor = User::create([
+        $admin = User::create([
             'name' => 'SV', 'email' => 'sv'.uniqid().'@lessworry.id',
-            'password' => 'secret123', 'role' => 'supervisor',
+            'password' => 'secret123', 'role' => 'admin',
         ]);
         $pegawai = $this->kasir();
         $hashLama = $pegawai->password;
 
         $this->actingAs($pegawai)->get('/dashboard')->assertOk();
 
-        // Perangkat supervisor adalah sesi lain: jangan bawa hash milik
+        // Perangkat admin adalah sesi lain: jangan bawa hash milik
         // pegawai dari permintaan di atas.
         $this->flushSession();
 
-        $this->actingAs($supervisor)->post('/users/'.$pegawai->id.'/reset-password')
+        $this->actingAs($admin)->post('/users/'.$pegawai->id.'/reset-password')
             ->assertRedirect(route('users.index'));
 
         // Pegawai yang baru keluar tetap memegang sesi lamanya di HP-nya.

@@ -85,8 +85,8 @@ return [
     ],
 
     'divisions' => [
-        'produksi' => 'Operasional Cuci / Produksi',
-        'kurir'    => 'Kurir / Antar Jemput',
+        'produksi' => 'Produksi',
+        'kurir'    => 'Kurir',
         'keuangan' => 'Keuangan',
     ],
 
@@ -94,6 +94,7 @@ return [
     | Batas wewenang kompensasi per peran, dalam rupiah. Final di API-6.
     */
     'compensation_limit' => [
+        'admin'          => PHP_INT_MAX,
         'kasir'          => 50000,
         'customer_care'  => 200000,
         'divisi'         => 0,
