@@ -16,6 +16,15 @@
       <span class="badge b-{{ $complaint->status }}">{{ $complaint->statusDisplay() }}</span>
     </div>
     @include('partials.sla')
+    @if($complaint->totalPauseMinutes() > 0)
+      {{-- Angka penyelesaian tidak menghitung jeda. Kalau itu tidak disebut,
+           orang akan membandingkannya dengan tanggal di layar dan mengira
+           salah satunya bohong. --}}
+      <div class="muted small" style="text-align:right">
+        Termasuk jeda {{ \App\Models\Complaint::humanMinutes($complaint->totalPauseMinutes()) }},
+        tidak dihitung sebagai waktu penyelesaian
+      </div>
+    @endif
   </div>
 </div>
 
@@ -259,18 +268,36 @@
 
         {{-- Jeda: penanda pada tiket Handling, bukan status keenam. Selama
              dijeda, hitungan SLA berhenti dan tenggatnya mundur sebanyak lama
-             jeda begitu dilanjutkan. --}}
-        <label for="pz">Jeda SLA</label>
-        <select id="pz" name="pause_reason">
-          <option value="">Tidak dijeda — hitungan SLA berjalan</option>
-          @foreach(config('complaint.pause_reasons') as $k=>$v)
-            <option value="{{ $k }}" @selected(old('pause_reason', $complaint->pause_reason)===$k)>{{ $v }}</option>
-          @endforeach
-        </select>
+             jeda begitu dilanjutkan.
+
+             Kolomnya hanya muncul untuk yang berwenang MEMULAI jeda. Yang
+             tidak berwenang tetap bisa memperbarui tiket yang sudah dijeda
+             orang lain — form-nya tidak mengirim kolom ini, dan jedanya
+             dibiarkan apa adanya. Penjaganya tetap server. --}}
+        @if(auth()->user()->canPause($complaint))
+          <label for="pz">Jeda SLA</label>
+          <select id="pz" name="pause_reason">
+            <option value="">Tidak dijeda — hitungan SLA berjalan</option>
+            @foreach(config('complaint.pause_reasons') as $k=>$v)
+              <option value="{{ $k }}" @selected(old('pause_reason', $complaint->pause_reason)===$k)>{{ $v }}</option>
+            @endforeach
+          </select>
+        @elseif($complaint->isPaused())
+          {{-- Tetap bisa melanjutkan: arahnya aman, ia mengembalikan tiket ke
+               hitungan SLA alih-alih menyembunyikannya. --}}
+          <label for="pz">Jeda SLA</label>
+          <select id="pz" name="pause_reason">
+            <option value="menunggu_pelanggan" selected>Tetap dijeda — {{ $complaint->pauseReasonLabel() }}</option>
+            <option value="">Lanjutkan, jalankan lagi hitungan SLA</option>
+          </select>
+        @endif
         @if($complaint->isPaused())
           <p class="hint">Dijeda sejak {{ $complaint->paused_at->translatedFormat('d M Y, H:i') }}
             ({{ \App\Models\Complaint::humanMinutes($complaint->pauseMinutes()) }}).
             Tenggat akan mundur sebanyak itu saat dilanjutkan.</p>
+        @elseif(! auth()->user()->canPause($complaint))
+          <p class="hint">Complaint {{ $complaint->bobotLabel() }} hanya bisa dijeda Customer Care —
+            jeda menghentikan hitungan SLA.</p>
         @endif
 
         {{-- Alasan penutupan menggantikan status "Ditolak". Tiketnya tetap

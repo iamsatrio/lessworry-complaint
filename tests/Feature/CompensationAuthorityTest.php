@@ -27,11 +27,11 @@ class CompensationAuthorityTest extends TestCase
         ]);
     }
 
-    private function complaint(int $kompensasi = 0, ?Outlet $outlet = null): Complaint
+    private function complaint(int $kompensasi = 0, ?Outlet $outlet = null, string $bobot = 'sedang'): Complaint
     {
         $complaint = new Complaint([
             'channel' => 'kasir', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
-            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x', 'outlet_id' => $outlet?->id,
+            'bobot' => $bobot, 'layanan' => 'kiloan', 'description' => 'x', 'outlet_id' => $outlet?->id,
         ]);
         $complaint->ticket_number = Complaint::nextTicketNumber();
         $complaint->status = 'handling';
@@ -58,7 +58,9 @@ class CompensationAuthorityTest extends TestCase
     public function test_kasir_tetap_bisa_memperbarui_status_tanpa_menyentuh_kompensasi(): void
     {
         $outlet = Outlet::create(['name' => 'Pusat']);
-        $complaint = $this->complaint(1_000_000, $outlet);
+        // Ringan: menjeda sekarang mengikuti sumbu bobot yang sama dengan
+        // menutup, dan yang diuji di sini kompensasinya — bukan wewenang jeda.
+        $complaint = $this->complaint(1_000_000, $outlet, 'ringan');
 
         // Form mengirim nilai yang sekarang apa adanya — itu bukan perubahan.
         $this->actingAs($this->userAs('kasir', $outlet))

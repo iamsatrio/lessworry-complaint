@@ -29,7 +29,8 @@ class Complaint extends Model
      * halaman complaint membaca nilai ini langsung. (API-8 T6)
      */
     protected $attributes = [
-        'lock_version' => 0,
+        'lock_version'   => 0,
+        'paused_minutes' => 0,
     ];
 
     protected function casts(): array
@@ -43,6 +44,7 @@ class Complaint extends Model
             'paused_at'        => 'datetime',
             'resolved_at'      => 'datetime',
             'lock_version'     => 'integer',
+            'paused_minutes'   => 'integer',
         ];
     }
 
@@ -356,6 +358,10 @@ class Complaint extends Model
             $this->due_resolution_at = $this->due_resolution_at->copy()->addMinutes($menit);
         }
 
+        // Ditotalkan, bukan ditimpa: satu tiket bisa dijeda berkali-kali, dan
+        // laporan butuh seluruhnya — bukan yang terakhir saja.
+        $this->paused_minutes = (int) $this->paused_minutes + $menit;
+
         $this->paused_at = null;
         $this->pause_reason = null;
 
@@ -458,14 +464,39 @@ class Complaint extends Model
         return $h > 0 ? $d.' hari '.$h.' jam' : $d.' hari';
     }
 
-    /** Lama penyelesaian dalam menit; null kalau belum selesai. */
+    /**
+     * Lama penyelesaian dalam menit — WAKTU KERJA TIM, jeda tidak dihitung.
+     * Null kalau belum selesai. (Review PR #1 nomor 3)
+     *
+     * Tanpa pengurangan ini, satu tiket melaporkan dua kebenaran yang
+     * bertabrakan: `isOverdue()` bilang tepat waktu karena tenggatnya ikut
+     * mundur selama jeda, sementara laporan bilang sebelas hari karena
+     * menghitung mentah dari `created_at` ke `resolved_at`.
+     *
+     * Yang lebih buruk daripada angkanya salah: makin benar tim memakai jeda,
+     * makin lambat mereka terlihat di laporannya sendiri. Itu mengajari orang
+     * untuk berhenti memakai jeda — padahal jeda itu yang membuat SLA jujur.
+     */
     public function resolutionMinutes(): ?int
     {
         if ($this->resolved_at === null) {
             return null;
         }
 
-        return $this->created_at->diffInMinutes($this->resolved_at);
+        $total = (int) round($this->created_at->diffInMinutes($this->resolved_at));
+
+        // Jeda yang masih berjalan ikut dikurangi. Jalur normal selalu
+        // melanjutkan tiket sebelum menutupnya, tapi angka ini tidak boleh
+        // bergantung pada urutan pemanggilan orang lain.
+        $jeda = (int) $this->paused_minutes + $this->pauseMinutes();
+
+        return max(0, $total - $jeda);
+    }
+
+    /** Total lama jeda tiket ini, termasuk jeda yang sedang berjalan. */
+    public function totalPauseMinutes(): int
+    {
+        return (int) $this->paused_minutes + $this->pauseMinutes();
     }
 
     /* ---------- Scope ---------- */

@@ -328,6 +328,20 @@ class ComplaintController extends Controller
                 : 'Peranmu tidak berwenang menutup complaint.']);
         }
 
+        // Membuka kembali tiket yang sudah ditutup memakai wewenang yang sama
+        // dengan menutupnya. Tanpa ini, kasir tidak boleh MENUTUP complaint
+        // Berat tapi boleh MEMBATALKAN penutupan supervisor — dan blok di
+        // bawah mengosongkan resolved_at, jadi waktu penyelesaian yang
+        // "selalu dihitung sistem" hilang permanen. (Review PR #1 temuan A)
+        $reopening = $complaint->status === 'close' && ! $closing;
+
+        if ($reopening && ! $user->canReopen($complaint)) {
+            return back()->withInput()->withErrors(['status' => $user->isKasir()
+                ? 'Kasir hanya boleh membuka kembali complaint berbobot Ringan. Complaint ini '
+                    .$complaint->bobotLabel().' dan sudah ditutup — mintakan ke Customer Care.'
+                : 'Peranmu tidak berwenang membuka kembali complaint yang sudah ditutup.']);
+        }
+
         // Jeda hanya masuk akal pada tiket yang sedang ditangani. Tiket Open
         // yang belum dipegang siapa pun tidak sedang menunggu pelanggan.
         if ($request->filled('pause_reason') && $data['status'] !== 'handling') {
@@ -342,6 +356,20 @@ class ComplaintController extends Controller
         $mintaJeda = $data['status'] === 'handling'
             ? ($request->has('pause_reason') ? ($data['pause_reason'] ?? null) : $complaint->pause_reason)
             : null;
+
+        // Yang diperiksa adalah MEMULAI jeda, bukan mempertahankan jeda yang
+        // sudah berjalan: kasir yang menambahkan catatan pada tiket Berat yang
+        // dijeda Customer Care tidak sedang menjalankan wewenang itu, dan
+        // menolaknya di sini hanya akan mengunci tiketnya dari semua orang.
+        $memulaiJeda = $mintaJeda !== null && $complaint->paused_at === null;
+
+        if ($memulaiJeda && ! $user->canPause($complaint)) {
+            return back()->withInput()->withErrors(['pause_reason' => $user->isKasir()
+                ? 'Kasir hanya boleh menjeda complaint berbobot Ringan. Complaint ini '
+                    .$complaint->bobotLabel().' — jeda menghentikan hitungan SLA, jadi '
+                    .'yang memutuskan Customer Care.'
+                : 'Peranmu tidak berwenang menjeda hitungan SLA.']);
+        }
 
         // Batas wewenang kompensasi berlaku dua arah. Batas atas sudah
         // dijaga; yang tidak adalah penurunan — kasir bisa memangkas angka
@@ -373,17 +401,21 @@ class ComplaintController extends Controller
         // mengubah angkanya. Tanpa pemeriksaan ini kasir bisa menutup
         // complaint Ringan berkompensasi Rp 200.000 hanya karena angkanya
         // sudah ada di sana sebelum ia membuka halaman. (API-25 #5)
-        if ($closing && $compensation > $batas) {
+        if (($closing || $reopening) && $compensation > $batas) {
             return back()->withInput()->withErrors([
                 'compensation_amount' => 'Complaint ini berkompensasi Rp '.number_format($compensation, 0, ',', '.')
                     .', di atas batas wewenang '.$user->roleLabel()
-                    .' (Rp '.number_format($batas, 0, ',', '.').'). Penutupannya naik ke yang berwenang di angka itu.',
+                    .' (Rp '.number_format($batas, 0, ',', '.').'). '
+                    .($closing ? 'Penutupannya' : 'Pembukaannya kembali').' naik ke yang berwenang di angka itu.',
             ]);
         }
 
         $from = $complaint->status;
+        // Dibaca sebelum blok di bawah mengosongkannya, supaya angka yang
+        // dibatalkan tetap punya jejak di riwayat.
+        $resolvedSebelumnya = $complaint->resolved_at;
 
-        DB::transaction(function () use ($request, $complaint, $data, $user, $from, $closing, $compensation, $sekarang, $mintaJeda) {
+        DB::transaction(function () use ($request, $complaint, $data, $user, $from, $closing, $reopening, $compensation, $sekarang, $mintaJeda, $resolvedSebelumnya) {
             $complaint->status = $data['status'];
             $complaint->lock_version = (int) $complaint->lock_version + 1;
             $complaint->resolution = $data['resolution'] ?? $complaint->resolution;
@@ -433,6 +465,18 @@ class ComplaintController extends Controller
                 'to_status'    => $complaint->status,
                 'note'         => $data['note'] ?? null,
             ]);
+
+            // Penutupan yang dibatalkan membuang waktu penyelesaian. Boleh,
+            // tapi tidak boleh tanpa bekas.
+            if ($reopening && $resolvedSebelumnya !== null) {
+                ComplaintActivity::create([
+                    'complaint_id' => $complaint->id,
+                    'user_id'      => $user->id,
+                    'type'         => 'note',
+                    'note'         => 'Penutupan dibatalkan. Sebelumnya tercatat selesai '
+                        .$resolvedSebelumnya->translatedFormat('d M Y, H:i').'.',
+                ]);
+            }
 
             // Jeda memundurkan tenggat, jadi ia harus punya jejaknya sendiri.
             if ($jeda === 'mulai') {

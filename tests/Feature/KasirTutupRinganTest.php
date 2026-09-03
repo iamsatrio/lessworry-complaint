@@ -242,6 +242,97 @@ class KasirTutupRinganTest extends TestCase
         $this->assertSame('handling', $complaint->fresh()->status);
     }
 
+    /* ---------- Membuka kembali = wewenang yang sama (Review PR #1 temuan A) ---------- */
+
+    /**
+     * Kebalikan sebuah tindakan berwewenang tetap tindakan berwewenang.
+     *
+     * Sebelumnya wewenang hanya diperiksa saat MENUTUP, jadi kasir tidak boleh
+     * menutup complaint Berat tapi boleh membatalkan penutupan supervisor —
+     * dan blok transaksinya mengosongkan `resolved_at`, jadi waktu penyelesaian
+     * yang "selalu dihitung sistem" hilang permanen.
+     */
+    public function test_kasir_ditolak_membuka_kembali_complaint_berat_yang_ditutup_supervisor(): void
+    {
+        $outlet = Outlet::create(['name' => 'Pusat']);
+        $complaint = $this->complaint('berat', 1_000_000, $outlet);
+
+        $this->tutup($this->userAs('supervisor'), $complaint)->assertSessionHasNoErrors();
+
+        $ditutupPada = $complaint->fresh()->resolved_at;
+        $this->assertNotNull($ditutupPada);
+
+        $this->actingAs($this->userAs('kasir', $outlet))
+            ->post('/complaints/'.$complaint->id.'/status', [
+                'lock_version' => $complaint->fresh()->lock_version,
+                'status'       => 'handling',
+            ])->assertSessionHasErrors('status');
+
+        $complaint->refresh();
+
+        $this->assertSame('close', $complaint->status, 'kasir membatalkan penutupan supervisor');
+        $this->assertSame('selesai', $complaint->close_reason);
+        $this->assertEquals($ditutupPada, $complaint->resolved_at,
+            'waktu penyelesaian hilang saat penutupan dibatalkan');
+    }
+
+    /** Batas kompensasi ikut berlaku ke arah sebaliknya, bukan hanya saat menutup. */
+    public function test_customer_care_ditolak_membuka_kembali_complaint_di_atas_batas_wewenangnya(): void
+    {
+        $complaint = $this->complaint('berat', 1_000_000);
+
+        $this->tutup($this->userAs('supervisor'), $complaint)->assertSessionHasNoErrors();
+
+        $this->actingAs($this->userAs('customer_care'))
+            ->post('/complaints/'.$complaint->id.'/status', [
+                'lock_version' => $complaint->fresh()->lock_version,
+                'status'       => 'handling',
+            ])->assertSessionHasErrors('compensation_amount');
+
+        $this->assertSame('close', $complaint->fresh()->status);
+    }
+
+    public function test_kasir_boleh_membuka_kembali_complaint_ringan_yang_ditutupnya_sendiri(): void
+    {
+        $outlet = Outlet::create(['name' => 'Pusat']);
+        $complaint = $this->complaint('ringan', 0, $outlet);
+        $kasir = $this->userAs('kasir', $outlet);
+
+        $this->tutup($kasir, $complaint)->assertSessionHasNoErrors();
+        $this->assertSame('close', $complaint->fresh()->status);
+
+        $this->actingAs($kasir)->post('/complaints/'.$complaint->id.'/status', [
+            'lock_version' => $complaint->fresh()->lock_version,
+            'status'       => 'handling',
+        ])->assertSessionHasNoErrors();
+
+        $complaint->refresh();
+
+        $this->assertSame('handling', $complaint->status);
+        $this->assertNull($complaint->close_reason);
+        $this->assertNull($complaint->resolved_at);
+    }
+
+    /** Penutupan yang dibatalkan boleh, tapi tidak boleh tanpa bekas. */
+    public function test_pembatalan_penutupan_meninggalkan_jejak_waktu_selesai_sebelumnya(): void
+    {
+        $complaint = $this->complaint('berat');
+        $supervisor = $this->userAs('supervisor');
+
+        $this->tutup($supervisor, $complaint)->assertSessionHasNoErrors();
+
+        $this->actingAs($supervisor)->post('/complaints/'.$complaint->id.'/status', [
+            'lock_version' => $complaint->fresh()->lock_version,
+            'status'       => 'handling',
+        ])->assertSessionHasNoErrors();
+
+        $catatan = $complaint->activities()->pluck('note')->implode(' | ');
+
+        $this->assertStringContainsString('Penutupan dibatalkan', $catatan,
+            'waktu penyelesaian dibuang tanpa satu baris pun di riwayat');
+        $this->assertSame('handling', $complaint->fresh()->status);
+    }
+
     /* ---------- Yang tidak berubah ---------- */
 
     public function test_customer_care_tetap_bisa_menutup_complaint_berat(): void
