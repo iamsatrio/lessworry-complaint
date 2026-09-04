@@ -9,11 +9,11 @@ use App\Http\Requests\AddResponsibleRequest;
 use App\Http\Requests\StoreComplaintRequest;
 use App\Http\Requests\UpdateComplaintStatusRequest;
 use App\Models\Complaint;
-use App\Models\ComplaintActivity;
 use App\Models\ComplaintAttachment;
 use App\Models\ComplaintResponsible;
 use App\Models\Outlet;
 use App\Models\User;
+use App\Services\JejakComplaint;
 use App\Services\KandidatPelaku;
 use App\Services\NeviraGate;
 use App\Services\PenyimpanFoto;
@@ -26,7 +26,11 @@ use Illuminate\Validation\Rule;
 
 class ComplaintController extends Controller
 {
-    public function __construct(private NeviraGate $nevira, private PenyimpanFoto $foto) {}
+    public function __construct(
+        private NeviraGate $nevira,
+        private PenyimpanFoto $foto,
+        private JejakComplaint $jejak,
+    ) {}
 
     /** Papan kerja: complaint terbuka, disaring per peran. */
     public function index(Request $request)
@@ -120,13 +124,7 @@ class ComplaintController extends Controller
                 $complaint->applySla();
                 $complaint->save();
 
-                ComplaintActivity::create([
-                    'complaint_id' => $complaint->id,
-                    'user_id' => $user->id,
-                    'type' => 'created',
-                    'to_status' => 'baru',
-                    'note' => 'Complaint dibuat lewat '.$complaint->channelLabel(),
-                ]);
+                $this->jejak->dibuat($complaint, $user);
 
                 foreach ($berkas as $b) {
                     $complaint->attachments()->create($b);
@@ -325,26 +323,10 @@ class ComplaintController extends Controller
 
             $complaint->save();
 
-            ComplaintActivity::create([
-                'complaint_id' => $complaint->id,
-                'user_id' => $user->id,
-                'type' => 'status_change',
-                'from_status' => $from,
-                'to_status' => $complaint->status,
-                'note' => $data['note'] ?? null,
-            ]);
+            $this->jejak->statusBerubah($complaint, $user, $from, $complaint->status, $data['note'] ?? null);
 
-            // Uang yang berpindah harus punya jejak sendiri. Riwayat dulu
-            // hanya mencatat perubahan status, jadi nilai kompensasi bisa
-            // bergerak tanpa siapa pun bisa menelusurinya. (API-14 #10)
             if ($compensation !== $sekarang) {
-                ComplaintActivity::create([
-                    'complaint_id' => $complaint->id,
-                    'user_id' => $user->id,
-                    'type' => 'note',
-                    'note' => 'Kompensasi diubah dari Rp '.number_format($sekarang, 0, ',', '.')
-                        .' ke Rp '.number_format($compensation, 0, ',', '.').'.',
-                ]);
+                $this->jejak->kompensasiBerubah($complaint, $user, $sekarang, $compensation);
             }
         });
 
@@ -380,14 +362,7 @@ class ComplaintController extends Controller
 
         $complaint->fill($data)->save();
 
-        ComplaintActivity::create([
-            'complaint_id' => $complaint->id,
-            'user_id' => $user->id,
-            'type' => filled($data['forwarded_division'] ?? null) ? 'forward' : 'assign',
-            'note' => filled($data['forwarded_division'] ?? null)
-                ? 'Diteruskan ke divisi '.config('complaint.divisions.'.$data['forwarded_division'])
-                : 'Penanggung jawab diperbarui',
-        ]);
+        $this->jejak->penugasan($complaint, $user, $data['forwarded_division'] ?? null);
 
         return back()->with('status', 'Penugasan diperbarui.');
     }
@@ -410,12 +385,7 @@ class ComplaintController extends Controller
         [$berkas, $gagal] = $this->foto->simpanBanyak($request->file('photos', []), 'complaints/'.$complaint->id);
 
         DB::transaction(function () use ($complaint, $data, $user, $berkas) {
-            $activity = ComplaintActivity::create([
-                'complaint_id' => $complaint->id,
-                'user_id' => $user->id,
-                'type' => 'note',
-                'note' => $data['note'],
-            ]);
+            $activity = $this->jejak->catatan($complaint, $user, $data['note']);
 
             foreach ($berkas as $b) {
                 $complaint->attachments()->create($b + ['complaint_activity_id' => $activity->id]);
@@ -478,16 +448,7 @@ class ComplaintController extends Controller
             'nevira_sync_error' => null,
         ])->save();
 
-        ComplaintActivity::create([
-            'complaint_id' => $complaint->id,
-            'user_id' => $user->id,
-            'type' => 'note',
-            'note' => $old === ''
-                ? 'Ditautkan ke order NEVIRA '.$new
-                : ($new === ''
-                    ? 'Tautan ke order NEVIRA '.$old.' dilepas'
-                    : 'Tautan order NEVIRA diubah dari '.$old.' ke '.$new),
-        ]);
+        $this->jejak->tautanOrder($complaint, $user, $old, $new);
 
         if ($new !== '') {
             $this->syncNevira($complaint, $user);
@@ -594,15 +555,7 @@ class ComplaintController extends Controller
                 ]);
             }
 
-            ComplaintActivity::create([
-                'complaint_id' => $complaint->id,
-                'user_id' => $user->id,
-                // Jenis tersendiri, bukan 'note': isinya nama karyawan, dan
-                // riwayat complaint dibaca juga oleh kasir. Yang boleh
-                // melihatnya disaring di tampilan. (API-19)
-                'type' => 'responsible',
-                'note' => 'Pelaku ditetapkan: '.$this->sebutPelaku($baru).'. Alasan: '.$data['alasan'],
-            ]);
+            $this->jejak->pelakuDitetapkan($complaint, $user, $baru, $data['alasan']);
         });
 
         return back()->with('status', count($baru).' pelaku ditetapkan.');
@@ -632,13 +585,7 @@ class ComplaintController extends Controller
                 'set_at' => now(),
             ])->save();
 
-            ComplaintActivity::create([
-                'complaint_id' => $complaint->id,
-                'user_id' => $user->id,
-                'type' => 'responsible',
-                'note' => 'Penetapan pelaku '.$responsible->staff_name.' diperbarui ('
-                    .$responsible->roleLabel().'). Alasan: '.$data['alasan'],
-            ]);
+            $this->jejak->pelakuDiperbarui($complaint, $user, $responsible, $data['alasan']);
         });
 
         return back()->with('status', 'Penetapan '.$responsible->staff_name.' diperbarui.');
@@ -658,24 +605,10 @@ class ComplaintController extends Controller
         DB::transaction(function () use ($complaint, $responsible, $user, $nama) {
             $responsible->delete();
 
-            ComplaintActivity::create([
-                'complaint_id' => $complaint->id,
-                'user_id' => $user->id,
-                'type' => 'responsible',
-                'note' => 'Penetapan pelaku ('.$nama.') dicabut.',
-            ]);
+            $this->jejak->pelakuDicabut($complaint, $user, $nama);
         });
 
         return back()->with('status', 'Penetapan '.$nama.' dicabut.');
-    }
-
-    private function sebutPelaku(array $pelaku): string
-    {
-        return collect($pelaku)->map(function ($p) {
-            $peran = config('complaint.responsible_roles.'.$p['role'], $p['role']);
-
-            return $p['name'].' ('.$peran.($p['stage'] ? ' · '.$p['stage'] : '').')';
-        })->implode(', ');
     }
 
     /**
