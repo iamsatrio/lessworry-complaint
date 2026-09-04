@@ -44,7 +44,7 @@ return new class extends Migration
                 if (! ctype_digit((string) $row->nevira_transaction_id)) {
                     DB::table('complaints')->where('id', $row->id)->update([
                         'nevira_transaction_number' => $row->nevira_transaction_id,
-                        'nevira_transaction_id'     => null,
+                        'nevira_transaction_id' => null,
                     ]);
                 }
             });

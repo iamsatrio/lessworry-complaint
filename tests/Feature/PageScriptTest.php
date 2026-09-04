@@ -47,7 +47,7 @@ class PageScriptTest extends TestCase
         preg_match_all('/\bid="([^"]+)"/', $html, $tersedia);
 
         $dipanggil = array_unique($dipanggil[1]);
-        $tersedia  = $tersedia[1];
+        $tersedia = $tersedia[1];
 
         // Halaman tanpa skrip tidak punya kelas kegagalan ini sama sekali —
         // yang dijaga di sini adalah skrip yang memanggil elemen hilang.
@@ -69,7 +69,7 @@ class PageScriptTest extends TestCase
                 $id,
                 $tersedia,
                 "Halaman $halaman memanggil elemen '$id' tapi elemennya tidak ada. "
-                ."Skrip akan berhenti di titik itu dan tombol lain ikut mati."
+                .'Skrip akan berhenti di titik itu dan tombol lain ikut mati.'
             );
         }
     }

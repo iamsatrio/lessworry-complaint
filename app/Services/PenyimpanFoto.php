@@ -43,12 +43,12 @@ class PenyimpanFoto
     /**
      * @return array{path:string,thumb_path:?string,mime:string,original_name:string,original_bytes:int,stored_bytes:int,compression_error:?string}
      *
-     * @throws \RuntimeException kalau isinya bukan gambar yang bisa dibaca
+     * @throws RuntimeException kalau isinya bukan gambar yang bisa dibaca
      */
     public function simpan(UploadedFile $file, string $dir): array
     {
-        $asli  = (int) $file->getSize();
-        $nama  = $file->getClientOriginalName();
+        $asli = (int) $file->getSize();
+        $nama = $file->getClientOriginalName();
         $bytes = (string) file_get_contents($file->getRealPath());
 
         if (@getimagesizefromstring($bytes) === false) {
@@ -66,19 +66,19 @@ class PenyimpanFoto
             $kecil = $this->encode($this->skala($gambar, self::SISI_KECIL));
             imagedestroy($gambar);
 
-            $path      = $dir.'/'.Str::random(40).'.jpg';
+            $path = $dir.'/'.Str::random(40).'.jpg';
             $thumbPath = $dir.'/'.Str::random(40).'-kecil.jpg';
 
             Storage::disk('local')->put($path, $penuh);
             Storage::disk('local')->put($thumbPath, $kecil);
 
             return [
-                'path'              => $path,
-                'thumb_path'        => $thumbPath,
-                'mime'              => 'image/jpeg',
-                'original_name'     => $nama,
-                'original_bytes'    => $asli,
-                'stored_bytes'      => strlen($penuh),
+                'path' => $path,
+                'thumb_path' => $thumbPath,
+                'mime' => 'image/jpeg',
+                'original_name' => $nama,
+                'original_bytes' => $asli,
+                'stored_bytes' => strlen($penuh),
                 'compression_error' => null,
             ];
         } catch (\Throwable $e) {
@@ -86,12 +86,12 @@ class PenyimpanFoto
             // petugas. Aslinya disimpan, kegagalannya dicatat, dan halaman
             // tetap bisa menampilkannya — hanya tanpa versi kecil.
             return [
-                'path'              => $file->store($dir, 'local'),
-                'thumb_path'        => null,
-                'mime'              => $file->getMimeType() ?: 'application/octet-stream',
-                'original_name'     => $nama,
-                'original_bytes'    => $asli,
-                'stored_bytes'      => $asli,
+                'path' => $file->store($dir, 'local'),
+                'thumb_path' => null,
+                'mime' => $file->getMimeType() ?: 'application/octet-stream',
+                'original_name' => $nama,
+                'original_bytes' => $asli,
+                'stored_bytes' => $asli,
                 'compression_error' => Str::limit($e->getMessage(), 180),
             ];
         }
@@ -100,7 +100,7 @@ class PenyimpanFoto
     /** @param \GdImage $gambar */
     private function skala($gambar, int $sisi)
     {
-        $lebar  = imagesx($gambar);
+        $lebar = imagesx($gambar);
         $tinggi = imagesy($gambar);
         $sisiTerpanjang = max($lebar, $tinggi);
 

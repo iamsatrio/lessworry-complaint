@@ -64,7 +64,7 @@ class NeviraClient
             ->acceptJson()
             ->asJson()
             ->post($this->url(config('nevira.login_endpoint')), [
-                'email'    => config('nevira.email'),
+                'email' => config('nevira.email'),
                 'password' => config('nevira.password'),
             ]);
 
@@ -115,7 +115,7 @@ class NeviraClient
             // lewat nevira_sync_error. Query sengaja tidak ikut dicatat: di
             // situ ada nomor nota pelanggan. (API-8 T3)
             Log::warning('NEVIRA request gagal', [
-                'path'   => $path,
+                'path' => $path,
                 'status' => $response->status(),
             ]);
 
@@ -174,8 +174,8 @@ class NeviraClient
             $data = $payload['data'] ?? [];
 
             return [
-                'id'      => $input,
-                'number'  => $data['transaction_number'] ?? null,
+                'id' => $input,
+                'number' => $data['transaction_number'] ?? null,
                 'payload' => $payload,
             ];
         }
@@ -223,7 +223,7 @@ class NeviraClient
     {
         $payload = $this->get('/deliveries-transactions', [
             'keyword' => $transactionNumber,
-            'limit'   => $limit,
+            'limit' => $limit,
         ]);
 
         return $payload['data'] ?? [];
@@ -236,25 +236,25 @@ class NeviraClient
             ->sortBy(fn ($row) => $row['delivery_date'] ?? '')
             ->map(function ($row) {
                 $courier = $row['courier'] ?? [];
-                $status  = $row['status'] ?? null;
+                $status = $row['status'] ?? null;
 
                 return [
-                    'id'            => $row['id_deliveries_transaction'] ?? null,
-                    'date'          => $row['delivery_date'] ?? null,
-                    'status_code'   => $status,
-                    'status'        => config('nevira.delivery_status.'.$status, 'Kode '.$status),
+                    'id' => $row['id_deliveries_transaction'] ?? null,
+                    'date' => $row['delivery_date'] ?? null,
+                    'status_code' => $status,
+                    'status' => config('nevira.delivery_status.'.$status, 'Kode '.$status),
                     'cancel_reason' => ($status === 6 && filled($row['cancel_type'] ?? null))
                         ? config('nevira.delivery_cancel_type.'.$row['cancel_type'], $row['cancel_type'])
                         : null,
-                    'courier_name'  => $courier['username'] ?? null,
-                    'courier_nip'   => $courier['nip'] ?? null,
-                    'courier_id'    => $row['id_user_courier'] ?? null,
-                    'queue_no'      => $row['queue_no'] ?? null,
-                    'distance'      => $row['distance'] ?? null,
-                    'notes'         => $row['notes'] ?? null,
+                    'courier_name' => $courier['username'] ?? null,
+                    'courier_nip' => $courier['nip'] ?? null,
+                    'courier_id' => $row['id_user_courier'] ?? null,
+                    'queue_no' => $row['queue_no'] ?? null,
+                    'distance' => $row['distance'] ?? null,
+                    'notes' => $row['notes'] ?? null,
                     'courier_notes' => $row['notes_courier'] ?? null,
-                    'proof_count'   => count($row['proof_images'] ?? []),
-                    'updated_at'    => $row['updated_at'] ?? null,
+                    'proof_count' => count($row['proof_images'] ?? []),
+                    'updated_at' => $row['updated_at'] ?? null,
                 ];
             })
             ->values()->all();
@@ -302,9 +302,9 @@ class NeviraClient
             ->reject(fn ($row) => array_key_exists('status', $row) && in_array($row['status'], [0, '0', false], true))
             ->map(fn ($row) => [
                 'staff_id' => isset($row['id_user']) ? (string) $row['id_user'] : null,
-                'name'     => (string) $row['username'],
-                'nip'      => $row['nip'] ?? null,
-                'role_id'  => $row['id_role'] ?? null,
+                'name' => (string) $row['username'],
+                'nip' => $row['nip'] ?? null,
+                'role_id' => $row['id_role'] ?? null,
             ])
             ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
             ->values()->all();
@@ -329,52 +329,52 @@ class NeviraClient
         }
 
         $customer = $d['customer'] ?? [];
-        $outlet   = $d['outlet'] ?? [];
+        $outlet = $d['outlet'] ?? [];
 
         return [
             // id_transaction sengaja TIDAK ikut: itu pengenal internal
             // NEVIRA dan tidak punya keperluan di sisi tampilan.
-            'invoice'         => $d['transaction_number'] ?? null,
-            'order_type'      => $d['order_type'] ?? null,
-            'status'          => $d['status'] ?? null,
-            'payment_status'  => $d['payment_status'] ?? null,
-            'progress'        => $d['progress_percentage'] ?? null,
-            'grand_total'     => $d['grand_total'] ?? null,
-            'customer_id'     => $d['id_customer'] ?? ($customer['id_customer'] ?? null),
-            'customer_name'   => $customer['customer_name'] ?? null,
-            'customer_phone'  => $customer['phone'] ?? null,
-            'outlet_id'       => $d['id_outlet'] ?? null,
-            'outlet_name'     => $d['outlet_name'] ?? ($outlet['outlet_name'] ?? null),
-            'cashier_name'    => $d['cashier']['username'] ?? null,
-            'cashier_id'      => $d['id_cashier'] ?? null,
-            'cashier_nip'     => $d['cashier']['nip'] ?? null,
+            'invoice' => $d['transaction_number'] ?? null,
+            'order_type' => $d['order_type'] ?? null,
+            'status' => $d['status'] ?? null,
+            'payment_status' => $d['payment_status'] ?? null,
+            'progress' => $d['progress_percentage'] ?? null,
+            'grand_total' => $d['grand_total'] ?? null,
+            'customer_id' => $d['id_customer'] ?? ($customer['id_customer'] ?? null),
+            'customer_name' => $customer['customer_name'] ?? null,
+            'customer_phone' => $customer['phone'] ?? null,
+            'outlet_id' => $d['id_outlet'] ?? null,
+            'outlet_name' => $d['outlet_name'] ?? ($outlet['outlet_name'] ?? null),
+            'cashier_name' => $d['cashier']['username'] ?? null,
+            'cashier_id' => $d['id_cashier'] ?? null,
+            'cashier_nip' => $d['cashier']['nip'] ?? null,
 
             // Jejak produksi: siapa mengerjakan tahap apa, berapa lama.
             // Dipakai untuk menelusuri complaint hasil cuci sampai ke tahapnya.
-            'processes'       => collect($d['services'] ?? [])
+            'processes' => collect($d['services'] ?? [])
                 ->flatMap(fn ($service) => collect($service['processes'] ?? [])
                     ->map(fn ($p) => [
-                        'stage'        => $p['process_name'] ?? null,
-                        'staff_id'     => $p['id_staff'] ?? null,
-                        'staff_name'   => $p['staff_name'] ?? null,
-                        'staff_nip'    => $p['nip'] ?? null,
-                        'status'       => $p['status'] ?? null,
-                        'started_at'   => $p['started_at'] ?? null,
+                        'stage' => $p['process_name'] ?? null,
+                        'staff_id' => $p['id_staff'] ?? null,
+                        'staff_name' => $p['staff_name'] ?? null,
+                        'staff_nip' => $p['nip'] ?? null,
+                        'status' => $p['status'] ?? null,
+                        'started_at' => $p['started_at'] ?? null,
                         'completed_at' => $p['completed_at'] ?? null,
-                        'duration'     => $p['total_duration'] ?? null,
-                        'notes'        => $p['notes'] ?? null,
+                        'duration' => $p['total_duration'] ?? null,
+                        'notes' => $p['notes'] ?? null,
                     ]))
                 ->values()->all(),
-            'services'        => collect($d['services'] ?? [])
+            'services' => collect($d['services'] ?? [])
                 ->map(fn ($s) => [
-                    'name'     => $s['service']['service_name'] ?? ($s['service_number'] ?? null),
+                    'name' => $s['service']['service_name'] ?? ($s['service_number'] ?? null),
                     'quantity' => $s['quantity'] ?? null,
-                    'status'   => $s['status'] ?? null,
-                    'notes'    => $s['notes'] ?? null,
+                    'status' => $s['status'] ?? null,
+                    'notes' => $s['notes'] ?? null,
                 ])->all(),
-            'created_at'      => $d['created_at'] ?? null,
-            'estimated_done'  => $d['estimated_completion_date'] ?? null,
-            'completed_at'    => $d['completion_date'] ?? null,
+            'created_at' => $d['created_at'] ?? null,
+            'estimated_done' => $d['estimated_completion_date'] ?? null,
+            'completed_at' => $d['completion_date'] ?? null,
         ];
     }
 

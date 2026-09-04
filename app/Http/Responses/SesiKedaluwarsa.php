@@ -38,10 +38,10 @@ class SesiKedaluwarsa
             return response()->view('complaints.create', [
                 'outlets' => Outlet::where('is_active', true)->orderBy('name')->get(),
                 'kembali' => $isian,
-                'gagal'   => self::PESAN.' Isianmu masih ada di bawah — periksa sekali lagi, lalu tekan Coba Simpan Lagi.',
+                'gagal' => self::PESAN.' Isianmu masih ada di bawah — periksa sekali lagi, lalu tekan Coba Simpan Lagi.',
                 // Kotak galat umum layout ("Periksa lagi sebelum lanjut") keliru
                 // di sini: yang gagal bukan isiannya.
-                'errors'  => new ViewErrorBag,
+                'errors' => new ViewErrorBag,
             ], 419)->header('Cache-Control', 'no-store, no-cache, must-revalidate, private');
         }
 
@@ -58,9 +58,9 @@ class SesiKedaluwarsa
         // bergantian. Isian itu tetap aman di draft perangkat yang terkunci
         // per pengguna, dan ditawarkan kembali setelah petugasnya masuk lagi.
         return response()->view('errors.sesi-kedaluwarsa', [
-            'pesan'   => self::PESAN,
+            'pesan' => self::PESAN,
             'kembali' => $this->simpanComplaint($request),
-            'errors'  => new ViewErrorBag,
+            'errors' => new ViewErrorBag,
         ], 419)->header('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     }
 

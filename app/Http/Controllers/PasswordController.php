@@ -20,10 +20,10 @@ class PasswordController extends Controller
 
         $data = $request->validate([
             'current_password' => ['required', 'string'],
-            'password'         => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
+            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ], [], [
             'current_password' => 'password sekarang',
-            'password'         => 'password baru',
+            'password' => 'password baru',
         ]);
 
         if (! Auth::validate(['email' => $user->email, 'password' => $data['current_password']])) {
@@ -39,7 +39,7 @@ class PasswordController extends Controller
         }
 
         $user->forceFill([
-            'password'             => $data['password'],
+            'password' => $data['password'],
             'must_change_password' => false,
         ])->save();
 

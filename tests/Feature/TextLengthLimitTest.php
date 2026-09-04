@@ -69,7 +69,7 @@ class TextLengthLimitTest extends TestCase
             'status' => 'ditangani', 'lock_version' => $complaint->lock_version,
             'resolution' => str_repeat('a', 2_000_000),
             'root_cause' => str_repeat('b', 2_000_000),
-            'note'       => str_repeat('c', 2_000_000),
+            'note' => str_repeat('c', 2_000_000),
         ])->assertSessionHasErrors(['resolution', 'root_cause', 'note']);
     }
 
@@ -88,7 +88,7 @@ class TextLengthLimitTest extends TestCase
 
         $this->actingAs($this->cc())->post('/complaints/'.$complaint->id.'/pelaku', [
             'manual_nama' => 'Budi',
-            'alasan'      => str_repeat('a', 2_000_000),
+            'alasan' => str_repeat('a', 2_000_000),
         ])->assertSessionHasErrors('alasan');
     }
 
@@ -98,7 +98,7 @@ class TextLengthLimitTest extends TestCase
 
         $this->actingAs($this->cc())->post('/complaints/'.$complaint->id.'/pelaku', [
             'manual_nama' => str_repeat('a', 5_000),
-            'alasan'      => 'Alasan wajar.',
+            'alasan' => 'Alasan wajar.',
         ])->assertSessionHasErrors('manual_nama');
     }
 }

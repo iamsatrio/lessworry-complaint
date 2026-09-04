@@ -48,11 +48,11 @@ class UserController extends Controller
         $this->authorizeSupervisor($request);
 
         $data = $request->validate([
-            'name'      => ['required', 'string', 'max:120'],
-            'email'     => ['required', 'email', 'max:190', 'unique:users,email'],
-            'role'      => ['required', Rule::in(['kasir', 'customer_care', 'divisi', 'supervisor'])],
+            'name' => ['required', 'string', 'max:120'],
+            'email' => ['required', 'email', 'max:190', 'unique:users,email'],
+            'role' => ['required', Rule::in(['kasir', 'customer_care', 'divisi', 'supervisor'])],
             'outlet_id' => ['nullable', 'exists:outlets,id'],
-            'division'  => ['nullable', Rule::in(array_keys(config('complaint.divisions')))],
+            'division' => ['nullable', Rule::in(array_keys(config('complaint.divisions')))],
         ]);
 
         // Password sementara dibuat sistem, bukan diketik supervisor —
@@ -68,8 +68,8 @@ class UserController extends Controller
         // Password sementara hanya ditampilkan sekali, lewat flash session.
         // Tidak disimpan, tidak dicatat di log.
         return redirect()->route('users.index')->with('temporary_password', [
-            'name'     => $user->name,
-            'email'    => $user->email,
+            'name' => $user->name,
+            'email' => $user->email,
             'password' => $temporary,
         ]);
     }
@@ -79,7 +79,7 @@ class UserController extends Controller
         $this->authorizeSupervisor($request);
 
         return view('users.edit', [
-            'user'    => $user,
+            'user' => $user,
             'outlets' => Outlet::orderBy('name')->get(),
         ]);
     }
@@ -89,10 +89,10 @@ class UserController extends Controller
         $this->authorizeSupervisor($request);
 
         $data = $request->validate([
-            'name'      => ['required', 'string', 'max:120'],
-            'role'      => ['required', Rule::in(['kasir', 'customer_care', 'divisi', 'supervisor'])],
+            'name' => ['required', 'string', 'max:120'],
+            'role' => ['required', Rule::in(['kasir', 'customer_care', 'divisi', 'supervisor'])],
             'outlet_id' => ['nullable', 'exists:outlets,id'],
-            'division'  => ['nullable', Rule::in(array_keys(config('complaint.divisions')))],
+            'division' => ['nullable', Rule::in(array_keys(config('complaint.divisions')))],
             'is_active' => ['nullable', 'boolean'],
         ]);
 
@@ -141,7 +141,7 @@ class UserController extends Controller
     private function pastikanMasihAdaSupervisor(User $user, string $peranBaru, bool $isActive): void
     {
         $tadinyaSupervisorAktif = $user->role === 'supervisor' && $user->is_active;
-        $tetapSupervisorAktif   = $peranBaru === 'supervisor' && $isActive;
+        $tetapSupervisorAktif = $peranBaru === 'supervisor' && $isActive;
 
         if (! $tadinyaSupervisorAktif || $tetapSupervisorAktif) {
             return;
@@ -173,13 +173,13 @@ class UserController extends Controller
         $temporary = Str::password(12, symbols: false);
 
         $user->forceFill([
-            'password'             => $temporary,
+            'password' => $temporary,
             'must_change_password' => true,
         ])->save();
 
         return redirect()->route('users.index')->with('temporary_password', [
-            'name'     => $user->name,
-            'email'    => $user->email,
+            'name' => $user->name,
+            'email' => $user->email,
             'password' => $temporary,
         ]);
     }

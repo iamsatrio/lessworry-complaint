@@ -22,17 +22,17 @@ class User extends Authenticatable
      * dan pengguna baru langsung ditolak middleware 'active'.
      */
     protected $attributes = [
-        'role'                 => 'kasir',
-        'is_active'            => true,
+        'role' => 'kasir',
+        'is_active' => true,
         'must_change_password' => false,
     ];
 
     protected function casts(): array
     {
         return [
-            'email_verified_at'    => 'datetime',
-            'password'             => 'hashed',
-            'is_active'            => 'boolean',
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'is_active' => 'boolean',
             'must_change_password' => 'boolean',
         ];
     }
@@ -123,20 +123,20 @@ class User extends Authenticatable
     public function canView(Complaint $complaint): bool
     {
         return match ($this->role) {
-            'kasir'  => $complaint->outlet_id === $this->outlet_id,
+            'kasir' => $complaint->outlet_id === $this->outlet_id,
             'divisi' => $complaint->forwarded_division === $this->division,
-            default  => true,
+            default => true,
         };
     }
 
     public function roleLabel(): string
     {
         return match ($this->role) {
-            'kasir'         => 'Kasir',
+            'kasir' => 'Kasir',
             'customer_care' => 'Customer Care',
-            'divisi'        => 'Divisi '.config('complaint.divisions.'.$this->division, $this->division),
-            'supervisor'    => 'Supervisor',
-            default         => $this->role,
+            'divisi' => 'Divisi '.config('complaint.divisions.'.$this->division, $this->division),
+            'supervisor' => 'Supervisor',
+            default => $this->role,
         };
     }
 }

@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class Complaint extends Model
 {
@@ -35,13 +37,13 @@ class Complaint extends Model
     protected function casts(): array
     {
         return [
-            'nevira_snapshot'  => 'array',
+            'nevira_snapshot' => 'array',
             'nevira_synced_at' => 'datetime',
-            'due_response_at'  => 'datetime',
+            'due_response_at' => 'datetime',
             'due_resolution_at' => 'datetime',
             'first_response_at' => 'datetime',
-            'resolved_at'      => 'datetime',
-            'lock_version'     => 'integer',
+            'resolved_at' => 'datetime',
+            'lock_version' => 'integer',
         ];
     }
 
@@ -85,11 +87,11 @@ class Complaint extends Model
 
         if (! empty($snapshot['cashier_name'])) {
             $handlers[] = [
-                'stage'    => 'Kasir penerima order',
-                'name'     => $snapshot['cashier_name'],
-                'nip'      => $snapshot['cashier_nip'] ?? null,
+                'stage' => 'Kasir penerima order',
+                'name' => $snapshot['cashier_name'],
+                'nip' => $snapshot['cashier_nip'] ?? null,
                 'staff_id' => $snapshot['cashier_id'] ?? null,
-                'status'   => null,
+                'status' => null,
                 'duration' => null,
             ];
         }
@@ -100,11 +102,11 @@ class Complaint extends Model
             }
 
             $handlers[] = [
-                'stage'    => $process['stage'] ?? 'Tahap produksi',
-                'name'     => $process['staff_name'],
-                'nip'      => $process['staff_nip'] ?? null,
+                'stage' => $process['stage'] ?? 'Tahap produksi',
+                'name' => $process['staff_name'],
+                'nip' => $process['staff_nip'] ?? null,
                 'staff_id' => $process['staff_id'] ?? null,
-                'status'   => $process['status'] ?? null,
+                'status' => $process['status'] ?? null,
                 'duration' => $process['duration'] ?? null,
             ];
         }
@@ -154,7 +156,7 @@ class Complaint extends Model
         }
 
         try {
-            return (int) \Illuminate\Support\Carbon::parse($created)->diffInDays(now());
+            return (int) Carbon::parse($created)->diffInDays(now());
         } catch (\Throwable) {
             return null;
         }
@@ -236,7 +238,7 @@ class Complaint extends Model
      * Disaring visibleTo supaya peringatannya sendiri tidak jadi jalan
      * melihat complaint outlet lain.
      *
-     * @return \Illuminate\Support\Collection<int,Complaint>
+     * @return Collection<int,Complaint>
      */
     public function kembaranNota(User $user)
     {
@@ -329,7 +331,7 @@ class Complaint extends Model
                 'label' => $minutes === null
                     ? 'Ditutup'
                     : 'Selesai '.$this->humanMinutes($minutes),
-                'pct'   => 100,
+                'pct' => 100,
             ];
         }
 
@@ -339,13 +341,13 @@ class Complaint extends Model
 
         $start = $this->created_at ?? now();
         $total = max(1, (int) round($start->diffInMinutes($this->due_resolution_at)));
-        $left  = (int) round(now()->diffInMinutes($this->due_resolution_at, false));
+        $left = (int) round(now()->diffInMinutes($this->due_resolution_at, false));
 
         if ($left <= 0) {
             return [
                 'state' => 'late',
                 'label' => 'Telat '.$this->humanMinutes(abs($left)),
-                'pct'   => 100,
+                'pct' => 100,
             ];
         }
 
@@ -354,7 +356,7 @@ class Complaint extends Model
         return [
             'state' => $pct <= 25 ? 'warn' : '',
             'label' => 'Sisa '.$this->humanMinutes($left),
-            'pct'   => $pct,
+            'pct' => $pct,
         ];
     }
 
@@ -401,9 +403,9 @@ class Complaint extends Model
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         return match ($user->role) {
-            'kasir'  => $query->where('outlet_id', $user->outlet_id),
+            'kasir' => $query->where('outlet_id', $user->outlet_id),
             'divisi' => $query->where('forwarded_division', $user->division),
-            default  => $query,
+            default => $query,
         };
     }
 

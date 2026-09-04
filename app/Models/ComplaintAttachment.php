@@ -22,7 +22,7 @@ class ComplaintAttachment extends Model
     {
         return [
             'original_bytes' => 'integer',
-            'stored_bytes'   => 'integer',
+            'stored_bytes' => 'integer',
         ];
     }
 

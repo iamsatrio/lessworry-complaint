@@ -6,7 +6,7 @@ return [
     | Sistem ini tidak pernah menulis, mengubah, atau menghapus data di NEVIRA.
     */
     'base_url' => env('NEVIRA_API_BASE', 'https://api.nevira.id/api'),
-    'email'    => env('NEVIRA_EMAIL'),
+    'email' => env('NEVIRA_EMAIL'),
     'password' => env('NEVIRA_PASSWORD'),
 
     /*
@@ -39,13 +39,13 @@ return [
     | NEVIRA sendiri, bukan tebakan.
     */
     'delivery_status' => [
-        1  => 'Siap Diantar',
-        2  => 'Diantar',
-        3  => 'Siap Dijemput',
-        4  => 'Dijemput',
-        5  => 'Tiba di Outlet',
-        6  => 'Batal',
-        7  => 'Selesai',
+        1 => 'Siap Diantar',
+        2 => 'Diantar',
+        3 => 'Siap Dijemput',
+        4 => 'Dijemput',
+        5 => 'Tiba di Outlet',
+        6 => 'Batal',
+        7 => 'Selesai',
         71 => 'Selesai Diantar',
         73 => 'Selesai Dijemput',
     ],
@@ -54,9 +54,9 @@ return [
     | Alasan pembatalan, dipakai saat status = 6.
     */
     'delivery_cancel_type' => [
-        'SYSTEM'              => 'Dibatalkan sistem',
-        'COURIER'             => 'Dibatalkan kurir',
-        'COURIER_RESCHEDULE'  => 'Dijadwalkan ulang kurir',
+        'SYSTEM' => 'Dibatalkan sistem',
+        'COURIER' => 'Dibatalkan kurir',
+        'COURIER_RESCHEDULE' => 'Dijadwalkan ulang kurir',
     ],
 
     // Matikan untuk bekerja tanpa koneksi NEVIRA (mode pengembangan).

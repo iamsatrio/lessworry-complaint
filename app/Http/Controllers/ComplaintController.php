@@ -2,18 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\NeviraAccessDenied;
+use App\Exceptions\NeviraException;
 use App\Models\Complaint;
 use App\Models\ComplaintActivity;
 use App\Models\ComplaintAttachment;
 use App\Models\ComplaintResponsible;
 use App\Models\Outlet;
 use App\Models\User;
-use App\Exceptions\NeviraAccessDenied;
-use App\Exceptions\NeviraException;
 use App\Rules\GambarSungguhan;
 use App\Services\KandidatPelaku;
-use App\Services\PenyimpanFoto;
 use App\Services\NeviraGate;
+use App\Services\PenyimpanFoto;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -71,7 +71,7 @@ class ComplaintController extends Controller
 
         return view('complaints.index', [
             'complaints' => $query->paginate(20)->withQueryString(),
-            'outlets'    => Outlet::orderBy('name')->get(),
+            'outlets' => Outlet::orderBy('name')->get(),
         ]);
     }
 
@@ -90,25 +90,25 @@ class ComplaintController extends Controller
         abort_unless($user->canCreateComplaint(), 403);
 
         $data = $request->validate([
-            'channel'               => ['required', Rule::in(array_keys(config('complaint.channels')))],
-            'reporter_name'         => ['required', 'string', 'max:120'],
-            'reporter_phone'        => ['nullable', 'string', 'max:30'],
+            'channel' => ['required', Rule::in(array_keys(config('complaint.channels')))],
+            'reporter_name' => ['required', 'string', 'max:120'],
+            'reporter_phone' => ['nullable', 'string', 'max:30'],
             'nevira_transaction_number' => ['required_without:nota_exemption', 'nullable', 'string', 'max:64'],
-            'nota_exemption'            => ['required_without:nevira_transaction_number', 'nullable', Rule::in(array_keys(config('complaint.nota_exemptions')))],
-            'outlet_id'             => ['nullable', 'exists:outlets,id'],
-            'category'              => ['required', Rule::in(array_keys(config('complaint.categories')))],
-            'sub_category'          => ['nullable', 'string', 'max:120'],
-            'priority'              => ['required', Rule::in(array_keys(config('complaint.priorities')))],
+            'nota_exemption' => ['required_without:nevira_transaction_number', 'nullable', Rule::in(array_keys(config('complaint.nota_exemptions')))],
+            'outlet_id' => ['nullable', 'exists:outlets,id'],
+            'category' => ['required', Rule::in(array_keys(config('complaint.categories')))],
+            'sub_category' => ['nullable', 'string', 'max:120'],
+            'priority' => ['required', Rule::in(array_keys(config('complaint.priorities')))],
             // Batas panjang: tanpa ini 2 juta karakter tersimpan utuh dan
             // ikut termuat di papan kerja maupun halaman detail. (API-8 T8)
-            'description'           => ['required', 'string', 'max:5000'],
-            'attachments.*'         => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', new GambarSungguhan],
+            'description' => ['required', 'string', 'max:5000'],
+            'attachments.*' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', new GambarSungguhan],
         ], [
             'nevira_transaction_number.required_without' => 'Isi nomor nota NEVIRA, atau pilih alasan kenapa complaint ini tidak punya nota.',
-            'nota_exemption.required_without'            => 'Pilih alasan kenapa complaint ini tidak punya nomor nota.',
+            'nota_exemption.required_without' => 'Pilih alasan kenapa complaint ini tidak punya nomor nota.',
         ], [
             'nevira_transaction_number' => 'nomor nota',
-            'nota_exemption'            => 'alasan tanpa nota',
+            'nota_exemption' => 'alasan tanpa nota',
         ]);
 
         // Nota terisi berarti tidak ada pengecualian yang berlaku.
@@ -147,10 +147,10 @@ class ComplaintController extends Controller
 
                 ComplaintActivity::create([
                     'complaint_id' => $complaint->id,
-                    'user_id'      => $user->id,
-                    'type'         => 'created',
-                    'to_status'    => 'baru',
-                    'note'         => 'Complaint dibuat lewat '.$complaint->channelLabel(),
+                    'user_id' => $user->id,
+                    'type' => 'created',
+                    'to_status' => 'baru',
+                    'note' => 'Complaint dibuat lewat '.$complaint->channelLabel(),
                 ]);
 
                 foreach ($berkas as $b) {
@@ -240,12 +240,12 @@ class ComplaintController extends Controller
 
         return view('complaints.show', [
             'complaint' => $complaint,
-            'kembaran'  => $complaint->kembaranNota($user),
-            'handlers'  => $penggunaSistem,
+            'kembaran' => $complaint->kembaranNota($user),
+            'handlers' => $penggunaSistem,
             // Kandidat pelaku disusun server: orang dari nota ini, karyawan
             // outletnya, lalu pengguna sistem. Kasir tidak pernah menerimanya
             // — daftar nama karyawan bukan konsumsinya. (API-19)
-            'kandidat'  => $user->canAssignResponsibility()
+            'kandidat' => $user->canAssignResponsibility()
                 ? KandidatPelaku::untuk($complaint, $this->karyawanOutlet($user, $complaint), $penggunaSistem)
                 : null,
         ]);
@@ -281,14 +281,14 @@ class ComplaintController extends Controller
         abort_unless($user->canView($complaint), 403);
 
         $data = $request->validate([
-            'status'              => ['required', Rule::in(array_keys(config('complaint.statuses')))],
+            'status' => ['required', Rule::in(array_keys(config('complaint.statuses')))],
             // Versi yang dilihat petugas saat halaman dibuka. Tanpa ini,
             // penyimpanan dari halaman basi menimpa keputusan orang lain
             // tanpa peringatan ke siapa pun. (API-8 T6)
-            'lock_version'        => ['required', 'integer'],
-            'note'                => ['nullable', 'string', 'max:2000'],
-            'resolution'          => ['nullable', 'string', 'max:5000'],
-            'root_cause'          => ['nullable', 'string', 'max:2000'],
+            'lock_version' => ['required', 'integer'],
+            'note' => ['nullable', 'string', 'max:2000'],
+            'resolution' => ['nullable', 'string', 'max:5000'],
+            'root_cause' => ['nullable', 'string', 'max:2000'],
             'compensation_amount' => ['nullable', 'integer', 'min:0'],
         ], [
             'lock_version.required' => 'Muat ulang halaman complaint ini sebelum menyimpan.',
@@ -365,11 +365,11 @@ class ComplaintController extends Controller
 
             ComplaintActivity::create([
                 'complaint_id' => $complaint->id,
-                'user_id'      => $user->id,
-                'type'         => 'status_change',
-                'from_status'  => $from,
-                'to_status'    => $complaint->status,
-                'note'         => $data['note'] ?? null,
+                'user_id' => $user->id,
+                'type' => 'status_change',
+                'from_status' => $from,
+                'to_status' => $complaint->status,
+                'note' => $data['note'] ?? null,
             ]);
 
             // Uang yang berpindah harus punya jejak sendiri. Riwayat dulu
@@ -378,9 +378,9 @@ class ComplaintController extends Controller
             if ($compensation !== $sekarang) {
                 ComplaintActivity::create([
                     'complaint_id' => $complaint->id,
-                    'user_id'      => $user->id,
-                    'type'         => 'note',
-                    'note'         => 'Kompensasi diubah dari Rp '.number_format($sekarang, 0, ',', '.')
+                    'user_id' => $user->id,
+                    'type' => 'note',
+                    'note' => 'Kompensasi diubah dari Rp '.number_format($sekarang, 0, ',', '.')
                         .' ke Rp '.number_format($compensation, 0, ',', '.').'.',
                 ]);
             }
@@ -410,7 +410,7 @@ class ComplaintController extends Controller
             // exists:users,id saja, jadi penugasan bisa diarahkan ke akun
             // nonaktif atau ke pengguna divisi yang tidak pernah muncul di
             // dropdown — dan complaint itu tidak pernah tersentuh siapa pun.
-            'assigned_to'        => ['nullable', Rule::exists('users', 'id')
+            'assigned_to' => ['nullable', Rule::exists('users', 'id')
                 ->where('is_active', true)
                 ->whereIn('role', ['kasir', 'customer_care', 'supervisor'])],
             'forwarded_division' => ['nullable', Rule::in(array_keys(config('complaint.divisions')))],
@@ -420,9 +420,9 @@ class ComplaintController extends Controller
 
         ComplaintActivity::create([
             'complaint_id' => $complaint->id,
-            'user_id'      => $user->id,
-            'type'         => filled($data['forwarded_division'] ?? null) ? 'forward' : 'assign',
-            'note'         => filled($data['forwarded_division'] ?? null)
+            'user_id' => $user->id,
+            'type' => filled($data['forwarded_division'] ?? null) ? 'forward' : 'assign',
+            'note' => filled($data['forwarded_division'] ?? null)
                 ? 'Diteruskan ke divisi '.config('complaint.divisions.'.$data['forwarded_division'])
                 : 'Penanggung jawab diperbarui',
         ]);
@@ -443,18 +443,18 @@ class ComplaintController extends Controller
         abort_unless($user->canView($complaint), 403);
 
         $data = $request->validate([
-            'note'     => ['required', 'string', 'max:2000'],
-            'photos'   => ['array', 'max:'.self::FOTO_PER_CATATAN],
+            'note' => ['required', 'string', 'max:2000'],
+            'photos' => ['array', 'max:'.self::FOTO_PER_CATATAN],
             // Isi berkas yang menentukan, bukan ekstensinya: aturan image
             // membaca berkasnya, dan PenyimpanFoto memeriksanya sekali lagi.
             // HEIC sengaja tidak diterima — gd tidak bisa membacanya, jadi
             // ia akan tersimpan apa adanya berikut EXIF-nya.
             'photos.*' => ['file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.self::FOTO_MAKS_KB, new GambarSungguhan],
         ], [
-            'photos.max'     => 'Maksimal '.self::FOTO_PER_CATATAN.' foto per catatan.',
+            'photos.max' => 'Maksimal '.self::FOTO_PER_CATATAN.' foto per catatan.',
             'photos.*.image' => 'Berkas :position bukan gambar. Unggah foto (JPG, PNG, atau WebP).',
             'photos.*.mimes' => 'Berkas :position bukan gambar. Unggah foto (JPG, PNG, atau WebP).',
-            'photos.*.max'   => 'Foto :position lebih dari '.(int) (self::FOTO_MAKS_KB / 1024).' MB.',
+            'photos.*.max' => 'Foto :position lebih dari '.(int) (self::FOTO_MAKS_KB / 1024).' MB.',
         ], ['photos' => 'foto']);
 
         // Berkas ditulis sebelum barisnya dibuat, dan kegagalannya tidak
@@ -465,9 +465,9 @@ class ComplaintController extends Controller
         DB::transaction(function () use ($complaint, $data, $user, $berkas) {
             $activity = ComplaintActivity::create([
                 'complaint_id' => $complaint->id,
-                'user_id'      => $user->id,
-                'type'         => 'note',
-                'note'         => $data['note'],
+                'user_id' => $user->id,
+                'type' => 'note',
+                'note' => $data['note'],
             ]);
 
             foreach ($berkas as $b) {
@@ -497,7 +497,7 @@ class ComplaintController extends Controller
     private function simpanFoto(array $files, string $dir): array
     {
         $berkas = [];
-        $gagal  = 0;
+        $gagal = 0;
 
         foreach (array_filter($files) as $file) {
             try {
@@ -533,7 +533,7 @@ class ComplaintController extends Controller
 
         $data = $request->validate([
             'nevira_transaction_number' => ['nullable', 'string', 'max:64'],
-            'nota_exemption'            => ['nullable', Rule::in(array_keys(config('complaint.nota_exemptions')))],
+            'nota_exemption' => ['nullable', Rule::in(array_keys(config('complaint.nota_exemptions')))],
         ], [], ['nevira_transaction_number' => 'nomor nota']);
 
         $new = trim((string) ($data['nevira_transaction_number'] ?? ''));
@@ -545,21 +545,21 @@ class ComplaintController extends Controller
 
         $complaint->forceFill([
             'nevira_transaction_number' => $new !== '' ? $new : null,
-            'nevira_transaction_id'     => null,
-            'nota_exemption'            => $new !== '' ? null : ($data['nota_exemption'] ?? $complaint->nota_exemption),
+            'nevira_transaction_id' => null,
+            'nota_exemption' => $new !== '' ? null : ($data['nota_exemption'] ?? $complaint->nota_exemption),
             // Snapshot lama milik order lain — buang, jangan sampai tertinggal
             // dan menampilkan data order yang bukan miliknya.
-            'nevira_snapshot'    => null,
+            'nevira_snapshot' => null,
             'nevira_customer_id' => null,
-            'nevira_synced_at'   => null,
-            'nevira_sync_error'  => null,
+            'nevira_synced_at' => null,
+            'nevira_sync_error' => null,
         ])->save();
 
         ComplaintActivity::create([
             'complaint_id' => $complaint->id,
-            'user_id'      => $user->id,
-            'type'         => 'note',
-            'note'         => $old === ''
+            'user_id' => $user->id,
+            'type' => 'note',
+            'note' => $old === ''
                 ? 'Ditautkan ke order NEVIRA '.$new
                 : ($new === ''
                     ? 'Tautan ke order NEVIRA '.$old.' dilepas'
@@ -598,22 +598,22 @@ class ComplaintController extends Controller
         $peranSah = array_keys(config('complaint.responsible_roles'));
 
         $data = $request->validate([
-            'pelaku'       => ['required_without:manual_nama', 'array'],
-            'pelaku.*'     => ['string', 'max:190'],
-            'peran'        => ['array'],
-            'peran.*'      => [Rule::in($peranSah)],
-            'manual_nama'  => ['nullable', 'string', 'max:120'],
-            'manual_nip'   => ['nullable', 'string', 'max:40'],
+            'pelaku' => ['required_without:manual_nama', 'array'],
+            'pelaku.*' => ['string', 'max:190'],
+            'peran' => ['array'],
+            'peran.*' => [Rule::in($peranSah)],
+            'manual_nama' => ['nullable', 'string', 'max:120'],
+            'manual_nip' => ['nullable', 'string', 'max:40'],
             'manual_peran' => ['nullable', Rule::in($peranSah)],
             // Alasan wajib, tanpa pengecualian. Menunjuk orang tanpa alasan
             // tidak bisa ditinjau ulang dan menempel di catatan kerjanya.
-            'alasan'       => ['required', 'string', 'max:2000'],
+            'alasan' => ['required', 'string', 'max:2000'],
         ], [
             'pelaku.required_without' => 'Pilih siapa yang terlibat, atau tulis namanya di isian bebas.',
-            'alasan.required'         => 'Tulis alasannya. Menunjuk orang tanpa alasan tidak bisa ditinjau ulang.',
+            'alasan.required' => 'Tulis alasannya. Menunjuk orang tanpa alasan tidak bisa ditinjau ulang.',
         ], [
-            'pelaku'      => 'pelaku',
-            'alasan'      => 'alasan',
+            'pelaku' => 'pelaku',
+            'alasan' => 'alasan',
             'manual_nama' => 'nama karyawan',
         ]);
 
@@ -641,10 +641,10 @@ class ComplaintController extends Controller
 
             $dipilih[] = [
                 'staff_id' => $kandidat['staff_id'],
-                'name'     => $kandidat['name'],
-                'nip'      => $kandidat['nip'],
-                'role'     => $data['peran'][$kunci] ?? $kandidat['role'],
-                'stage'    => $kandidat['stage'],
+                'name' => $kandidat['name'],
+                'nip' => $kandidat['nip'],
+                'role' => $data['peran'][$kunci] ?? $kandidat['role'],
+                'stage' => $kandidat['stage'],
             ];
         }
 
@@ -653,10 +653,10 @@ class ComplaintController extends Controller
         if (filled($data['manual_nama'] ?? null)) {
             $dipilih[] = [
                 'staff_id' => null,
-                'name'     => trim($data['manual_nama']),
-                'nip'      => $data['manual_nip'] ?? null,
-                'role'     => $data['manual_peran'] ?? 'lainnya',
-                'stage'    => null,
+                'name' => trim($data['manual_nama']),
+                'nip' => $data['manual_nip'] ?? null,
+                'role' => $data['manual_peran'] ?? 'lainnya',
+                'stage' => null,
             ];
         }
 
@@ -684,24 +684,24 @@ class ComplaintController extends Controller
             foreach ($baru as $calon) {
                 $complaint->responsibles()->create([
                     'nevira_user_id' => $calon['staff_id'],
-                    'staff_name'     => $calon['name'],
-                    'staff_nip'      => $calon['nip'],
-                    'role'           => $calon['role'],
-                    'stage'          => $calon['stage'],
-                    'reason'         => $data['alasan'],
-                    'set_by'         => $user->id,
-                    'set_at'         => now(),
+                    'staff_name' => $calon['name'],
+                    'staff_nip' => $calon['nip'],
+                    'role' => $calon['role'],
+                    'stage' => $calon['stage'],
+                    'reason' => $data['alasan'],
+                    'set_by' => $user->id,
+                    'set_at' => now(),
                 ]);
             }
 
             ComplaintActivity::create([
                 'complaint_id' => $complaint->id,
-                'user_id'      => $user->id,
+                'user_id' => $user->id,
                 // Jenis tersendiri, bukan 'note': isinya nama karyawan, dan
                 // riwayat complaint dibaca juga oleh kasir. Yang boleh
                 // melihatnya disaring di tampilan. (API-19)
-                'type'         => 'responsible',
-                'note'         => 'Pelaku ditetapkan: '.$this->sebutPelaku($baru).'. Alasan: '.$data['alasan'],
+                'type' => 'responsible',
+                'note' => 'Pelaku ditetapkan: '.$this->sebutPelaku($baru).'. Alasan: '.$data['alasan'],
             ]);
         });
 
@@ -717,7 +717,7 @@ class ComplaintController extends Controller
         abort_unless($responsible->complaint_id === $complaint->id, 404);
 
         $data = $request->validate([
-            'peran'  => ['required', Rule::in(array_keys(config('complaint.responsible_roles')))],
+            'peran' => ['required', Rule::in(array_keys(config('complaint.responsible_roles')))],
             'alasan' => ['required', 'string', 'max:2000'],
         ], [
             'alasan.required' => 'Tulis alasannya. Menunjuk orang tanpa alasan tidak bisa ditinjau ulang.',
@@ -725,7 +725,7 @@ class ComplaintController extends Controller
 
         DB::transaction(function () use ($complaint, $responsible, $data, $user) {
             $responsible->forceFill([
-                'role'   => $data['peran'],
+                'role' => $data['peran'],
                 'reason' => $data['alasan'],
                 'set_by' => $user->id,
                 'set_at' => now(),
@@ -733,9 +733,9 @@ class ComplaintController extends Controller
 
             ComplaintActivity::create([
                 'complaint_id' => $complaint->id,
-                'user_id'      => $user->id,
-                'type'         => 'responsible',
-                'note'         => 'Penetapan pelaku '.$responsible->staff_name.' diperbarui ('
+                'user_id' => $user->id,
+                'type' => 'responsible',
+                'note' => 'Penetapan pelaku '.$responsible->staff_name.' diperbarui ('
                     .$responsible->roleLabel().'). Alasan: '.$data['alasan'],
             ]);
         });
@@ -758,9 +758,9 @@ class ComplaintController extends Controller
 
             ComplaintActivity::create([
                 'complaint_id' => $complaint->id,
-                'user_id'      => $user->id,
-                'type'         => 'responsible',
-                'note'         => 'Penetapan pelaku ('.$nama.') dicabut.',
+                'user_id' => $user->id,
+                'type' => 'responsible',
+                'note' => 'Penetapan pelaku ('.$nama.') dicabut.',
             ]);
         });
 
@@ -889,7 +889,7 @@ class ComplaintController extends Controller
     {
         try {
             $resolved = $this->nevira->resolve($user, $complaint->nevira_transaction_number);
-            $summary  = $resolved['summary'];
+            $summary = $resolved['summary'];
 
             // Perjalanan kurir ditarik terpisah: detail transaksi tidak
             // membawa nama kurirnya. Gagal di sini tidak membatalkan sinkron
@@ -901,12 +901,12 @@ class ComplaintController extends Controller
             $complaint->forceFill([
                 // Id internal disimpan untuk panggilan API berikutnya, dan
                 // tidak pernah dirender ke halaman mana pun.
-                'nevira_transaction_id'     => $resolved['id'],
+                'nevira_transaction_id' => $resolved['id'],
                 'nevira_transaction_number' => $resolved['number'] ?? $complaint->nevira_transaction_number,
-                'nevira_snapshot'    => $summary,
+                'nevira_snapshot' => $summary,
                 'nevira_customer_id' => $summary['customer_id'] ?? null,
-                'nevira_synced_at'   => now(),
-                'nevira_sync_error'  => null,
+                'nevira_synced_at' => now(),
+                'nevira_sync_error' => null,
             ])->save();
 
             $this->fillReporterFromOrder($complaint, $summary);

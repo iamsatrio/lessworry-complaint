@@ -230,7 +230,7 @@ class NotePhotoTest extends TestCase
     {
         $cc = $this->userAs('customer_care');
         $satu = $this->complaint();
-        $dua  = $this->complaint();
+        $dua = $this->complaint();
 
         $this->catat($cc, $satu, ['note' => 'Foto.', 'photos' => [$this->fotoBesar()]]);
         $lampiran = ComplaintActivity::latest('id')->first()->attachments()->sole();
@@ -255,7 +255,7 @@ class NotePhotoTest extends TestCase
 
     public function test_kasir_outlet_lain_tidak_bisa_mengambil_foto_catatan(): void
     {
-        $pusat  = Outlet::create(['name' => 'Pusat']);
+        $pusat = Outlet::create(['name' => 'Pusat']);
         $cabang = Outlet::create(['name' => 'Cabang']);
 
         $cc = $this->userAs('customer_care');
