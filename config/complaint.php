@@ -6,9 +6,9 @@ return [
     | Kanal masuk complaint. Sesuai API-4: direct kasir, WA outlet, WA customer care.
     */
     'channels' => [
-        'kasir'     => 'Direct Kasir',
+        'kasir' => 'Direct Kasir',
         'wa_outlet' => 'WA Outlet',
-        'wa_cc'     => 'WA Customer Care',
+        'wa_cc' => 'WA Customer Care',
     ],
 
     /*
@@ -33,13 +33,13 @@ return [
     | di laporan.
     */
     'categories' => [
-        'kurang_bersih'   => ['label' => 'Kurang Bersih',   'sub' => []],
-        'barang_rusak'    => ['label' => 'Barang Rusak',    'sub' => ['Luntur', 'Rusak/sobek', 'Menyusut']],
-        'barang_hilang'   => ['label' => 'Barang Hilang',   'sub' => ['Item kurang']],
-        'terlambat'       => ['label' => 'Terlambat',       'sub' => ['Telat selesai', 'Telat antar', 'Telat jemput']],
-        'berbau'          => ['label' => 'Berbau',          'sub' => []],
-        'lainnya'         => ['label' => 'Lainnya',         'sub' => []],
-        'kurang_rapih'    => ['label' => 'Kurang Rapih',    'sub' => []],
+        'kurang_bersih' => ['label' => 'Kurang Bersih',   'sub' => []],
+        'barang_rusak' => ['label' => 'Barang Rusak',    'sub' => ['Luntur', 'Rusak/sobek', 'Menyusut']],
+        'barang_hilang' => ['label' => 'Barang Hilang',   'sub' => ['Item kurang']],
+        'terlambat' => ['label' => 'Terlambat',       'sub' => ['Telat selesai', 'Telat antar', 'Telat jemput']],
+        'berbau' => ['label' => 'Berbau',          'sub' => []],
+        'lainnya' => ['label' => 'Lainnya',         'sub' => []],
+        'kurang_rapih' => ['label' => 'Kurang Rapih',    'sub' => []],
         'barang_tertukar' => ['label' => 'Barang Tertukar', 'sub' => []],
     ],
 
@@ -53,7 +53,7 @@ return [
     'bobot' => [
         'ringan' => 'Ringan',
         'sedang' => 'Sedang',
-        'berat'  => 'Berat',
+        'berat' => 'Berat',
     ],
 
     /*
@@ -63,11 +63,11 @@ return [
     | seluruh papan merah di hari pertama lalu berhenti dibaca. (API-18 #3)
     */
     'sla' => [
-        'response_hours'  => 24,
+        'response_hours' => 24,
         'resolution_days' => [
             'ringan' => 2,
             'sedang' => 3,
-            'berat'  => 5,
+            'berat' => 5,
         ],
     ],
 
@@ -77,9 +77,9 @@ return [
     | bukan status tersendiri. (API-18 #6)
     */
     'statuses' => [
-        'open'     => 'Open',
+        'open' => 'Open',
         'handling' => 'Handling',
-        'close'    => 'Close',
+        'close' => 'Close',
     ],
 
     'open_statuses' => ['open', 'handling'],
@@ -118,12 +118,12 @@ return [
     | paling sering bermasalah.
     */
     'layanan' => [
-        'kiloan_cuset'     => 'Kiloan – Cuci Setrika',
-        'kiloan'           => 'Kiloan',
-        'kiloan_culip'     => 'Kiloan – Cuci Lipat',
+        'kiloan_cuset' => 'Kiloan – Cuci Setrika',
+        'kiloan' => 'Kiloan',
+        'kiloan_culip' => 'Kiloan – Cuci Lipat',
         'satuan_non_cloth' => 'Satuan Non Cloth',
-        'satuan_cloth'     => 'Satuan Cloth',
-        'satuan_bedding'   => 'Satuan Bedding',
+        'satuan_cloth' => 'Satuan Cloth',
+        'satuan_bedding' => 'Satuan Bedding',
     ],
 
     /*
@@ -140,15 +140,15 @@ return [
     | sebagai sesuatu yang bukan dirinya.
     */
     'tindak_lanjut' => [
-        'proses_ulang'   => 'Proses ulang',
-        'tracking'       => 'Tracking',
-        'terkonfirmasi'  => 'Terkonfirmasi',
-        'compensate'     => 'Compensate',
-        'voucher'        => 'Voucher',
-        'repair'         => 'Repair',
+        'proses_ulang' => 'Proses ulang',
+        'tracking' => 'Tracking',
+        'terkonfirmasi' => 'Terkonfirmasi',
+        'compensate' => 'Compensate',
+        'voucher' => 'Voucher',
+        'repair' => 'Repair',
         'delivery_ulang' => 'Delivery ulang',
-        'pickup_ulang'   => 'Pickup ulang',
-        'repaint'        => 'Repaint',
+        'pickup_ulang' => 'Pickup ulang',
+        'repaint' => 'Repaint',
     ],
 
     /*
@@ -178,16 +178,16 @@ return [
     | kurir untuk complaint itu. (API-19)
     */
     'responsible_roles' => [
-        'kasir'         => 'Kasir',
-        'produksi'      => 'Produksi / Cuci',
-        'kurir'         => 'Kurir',
+        'kasir' => 'Kasir',
+        'produksi' => 'Produksi / Cuci',
+        'kurir' => 'Kurir',
         'customer_care' => 'Customer Care',
-        'lainnya'       => 'Lainnya',
+        'lainnya' => 'Lainnya',
     ],
 
     'divisions' => [
         'produksi' => 'Operasional Cuci / Produksi',
-        'kurir'    => 'Kurir / Antar Jemput',
+        'kurir' => 'Kurir / Antar Jemput',
         'keuangan' => 'Keuangan',
     ],
 
@@ -196,9 +196,9 @@ return [
     | angkanya, DAN saat menutup complaint yang memegang angka itu. (API-25)
     */
     'compensation_limit' => [
-        'kasir'          => 50000,
-        'customer_care'  => 200000,
-        'divisi'         => 0,
-        'supervisor'     => PHP_INT_MAX,
+        'kasir' => 50000,
+        'customer_care' => 200000,
+        'divisi' => 0,
+        'supervisor' => PHP_INT_MAX,
     ],
 ];

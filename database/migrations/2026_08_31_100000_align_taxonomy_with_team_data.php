@@ -18,9 +18,9 @@ return new class extends Migration
 {
     /** Kategori lama → kategori tim. Yang tidak disebut jatuh ke `lainnya`. */
     private const KATEGORI = [
-        'hasil_cuci'    => 'barang_rusak',
+        'hasil_cuci' => 'barang_rusak',
         'keterlambatan' => 'terlambat',
-        'salah_tagih'   => 'lainnya',
+        'salah_tagih' => 'lainnya',
         'sikap_petugas' => 'lainnya',
     ];
 
@@ -36,19 +36,19 @@ return new class extends Migration
      * Barang Rusak — dan sub-nya dikosongkan supaya tidak tersisa ganda.
      */
     private const SUB_NAIK_PANGKAT = [
-        'hasil_cuci'    => ['Masih kotor' => 'kurang_bersih', 'Bau' => 'berbau'],
+        'hasil_cuci' => ['Masih kotor' => 'kurang_bersih', 'Bau' => 'berbau'],
         'barang_hilang' => ['Tertukar pelanggan lain' => 'barang_tertukar'],
     ];
 
     private const PRIORITY_KE_BOBOT = [
         'urgent' => 'berat',
-        'high'   => 'berat',
+        'high' => 'berat',
         'medium' => 'sedang',
-        'low'    => 'ringan',
+        'low' => 'ringan',
     ];
 
     private const BOBOT_KE_PRIORITY = [
-        'berat'  => 'high',
+        'berat' => 'high',
         'sedang' => 'medium',
         'ringan' => 'low',
     ];
@@ -173,8 +173,8 @@ return new class extends Migration
         // paused_at diambil dari updated_at: itu perkiraan terbaik yang ada
         // untuk kapan jedanya dimulai, dan lebih jujur daripada now().
         DB::table('complaints')->where('status', 'menunggu_pelanggan')->update([
-            'status'       => 'handling',
-            'paused_at'    => DB::raw('updated_at'),
+            'status' => 'handling',
+            'paused_at' => DB::raw('updated_at'),
             'pause_reason' => 'menunggu_pelanggan',
         ]);
 

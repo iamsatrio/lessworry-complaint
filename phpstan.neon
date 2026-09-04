@@ -1,0 +1,14 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 5
+
+    paths:
+        - app
+        - database
+        - routes
+
+    # Test menjaga perilaku; analisis statis menjaga hal yang tidak terlihat
+    # test — properti yang tidak ada, tipe yang tidak cocok, null yang tidak
+    # dijaga. Keduanya menangkap kelas kesalahan yang berbeda.

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Complaint;
 use App\Models\Outlet;
 use App\Models\User;
+use App\Services\NeviraGate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
@@ -292,5 +293,5 @@ class NeviraChokePointTest extends TestCase
 /** Alias supaya batasnya tidak ditulis dua kali di test. */
 class NeviraGateLimit
 {
-    public const PER_MINUTE = \App\Services\NeviraGate::PER_MINUTE;
+    public const PER_MINUTE = NeviraGate::PER_MINUTE;
 }

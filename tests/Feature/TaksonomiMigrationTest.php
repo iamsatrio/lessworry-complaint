@@ -40,15 +40,15 @@ class TaksonomiMigrationTest extends TestCase
     {
         return DB::table('complaints')->insertGetId([
             'ticket_number' => $nomor,
-            'channel'       => 'wa_cc',
+            'channel' => 'wa_cc',
             'reporter_name' => 'Pelapor',
-            'category'      => $kategori,
-            'sub_category'  => $sub,
-            'priority'      => $priority,
-            'status'        => $status,
-            'description'   => 'Keluhan lama',
-            'created_at'    => now()->subDays(3),
-            'updated_at'    => now()->subDay(),
+            'category' => $kategori,
+            'sub_category' => $sub,
+            'priority' => $priority,
+            'status' => $status,
+            'description' => 'Keluhan lama',
+            'created_at' => now()->subDays(3),
+            'updated_at' => now()->subDay(),
         ]);
     }
 
@@ -61,14 +61,14 @@ class TaksonomiMigrationTest extends TestCase
         $this->assertFalse(Schema::hasColumn('complaints', 'bobot'));
 
         $baris = [
-            'kotor'     => $this->complaintLama('LW-20260101-001', 'hasil_cuci', 'Masih kotor', 'urgent', 'baru'),
-            'bau'       => $this->complaintLama('LW-20260101-002', 'hasil_cuci', 'Bau', 'high', 'ditangani'),
-            'sobek'     => $this->complaintLama('LW-20260101-003', 'hasil_cuci', 'Rusak/sobek', 'medium', 'menunggu_pelanggan'),
-            'telat'     => $this->complaintLama('LW-20260101-004', 'keterlambatan', 'Telat antar', 'low', 'selesai'),
-            'tagih'     => $this->complaintLama('LW-20260101-005', 'salah_tagih', 'Berat tidak sesuai', 'medium', 'ditolak'),
-            'sikap'     => $this->complaintLama('LW-20260101-006', 'sikap_petugas', 'Pelayanan kasir', 'low', 'baru'),
-            'hilang'    => $this->complaintLama('LW-20260101-007', 'barang_hilang', 'Item kurang', 'high', 'ditangani'),
-            'tertukar'  => $this->complaintLama('LW-20260101-008', 'barang_hilang', 'Tertukar pelanggan lain', 'urgent', 'baru'),
+            'kotor' => $this->complaintLama('LW-20260101-001', 'hasil_cuci', 'Masih kotor', 'urgent', 'baru'),
+            'bau' => $this->complaintLama('LW-20260101-002', 'hasil_cuci', 'Bau', 'high', 'ditangani'),
+            'sobek' => $this->complaintLama('LW-20260101-003', 'hasil_cuci', 'Rusak/sobek', 'medium', 'menunggu_pelanggan'),
+            'telat' => $this->complaintLama('LW-20260101-004', 'keterlambatan', 'Telat antar', 'low', 'selesai'),
+            'tagih' => $this->complaintLama('LW-20260101-005', 'salah_tagih', 'Berat tidak sesuai', 'medium', 'ditolak'),
+            'sikap' => $this->complaintLama('LW-20260101-006', 'sikap_petugas', 'Pelayanan kasir', 'low', 'baru'),
+            'hilang' => $this->complaintLama('LW-20260101-007', 'barang_hilang', 'Item kurang', 'high', 'ditangani'),
+            'tertukar' => $this->complaintLama('LW-20260101-008', 'barang_hilang', 'Tertukar pelanggan lain', 'urgent', 'baru'),
         ];
 
         $sebelum = DB::table('complaints')->count();
@@ -183,11 +183,11 @@ class TaksonomiMigrationTest extends TestCase
 
         DB::table('complaint_activities')->insert([
             'complaint_id' => $complaintId,
-            'type'         => 'status_change',
-            'from_status'  => 'ditangani',
-            'to_status'    => 'selesai',
-            'created_at'   => now(),
-            'updated_at'   => now(),
+            'type' => 'status_change',
+            'from_status' => 'ditangani',
+            'to_status' => 'selesai',
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         $this->maju();

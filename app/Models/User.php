@@ -3,9 +3,22 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
+/**
+ * @property int $id
+ * @property string $name
+ * @property string $email
+ * @property string $password
+ * @property string $role
+ * @property int|null $outlet_id
+ * @property string|null $division
+ * @property bool $is_active
+ * @property bool $must_change_password
+ * @property-read Outlet|null $outlet
+ */
 class User extends Authenticatable
 {
     use HasFactory, Notifiable;
@@ -22,22 +35,23 @@ class User extends Authenticatable
      * dan pengguna baru langsung ditolak middleware 'active'.
      */
     protected $attributes = [
-        'role'                 => 'kasir',
-        'is_active'            => true,
+        'role' => 'kasir',
+        'is_active' => true,
         'must_change_password' => false,
     ];
 
     protected function casts(): array
     {
         return [
-            'email_verified_at'    => 'datetime',
-            'password'             => 'hashed',
-            'is_active'            => 'boolean',
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'is_active' => 'boolean',
             'must_change_password' => 'boolean',
         ];
     }
 
-    public function outlet()
+    /** @return BelongsTo<Outlet, $this> */
+    public function outlet(): BelongsTo
     {
         return $this->belongsTo(Outlet::class);
     }
@@ -184,20 +198,20 @@ class User extends Authenticatable
     public function canView(Complaint $complaint): bool
     {
         return match ($this->role) {
-            'kasir'  => $complaint->outlet_id === $this->outlet_id,
+            'kasir' => $complaint->outlet_id === $this->outlet_id,
             'divisi' => $complaint->forwarded_division === $this->division,
-            default  => true,
+            default => true,
         };
     }
 
     public function roleLabel(): string
     {
         return match ($this->role) {
-            'kasir'         => 'Kasir',
+            'kasir' => 'Kasir',
             'customer_care' => 'Customer Care',
-            'divisi'        => 'Divisi '.config('complaint.divisions.'.$this->division, $this->division),
-            'supervisor'    => 'Supervisor',
-            default         => $this->role,
+            'divisi' => 'Divisi '.config('complaint.divisions.'.$this->division, $this->division),
+            'supervisor' => 'Supervisor',
+            default => $this->role,
         };
     }
 }

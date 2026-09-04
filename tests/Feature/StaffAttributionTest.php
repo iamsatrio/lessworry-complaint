@@ -40,9 +40,9 @@ class StaffAttributionTest extends TestCase
         $c = $this->makeComplaint(['nevira_transaction_number' => '31135']);
         $c->forceFill(['nevira_snapshot' => [
             'cashier_name' => 'Muhamad Gilang Ramadhan',
-            'cashier_nip'  => 'LW/06-0002',
-            'cashier_id'   => 535,
-            'processes'    => [
+            'cashier_nip' => 'LW/06-0002',
+            'cashier_id' => 535,
+            'processes' => [
                 ['stage' => 'Spotting', 'staff_name' => 'Andi', 'staff_nip' => 'LW/01', 'staff_id' => 243, 'status' => 'COMPLETED', 'duration' => 817],
                 ['stage' => 'Cuci', 'staff_name' => 'Budi', 'staff_nip' => 'LW/02', 'staff_id' => 244, 'status' => 'COMPLETED', 'duration' => 600],
             ],
@@ -116,7 +116,7 @@ class StaffAttributionTest extends TestCase
 
         $this->actingAs($kasir)->post('/complaints/'.$c->id.'/pelaku', [
             'manual_nama' => 'Budi',
-            'alasan'      => 'coba-coba',
+            'alasan' => 'coba-coba',
         ])->assertForbidden();
 
         $this->assertSame(0, $c->responsibles()->count());

@@ -46,7 +46,7 @@ class TaksonomiTimTest extends TestCase
             ->get('/complaints/create')->assertOk()->getContent();
 
         foreach (['barang_rusak', 'kurang_bersih', 'barang_hilang', 'berbau',
-                  'kurang_rapih', 'barang_tertukar', 'terlambat', 'lainnya'] as $kunci) {
+            'kurang_rapih', 'barang_tertukar', 'terlambat', 'lainnya'] as $kunci) {
             $this->assertStringContainsString('value="'.$kunci.'"', $html,
                 "Kategori tim '$kunci' tidak ada di form intake.");
         }

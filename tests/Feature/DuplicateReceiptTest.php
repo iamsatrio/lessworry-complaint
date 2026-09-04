@@ -77,7 +77,7 @@ class DuplicateReceiptTest extends TestCase
     public function test_halaman_complaint_menyebut_complaint_lain_untuk_nota_yang_sama(): void
     {
         $pertama = $this->complaint();
-        $kedua   = $this->complaint();
+        $kedua = $this->complaint();
 
         $this->actingAs($this->userAs('supervisor'))
             ->get('/complaints/'.$kedua->id)
@@ -96,7 +96,7 @@ class DuplicateReceiptTest extends TestCase
 
     public function test_peringatan_tidak_membocorkan_complaint_outlet_lain(): void
     {
-        $pusat  = Outlet::create(['name' => 'Pusat']);
+        $pusat = Outlet::create(['name' => 'Pusat']);
         $cabang = Outlet::create(['name' => 'Cabang']);
 
         $rahasia = $this->complaint(self::NOTA, $cabang);

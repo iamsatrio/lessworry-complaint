@@ -50,7 +50,7 @@ class KasirTutupRinganTest extends TestCase
     {
         return $this->actingAs($user)->post('/complaints/'.$complaint->id.'/status', array_merge([
             'lock_version' => $complaint->fresh()->lock_version,
-            'status'       => 'close',
+            'status' => 'close',
             'close_reason' => 'selesai',
         ], $ganti));
     }
@@ -130,7 +130,7 @@ class KasirTutupRinganTest extends TestCase
         $balasan = $this->actingAs($this->userAs('kasir', $outlet))
             ->post('/complaints/'.$complaint->id.'/status', [
                 'lock_version' => $complaint->fresh()->lock_version,
-                'status'       => 'close',
+                'status' => 'close',
                 'close_reason' => 'selesai',
                 // Sengaja: tidak ada 'compensation_amount' di payload.
             ]);
@@ -265,7 +265,7 @@ class KasirTutupRinganTest extends TestCase
         $this->actingAs($this->userAs('kasir', $outlet))
             ->post('/complaints/'.$complaint->id.'/status', [
                 'lock_version' => $complaint->fresh()->lock_version,
-                'status'       => 'handling',
+                'status' => 'handling',
             ])->assertSessionHasErrors('status');
 
         $complaint->refresh();
@@ -286,7 +286,7 @@ class KasirTutupRinganTest extends TestCase
         $this->actingAs($this->userAs('customer_care'))
             ->post('/complaints/'.$complaint->id.'/status', [
                 'lock_version' => $complaint->fresh()->lock_version,
-                'status'       => 'handling',
+                'status' => 'handling',
             ])->assertSessionHasErrors('compensation_amount');
 
         $this->assertSame('close', $complaint->fresh()->status);
@@ -303,7 +303,7 @@ class KasirTutupRinganTest extends TestCase
 
         $this->actingAs($kasir)->post('/complaints/'.$complaint->id.'/status', [
             'lock_version' => $complaint->fresh()->lock_version,
-            'status'       => 'handling',
+            'status' => 'handling',
         ])->assertSessionHasNoErrors();
 
         $complaint->refresh();
@@ -323,7 +323,7 @@ class KasirTutupRinganTest extends TestCase
 
         $this->actingAs($supervisor)->post('/complaints/'.$complaint->id.'/status', [
             'lock_version' => $complaint->fresh()->lock_version,
-            'status'       => 'handling',
+            'status' => 'handling',
         ])->assertSessionHasNoErrors();
 
         $catatan = $complaint->activities()->pluck('note')->implode(' | ');

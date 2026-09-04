@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Complaint;
 use App\Models\Outlet;
 use App\Models\User;
+use App\Services\NeviraClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -174,7 +175,7 @@ class ComplaintTest extends TestCase
         $hari = [
             'ringan' => 2,
             'sedang' => 3,
-            'berat'  => 5,
+            'berat' => 5,
         ];
 
         foreach ($hari as $bobot => $target) {
@@ -289,7 +290,7 @@ class ComplaintTest extends TestCase
             '*/transactions/*' => Http::response(['data' => ['id_transaction' => 1]], 200),
         ]);
 
-        app(\App\Services\NeviraClient::class)->transaction('1');
+        app(NeviraClient::class)->transaction('1');
 
         Http::assertSent(function ($request) {
             if (! str_contains($request->url(), '/transactions/')) {
@@ -309,7 +310,7 @@ class ComplaintTest extends TestCase
             '*' => Http::response(['data' => ['id_transaction' => 42]], 200),
         ]);
 
-        app(\App\Services\NeviraClient::class)->transaction('42');
+        app(NeviraClient::class)->transaction('42');
 
         Http::assertSent(fn ($request) => ! str_contains($request->url(), '/transaction/detail/'));
         Http::assertSent(fn ($request) => str_contains($request->url(), '/api/transactions/42'));
@@ -459,7 +460,7 @@ class ComplaintTest extends TestCase
         $cc = $this->userAs('customer_care');
         $complaint = $this->makeComplaint(['nevira_transaction_number' => '111']);
         $complaint->forceFill([
-            'nevira_snapshot'    => ['invoice' => 'INV/LAMA'],
+            'nevira_snapshot' => ['invoice' => 'INV/LAMA'],
             'nevira_customer_id' => '999',
         ])->save();
 

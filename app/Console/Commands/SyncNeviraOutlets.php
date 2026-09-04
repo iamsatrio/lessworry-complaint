@@ -53,6 +53,7 @@ class SyncNeviraOutlets extends Command
 
             if ($outlet) {
                 $tetap++;
+
                 continue;
             }
 

@@ -48,7 +48,7 @@ class JedaSlaTest extends TestCase
     {
         return $this->actingAs($user)->post('/complaints/'.$complaint->id.'/status', array_merge([
             'lock_version' => $complaint->fresh()->lock_version,
-            'status'       => 'handling',
+            'status' => 'handling',
         ], $data));
     }
 

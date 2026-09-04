@@ -45,7 +45,7 @@ class StaffPrivacyTest extends TestCase
         $complaint->save();
 
         $complaint->forceFill(['nevira_snapshot' => [
-            'invoice'    => 'INV/118/1/1',
+            'invoice' => 'INV/118/1/1',
             'deliveries' => [[
                 'id' => 1, 'date' => '2026-05-03', 'status_code' => 2, 'status' => 'Diantar',
                 'cancel_reason' => null,
@@ -96,7 +96,7 @@ class StaffPrivacyTest extends TestCase
 
     public function test_kasir_tidak_menerima_daftar_pegawai_perusahaan(): void
     {
-        $pusat  = Outlet::create(['name' => 'Pusat', 'nevira_outlet_id' => '118']);
+        $pusat = Outlet::create(['name' => 'Pusat', 'nevira_outlet_id' => '118']);
         $cabang = Outlet::create(['name' => 'Cabang', 'nevira_outlet_id' => '119']);
 
         $this->userAs('kasir', $cabang, 'Kasir Cabang Rahasia');

@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\NeviraAccessDenied;
-use App\Models\Outlet;
 use App\Exceptions\NeviraException;
+use App\Models\Outlet;
 use App\Services\NeviraGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,7 +30,7 @@ class NeviraLookupController extends Controller
 
         if (! $gate->isConfigured()) {
             return response()->json([
-                'ok'      => false,
+                'ok' => false,
                 'message' => 'Integrasi NEVIRA belum dikonfigurasi. Complaint tetap bisa disimpan tanpa tautan order.',
             ]);
         }
@@ -41,13 +41,13 @@ class NeviraLookupController extends Controller
             abort(403);
         } catch (NeviraException $e) {
             return response()->json([
-                'ok'      => false,
+                'ok' => false,
                 'message' => $e->userMessage(),
             ]);
         }
 
         return response()->json([
-            'ok'   => true,
+            'ok' => true,
             'data' => $this->untukPeran($resolved['summary'], $user),
         ]);
     }
@@ -75,17 +75,17 @@ class NeviraLookupController extends Controller
     private function untukPeran(array $summary, $user): array
     {
         $aman = [
-            'invoice'        => $summary['invoice'] ?? null,
-            'outlet_name'    => $summary['outlet_name'] ?? null,
+            'invoice' => $summary['invoice'] ?? null,
+            'outlet_name' => $summary['outlet_name'] ?? null,
             // Id outlet LOKAL, bukan id NEVIRA — supaya form bisa memilih
             // pilihannya tanpa pengenal sistem lain ikut ke browser.
-            'outlet_id'      => $this->outletLokal($summary),
-            'status'         => $summary['status'] ?? null,
+            'outlet_id' => $this->outletLokal($summary),
+            'status' => $summary['status'] ?? null,
             'payment_status' => $summary['payment_status'] ?? null,
-            'grand_total'    => $summary['grand_total'] ?? null,
-            'customer_name'  => $summary['customer_name'] ?? null,
+            'grand_total' => $summary['grand_total'] ?? null,
+            'customer_name' => $summary['customer_name'] ?? null,
             'customer_phone' => $summary['customer_phone'] ?? null,
-            'created_at'     => $summary['created_at'] ?? null,
+            'created_at' => $summary['created_at'] ?? null,
         ];
 
         // Nama karyawan menyangkut penilaian kerja orang.

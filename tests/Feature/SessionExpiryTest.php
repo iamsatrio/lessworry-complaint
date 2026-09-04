@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Complaint;
 use App\Models\User;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Session\TokenMismatchException;
 use Tests\TestCase;
 
@@ -29,18 +31,18 @@ class SessionExpiryTest extends TestCase
      * penangan galat di produksi. Tanpa rute terpasang, penangan tidak bisa
      * membedakan simpan complaint dari permintaan lain.
      */
-    private function simpanYangKedaluwarsa(array $isian): \Illuminate\Http\Request
+    private function simpanYangKedaluwarsa(array $isian): Request
     {
-        $request = \Illuminate\Http\Request::create('/complaints', 'POST', $isian);
+        $request = Request::create('/complaints', 'POST', $isian);
         $request->setLaravelSession(app('session.store'));
         $request->setRouteResolver(fn () => app('router')->getRoutes()->getByName('complaints.store'));
 
         return $request;
     }
 
-    private function renderKedaluwarsa(\Illuminate\Http\Request $request)
+    private function renderKedaluwarsa(Request $request)
     {
-        return app(\Illuminate\Contracts\Debug\ExceptionHandler::class)
+        return app(ExceptionHandler::class)
             ->render($request, new TokenMismatchException('CSRF token mismatch.'));
     }
 
@@ -131,10 +133,10 @@ class SessionExpiryTest extends TestCase
 
     public function test_permintaan_json_dapat_pesan_bukan_halaman_html(): void
     {
-        $request = \Illuminate\Http\Request::create('/nevira/lookup', 'GET');
+        $request = Request::create('/nevira/lookup', 'GET');
         $request->headers->set('Accept', 'application/json');
 
-        $handler = app(\Illuminate\Contracts\Debug\ExceptionHandler::class);
+        $handler = app(ExceptionHandler::class);
         $response = $handler->render($request, new TokenMismatchException('CSRF token mismatch.'));
 
         $this->assertSame(419, $response->getStatusCode());

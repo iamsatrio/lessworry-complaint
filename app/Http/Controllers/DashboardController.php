@@ -40,15 +40,15 @@ class DashboardController extends Controller
             ->pluck('total', 'status');
 
         return view('dashboard', [
-            'openCount'      => $open->count(),
-            'overdueCount'   => $overdue->count(),
-            'overdue'        => $overdue->sortBy('due_resolution_at')->take(8),
-            'todayCount'     => $today,
-            'resolvedToday'  => $resolvedToday,
-            'avgMinutes'     => $avgMinutes,
-            'byCategory'     => $byCategory,
-            'byStatus'       => $byStatus,
-            'latest'         => $base()->latest()->with('outlet')->take(8)->get(),
+            'openCount' => $open->count(),
+            'overdueCount' => $overdue->count(),
+            'overdue' => $overdue->sortBy('due_resolution_at')->take(8),
+            'todayCount' => $today,
+            'resolvedToday' => $resolvedToday,
+            'avgMinutes' => $avgMinutes,
+            'byCategory' => $byCategory,
+            'byStatus' => $byStatus,
+            'latest' => $base()->latest()->with('outlet')->take(8)->get(),
         ]);
     }
 }

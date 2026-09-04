@@ -47,7 +47,7 @@ class AssignAuthorityTest extends TestCase
     {
         $outlet = Outlet::create(['name' => 'Pusat']);
         $kasir = $this->userAs('kasir', $outlet);
-        $lain  = $this->userAs('customer_care');
+        $lain = $this->userAs('customer_care');
         $complaint = $this->complaint(['outlet_id' => $outlet->id]);
 
         $this->actingAs($kasir)
