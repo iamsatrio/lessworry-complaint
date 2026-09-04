@@ -77,7 +77,7 @@ class ComplaintController extends Controller
 
     public function create()
     {
-        abort_unless(Auth::user()->canCreateComplaint(), 403);
+        $this->authorize('create', Complaint::class);
 
         return view('complaints.create', [
             'outlets' => Outlet::where('is_active', true)->orderBy('name')->get(),
@@ -86,8 +86,9 @@ class ComplaintController extends Controller
 
     public function store(Request $request)
     {
+        $this->authorize('create', Complaint::class);
+
         $user = $request->user();
-        abort_unless($user->canCreateComplaint(), 403);
 
         $data = $request->validate([
             'channel' => ['required', Rule::in(array_keys(config('complaint.channels')))],
@@ -227,8 +228,9 @@ class ComplaintController extends Controller
 
     public function show(Complaint $complaint)
     {
+        $this->authorize('view', $complaint);
+
         $user = Auth::user();
-        abort_unless($user->canView($complaint), 403);
 
         $complaint->load(['outlet', 'assignee', 'creator', 'activities.user', 'activities.attachments', 'attachments', 'responsibles.setter']);
 
@@ -277,8 +279,9 @@ class ComplaintController extends Controller
     /** Ubah status, dengan pencatatan riwayat dan penegakan wewenang. */
     public function updateStatus(Request $request, Complaint $complaint)
     {
+        $this->authorize('updateStatus', $complaint);
+
         $user = $request->user();
-        abort_unless($user->canView($complaint), 403);
 
         $data = $request->validate([
             'status' => ['required', Rule::in(array_keys(config('complaint.statuses')))],
@@ -401,9 +404,9 @@ class ComplaintController extends Controller
      */
     public function assign(Request $request, Complaint $complaint)
     {
+        $this->authorize('assign', $complaint);
+
         $user = $request->user();
-        abort_unless($user->canView($complaint), 403);
-        abort_unless($user->canAssignResponsibility(), 403);
 
         $data = $request->validate([
             // Hanya ke akun aktif yang memang menangani complaint. Sebelumnya
@@ -439,8 +442,9 @@ class ComplaintController extends Controller
      */
     public function addNote(Request $request, Complaint $complaint)
     {
+        $this->authorize('addNote', $complaint);
+
         $user = $request->user();
-        abort_unless($user->canView($complaint), 403);
 
         $data = $request->validate([
             'note' => ['required', 'string', 'max:2000'],
@@ -525,11 +529,11 @@ class ComplaintController extends Controller
      */
     public function updateLink(Request $request, Complaint $complaint)
     {
-        $user = $request->user();
-        abort_unless($user->canView($complaint), 403);
         // Menautkan berarti menarik data pelanggan dari NEVIRA. Peran yang
         // tidak mencatat complaint tidak berkepentingan dengan itu.
-        abort_unless($user->canCreateComplaint(), 403);
+        $this->authorize('link', $complaint);
+
+        $user = $request->user();
 
         $data = $request->validate([
             'nevira_transaction_number' => ['nullable', 'string', 'max:64'],
@@ -591,9 +595,9 @@ class ComplaintController extends Controller
      */
     public function addResponsible(Request $request, Complaint $complaint)
     {
+        $this->authorize('manageResponsible', $complaint);
+
         $user = $request->user();
-        abort_unless($user->canView($complaint), 403);
-        abort_unless($user->canAssignResponsibility(), 403);
 
         $peranSah = array_keys(config('complaint.responsible_roles'));
 
@@ -711,10 +715,11 @@ class ComplaintController extends Controller
     /** Ubah peran atau alasan seorang pelaku. Perubahan ikut ke riwayat. */
     public function updateResponsible(Request $request, Complaint $complaint, ComplaintResponsible $responsible)
     {
-        $user = $request->user();
-        abort_unless($user->canView($complaint), 403);
-        abort_unless($user->canAssignResponsibility(), 403);
+        $this->authorize('manageResponsible', $complaint);
+        // 404, bukan 403: ini keutuhan rute, bukan wewenang.
         abort_unless($responsible->complaint_id === $complaint->id, 404);
+
+        $user = $request->user();
 
         $data = $request->validate([
             'peran' => ['required', Rule::in(array_keys(config('complaint.responsible_roles')))],
@@ -746,10 +751,11 @@ class ComplaintController extends Controller
     /** Cabut penetapan seorang pelaku. Pencabutan juga masuk riwayat. */
     public function destroyResponsible(Request $request, Complaint $complaint, ComplaintResponsible $responsible)
     {
-        $user = $request->user();
-        abort_unless($user->canView($complaint), 403);
-        abort_unless($user->canAssignResponsibility(), 403);
+        $this->authorize('manageResponsible', $complaint);
+        // 404, bukan 403: ini keutuhan rute, bukan wewenang.
         abort_unless($responsible->complaint_id === $complaint->id, 404);
+
+        $user = $request->user();
 
         $nama = $responsible->staff_name;
 
@@ -784,7 +790,7 @@ class ComplaintController extends Controller
      */
     public function attachment(Request $request, Complaint $complaint, ComplaintAttachment $attachment)
     {
-        abort_unless($request->user()->canView($complaint), 403);
+        $this->authorize('viewAttachment', $complaint);
         abort_unless($attachment->complaint_id === $complaint->id, 404);
         abort_unless(Storage::disk('local')->exists($attachment->path), 404);
 
@@ -801,7 +807,7 @@ class ComplaintController extends Controller
      */
     public function attachmentThumb(Request $request, Complaint $complaint, ComplaintAttachment $attachment)
     {
-        abort_unless($request->user()->canView($complaint), 403);
+        $this->authorize('viewAttachment', $complaint);
         abort_unless($attachment->complaint_id === $complaint->id, 404);
 
         // Foto yang kompresinya gagal tidak punya versi kecil; yang disajikan
@@ -818,11 +824,9 @@ class ComplaintController extends Controller
     /** Coba tautkan ulang ke NEVIRA (dipakai saat sinkron pertama gagal). */
     public function resync(Complaint $complaint)
     {
-        $user = Auth::user();
-        abort_unless($user->canView($complaint), 403);
-        abort_unless($user->canCreateComplaint(), 403);
+        $this->authorize('link', $complaint);
 
-        $this->syncNevira($complaint, $user);
+        $this->syncNevira($complaint, Auth::user());
 
         return back()->with('status', $complaint->nevira_sync_error
             ? 'Sinkron NEVIRA gagal: '.$complaint->nevira_sync_error
