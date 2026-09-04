@@ -3,11 +3,52 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
 
+/**
+ * Kolom tabel complaints, ditulis supaya analisis statis tahu bentuknya —
+ * casts() hanya berlaku saat berjalan, tidak terbaca PHPStan.
+ *
+ * @property int $id
+ * @property string $ticket_number
+ * @property string $channel
+ * @property string $reporter_name
+ * @property string|null $reporter_phone
+ * @property string|null $nevira_transaction_id
+ * @property string|null $nevira_transaction_number
+ * @property string|null $nevira_customer_id
+ * @property array<string,mixed>|null $nevira_snapshot
+ * @property Carbon|null $nevira_synced_at
+ * @property string|null $nevira_sync_error
+ * @property string|null $nota_exemption
+ * @property int|null $outlet_id
+ * @property string $category
+ * @property string|null $sub_category
+ * @property string $priority
+ * @property string $status
+ * @property int $lock_version
+ * @property string $description
+ * @property int|null $assigned_to
+ * @property string|null $forwarded_division
+ * @property string|null $resolution
+ * @property string|null $root_cause
+ * @property int $compensation_amount
+ * @property Carbon|null $due_response_at
+ * @property Carbon|null $due_resolution_at
+ * @property Carbon|null $first_response_at
+ * @property Carbon|null $resolved_at
+ * @property int|null $created_by
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property-read Outlet|null $outlet
+ * @property-read User|null $assignee
+ * @property-read User|null $creator
+ */
 class Complaint extends Model
 {
     use HasFactory;
@@ -47,17 +88,20 @@ class Complaint extends Model
         ];
     }
 
-    public function outlet()
+    /** @return BelongsTo<Outlet, $this> */
+    public function outlet(): BelongsTo
     {
         return $this->belongsTo(Outlet::class);
     }
 
-    public function assignee()
+    /** @return BelongsTo<User, $this> */
+    public function assignee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to');
     }
 
-    public function creator()
+    /** @return BelongsTo<User, $this> */
+    public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
     }
@@ -69,7 +113,8 @@ class Complaint extends Model
      * melibatkan kasir penerima, petugas cuci, dan kurir sekaligus. Kosong
      * juga wajar: complaint tanpa pelaku tidak pernah dipaksa.
      */
-    public function responsibles()
+    /** @return HasMany<ComplaintResponsible, $this> */
+    public function responsibles(): HasMany
     {
         return $this->hasMany(ComplaintResponsible::class)->orderBy('id');
     }
@@ -78,7 +123,7 @@ class Complaint extends Model
      * Orang-orang yang menyentuh order ini menurut NEVIRA — kasir penerima
      * dan setiap tahap produksi. Fakta, bukan tuduhan.
      *
-     * @return array<int,array{stage:string,name:?string,nip:?string,status:?string,duration:?int}>
+     * @return array<int,array{stage:string,name:?string,nip:?string,staff_id:mixed,status:?string,duration:?int}>
      */
     public function orderHandlers(): array
     {
@@ -206,12 +251,14 @@ class Complaint extends Model
             : ($this->outlet?->nevira_outlet_id ?: null);
     }
 
-    public function activities()
+    /** @return HasMany<ComplaintActivity, $this> */
+    public function activities(): HasMany
     {
         return $this->hasMany(ComplaintActivity::class)->latest();
     }
 
-    public function attachments()
+    /** @return HasMany<ComplaintAttachment, $this> */
+    public function attachments(): HasMany
     {
         return $this->hasMany(ComplaintAttachment::class);
     }
@@ -238,12 +285,12 @@ class Complaint extends Model
      * Disaring visibleTo supaya peringatannya sendiri tidak jadi jalan
      * melihat complaint outlet lain.
      *
-     * @return Collection<int,Complaint>
+     * @return EloquentCollection<int,static>
      */
-    public function kembaranNota(User $user)
+    public function kembaranNota(User $user): EloquentCollection
     {
         if (blank($this->nevira_transaction_number)) {
-            return collect();
+            return new EloquentCollection;
         }
 
         return static::query()
@@ -386,7 +433,9 @@ class Complaint extends Model
             return null;
         }
 
-        return $this->created_at->diffInMinutes($this->resolved_at);
+        // diffInMinutes() mengembalikan float di Carbon 3; dibulatkan ke
+        // bawah secara eksplisit supaya tidak ada konversi implisit.
+        return (int) $this->created_at->diffInMinutes($this->resolved_at);
     }
 
     /* ---------- Scope ---------- */

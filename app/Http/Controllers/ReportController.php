@@ -37,7 +37,9 @@ class ReportController extends Controller
             'avgMinutes' => $resolved->isEmpty() ? null : (int) round($resolved->avg(fn ($c) => $c->resolutionMinutes())),
             'byCategory' => $complaints->groupBy('category')->map->count()->sortDesc(),
             'byChannel' => $complaints->groupBy('channel')->map->count()->sortDesc(),
-            'byOutlet' => $complaints->groupBy(fn ($c) => $c->outlet?->name ?? 'Tanpa outlet')->map->count()->sortDesc(),
+            // ?? sudah menahan complaint tanpa outlet: PHP membaca properti
+            // di kirinya secara isset, jadi ?-> di sini mubazir.
+            'byOutlet' => $complaints->groupBy(fn ($c) => $c->outlet->name ?? 'Tanpa outlet')->map->count()->sortDesc(),
             // Rekap per karyawan hanya untuk yang berwenang melihatnya.
             // Tiap pelaku dihitung, bukan satu per complaint: satu keluhan
             // bisa melibatkan kasir, petugas cuci, dan kurir sekaligus.

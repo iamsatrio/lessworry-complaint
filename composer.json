@@ -15,6 +15,7 @@
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
+        "larastan/larastan": "^3.11",
         "laravel/pail": "^1.2.5",
         "laravel/pao": "^1.0.6",
         "laravel/pint": "^1.27",
@@ -74,6 +75,9 @@
         ],
         "format": [
             "vendor/bin/pint"
+        ],
+        "analyse": [
+            "vendor/bin/phpstan analyse --memory-limit=1G"
         ]
     },
     "extra": {

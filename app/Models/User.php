@@ -3,9 +3,22 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
+/**
+ * @property int $id
+ * @property string $name
+ * @property string $email
+ * @property string $password
+ * @property string $role
+ * @property int|null $outlet_id
+ * @property string|null $division
+ * @property bool $is_active
+ * @property bool $must_change_password
+ * @property-read Outlet|null $outlet
+ */
 class User extends Authenticatable
 {
     use HasFactory, Notifiable;
@@ -37,7 +50,8 @@ class User extends Authenticatable
         ];
     }
 
-    public function outlet()
+    /** @return BelongsTo<Outlet, $this> */
+    public function outlet(): BelongsTo
     {
         return $this->belongsTo(Outlet::class);
     }

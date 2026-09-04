@@ -72,6 +72,10 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // Contoh complaint supaya papan kerja dan laporan tidak kosong saat pertama dibuka.
+        // Bentuknya ditulis supaya analisis statis tidak menyimpulkan tipe
+        // literal dari isi contoh — status di sini data, bukan daftar tetap,
+        // dan penjagaan di bawah harus tetap berlaku kalau barisnya berubah.
+        /** @var list<array{0:string,1:string,2:string,3:string,4:string,5:string,6:string,7:string,8:int,9:string,10:string|null}> $samples */
         $samples = [
             ['wa_cc', 'Ibu Rina', '081234567801', 'hasil_cuci', 'Masih kotor', 'urgent', 'baru',
                 'Kemeja putih masih ada noda di bagian kerah setelah dicuci.', $pusat->id, '-3 hours', null],
