@@ -5,6 +5,7 @@ namespace App\Services;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use PDOException;
 use Throwable;
 
 /**
@@ -43,6 +44,9 @@ class PemeriksaKesehatan
 
         // "disabled" bukan kerusakan: itu pilihan yang ditulis di .env
         // (NEVIRA_ENABLED=false) supaya sistem bisa dipakai tanpa NEVIRA.
+        // "unknown" juga tidak: itu berarti pemeriksaannya sendiri tidak bisa
+        // dijalankan karena ada yang lain yang mati — dan yang lain itu sudah
+        // punya barisnya sendiri di sini.
         $rusak = collect($checks)->contains(fn ($nilai) => $nilai === 'error');
 
         return [
@@ -105,6 +109,16 @@ class PemeriksaKesehatan
             $klien->me();
 
             return 'ok';
+        } catch (PDOException) {
+            // Yang gagal BUKAN NEVIRA: token NEVIRA disimpan di cache store
+            // bawaan (database), jadi database yang mati membuat pengambilan
+            // token melempar sebelum satu permintaan pun dikirim. Melaporkannya
+            // "error" akan bilang NEVIRA mati padahal NEVIRA sehat — dan
+            // membedakan keduanya justru gunanya endpoint ini.
+            //
+            // QueryException Laravel turunan PDOException, jadi keduanya
+            // tertangkap di sini.
+            return 'unknown';
         } catch (Throwable) {
             // Sengaja tanpa pesan: isinya bisa memuat URL dan status internal
             // NEVIRA. Detailnya sudah masuk log lewat NeviraClient.

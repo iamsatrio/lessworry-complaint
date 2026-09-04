@@ -47,7 +47,16 @@ return [
     |
     */
 
-    'encrypt' => env('SESSION_ENCRYPT', false),
+    /*
+    | Bawaannya SENGAJA true, berbeda dari bawaan Laravel.
+    |
+    | Password sementara pengguna baru diterbangkan lewat flash session, dan
+    | driver sesinya `database`. Kalau .env produksi tidak memuat baris
+    | SESSION_ENCRYPT, password itu mendarat sebagai teks polos di tabel
+    | `sessions` — terbaca siapa pun yang bisa membaca database, termasuk dari
+    | salinan backup. Lupa menulis satu baris .env tidak boleh berakibat itu.
+    */
+    'encrypt' => env('SESSION_ENCRYPT', true),
 
     /*
     |--------------------------------------------------------------------------

@@ -276,4 +276,29 @@ class HealthCheckTest extends TestCase
             ->assertStatus(429)
             ->assertExactJson(['status' => 'error']);
     }
+
+    public function test_database_mati_tidak_dilaporkan_seolah_nevira_yang_mati(): void
+    {
+        // Token NEVIRA disimpan di cache store bawaan (database). Database
+        // yang mati membuat pengambilan token melempar sebelum satu permintaan
+        // pun dikirim — dan melaporkannya "error" berarti bilang NEVIRA mati
+        // padahal NEVIRA sehat. Membedakan keduanya justru gunanya endpoint
+        // ini.
+        $this->neviraHidup();
+
+        config(['database.default' => 'pgsql']);
+
+        try {
+            $response = $this->getJson('/health');
+        } finally {
+            config(['database.default' => 'sqlite']);
+        }
+
+        $response->assertStatus(503);
+        $this->assertSame('error', $response->json('checks.database'));
+        $this->assertSame('unknown', $response->json('checks.nevira'));
+
+        // Dan tidak ada permintaan yang dikirim ke NEVIRA.
+        Http::assertNothingSent();
+    }
 }

@@ -367,4 +367,63 @@ class BackupTest extends TestCase
         // memegang kunci pada inode yang berbeda.
         $this->assertFileExists($this->dir.'/.lock');
     }
+
+    public function test_verify_menolak_attach_yang_disembunyikan_sebaris_dan_tidak_menulis_ke_korban(): void
+    {
+        // Bentuk persis yang menembus versi per baris: ATTACH ada di baris yang
+        // sama, sesudah titik koma. Dijalankan sampai menulis ke berkas
+        // database di luar direktori backup, dan perintahnya keluar dengan
+        // exit code 0 — terbaca sebagai verifikasi yang berhasil.
+        $korban = storage_path('app/korban-'.uniqid().'.sqlite');
+        file_put_contents($korban, '');
+
+        $this->tulisBackup('db-2030-01-04-020000.sql.gz',
+            "CREATE TABLE complaints (id INTEGER);\n"
+            ."INSERT INTO complaints VALUES (1);ATTACH DATABASE '{$korban}' AS korban;"
+            .'CREATE TABLE korban.bukti (x TEXT);'
+            ."INSERT INTO korban.bukti VALUES ('ditulis');"
+        );
+
+        try {
+            $this->artisan('backup:verify')
+                ->expectsOutputToContain('ATTACH DATABASE')
+                ->assertFailed();
+
+            $this->assertSame('', (string) file_get_contents($korban));
+        } finally {
+            @unlink($korban);
+        }
+    }
+
+    public function test_verify_menolak_attach_di_belakang_komentar_blok(): void
+    {
+        $korban = storage_path('app/korban-'.uniqid().'.sqlite');
+        file_put_contents($korban, '');
+
+        $this->tulisBackup('db-2030-01-05-020000.sql.gz',
+            "CREATE TABLE complaints (id INTEGER);\n"
+            ."/* x */ATTACH DATABASE '{$korban}' AS korban;"
+            .'CREATE TABLE korban.bukti (x TEXT);'
+        );
+
+        try {
+            $this->artisan('backup:verify')
+                ->expectsOutputToContain('ATTACH DATABASE')
+                ->assertFailed();
+
+            $this->assertSame('', (string) file_get_contents($korban));
+        } finally {
+            @unlink($korban);
+        }
+    }
+
+    public function test_verify_tetap_menerima_dump_yang_datanya_memuat_kata_terlarang(): void
+    {
+        // Complaint yang isinya menyebut ATTACH DATABASE tidak boleh membuat
+        // backupnya sendiri gagal diverifikasi.
+        $this->complaint("pelanggan menulis: ';ATTACH DATABASE ini;'");
+
+        $this->artisan('backup:database')->assertSuccessful();
+        $this->artisan('backup:verify')->assertSuccessful();
+    }
 }

@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\BerkasBackup;
+use App\Services\PemindaiDumpSql;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -205,59 +206,25 @@ class VerifyBackup extends Command
     }
 
     /**
-     * Tolak dump yang bisa memindahkan dirinya keluar dari database sementara.
+     * Tolak dump yang bisa memindahkan pemulihan keluar dari database
+     * sementara — sebelum satu byte pun dijalankan.
      *
-     * Perintah ini memulihkan berkas yang isinya TIDAK dipercaya: berkas
-     * apa pun yang diletakkan di direktori backup dengan nama yang cocok pola
-     * akan diambil oleh `backup:verify` tanpa argumen. Memeriksa lokasi dan
-     * nama saja tidak cukup — yang menentukan ke mana barisnya masuk adalah
-     * isinya.
+     * Pemindaiannya per PERNYATAAN, bukan per baris: pernyataan SQL tidak
+     * harus satu per baris, dan versi pertama pemeriksaan ini bisa dilewati
+     * hanya dengan menaruh `ATTACH` sesudah titik koma di baris yang sama.
+     * Lihat PemindaiDumpSql.
      *
-     * Yang ditolak:
-     *   USE / CREATE DATABASE / CREATE SCHEMA / DROP DATABASE  (MySQL)
-     *   ATTACH DATABASE                                        (SQLite)
-     *
-     * Dump yang dihasilkan `backup:database` tidak pernah memuat satu pun —
-     * mysqldump dipanggil TANPA --databases justru supaya begitu.
-     *
-     * Dibaca baris demi baris; dumpnya sendiri tidak pernah utuh di memori.
+     * Ini lapis pertama, dipakai supaya penolakannya datang lebih awal dengan
+     * pesan yang jelas. Lapis kedua ada di pulihkanMysql(): `--one-database`,
+     * yang tidak bergantung pada pemindai ini sama sekali.
      */
     private function tolakYangBisaKeluarDatabaseSementara(string $path): void
     {
-        $terlarang = [
-            '/^\s*USE\s+[`"\']?[A-Za-z0-9_$-]+[`"\']?\s*;/i' => 'USE',
-            '/^\s*CREATE\s+(DATABASE|SCHEMA)\b/i' => 'CREATE DATABASE',
-            '/^\s*DROP\s+(DATABASE|SCHEMA)\b/i' => 'DROP DATABASE',
-            '/^\s*ATTACH\s+(DATABASE\s+)?/i' => 'ATTACH DATABASE',
-        ];
+        // Gaya escape ditentukan dari driver yang akan MENJALANKAN dumpnya,
+        // bukan dari tebakan atas isi berkasnya.
+        $pemindai = new PemindaiDumpSql(DB::connection()->getDriverName() !== 'sqlite');
 
-        $sisa = '';
-
-        foreach ($this->potongan($path) as $potongan) {
-            $sisa .= $potongan;
-            $baris = explode("\n", $sisa);
-            $sisa = (string) array_pop($baris);
-
-            foreach ($baris as $satu) {
-                $this->periksaBaris($satu, $terlarang);
-            }
-        }
-
-        $this->periksaBaris($sisa, $terlarang);
-    }
-
-    /** @param  array<string,string>  $terlarang */
-    private function periksaBaris(string $baris, array $terlarang): void
-    {
-        foreach ($terlarang as $pola => $nama) {
-            if (preg_match($pola, $baris)) {
-                throw new \RuntimeException(
-                    'Dump ini memuat perintah "'.$nama.'" — perintah itu bisa memindahkan '
-                    .'pemulihan ke database lain, termasuk database produksi. Ditolak sebelum dijalankan. '
-                    .'Dump dari backup:database tidak pernah memuatnya.'
-                );
-            }
-        }
+        $pemindai->periksa($this->potongan($path));
     }
 
     /**
