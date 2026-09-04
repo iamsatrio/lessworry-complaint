@@ -4,13 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Exceptions\NeviraAccessDenied;
 use App\Exceptions\NeviraException;
+use App\Http\Requests\AddComplaintNoteRequest;
+use App\Http\Requests\AddResponsibleRequest;
+use App\Http\Requests\StoreComplaintRequest;
+use App\Http\Requests\UpdateComplaintStatusRequest;
 use App\Models\Complaint;
 use App\Models\ComplaintActivity;
 use App\Models\ComplaintAttachment;
 use App\Models\ComplaintResponsible;
 use App\Models\Outlet;
 use App\Models\User;
-use App\Rules\GambarSungguhan;
 use App\Services\KandidatPelaku;
 use App\Services\NeviraGate;
 use App\Services\PenyimpanFoto;
@@ -23,12 +26,6 @@ use Illuminate\Validation\Rule;
 
 class ComplaintController extends Controller
 {
-    /** Batas unggahan foto per catatan penanganan. (API-20) */
-    public const FOTO_PER_CATATAN = 5;
-
-    /** Foto kamera HP 3–8 MB; di atas ini hampir pasti bukan foto bukti. */
-    public const FOTO_MAKS_KB = 8192;
-
     public function __construct(private NeviraGate $nevira, private PenyimpanFoto $foto) {}
 
     /** Papan kerja: complaint terbuka, disaring per peran. */
@@ -84,33 +81,10 @@ class ComplaintController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(StoreComplaintRequest $request)
     {
-        $this->authorize('create', Complaint::class);
-
         $user = $request->user();
-
-        $data = $request->validate([
-            'channel' => ['required', Rule::in(array_keys(config('complaint.channels')))],
-            'reporter_name' => ['required', 'string', 'max:120'],
-            'reporter_phone' => ['nullable', 'string', 'max:30'],
-            'nevira_transaction_number' => ['required_without:nota_exemption', 'nullable', 'string', 'max:64'],
-            'nota_exemption' => ['required_without:nevira_transaction_number', 'nullable', Rule::in(array_keys(config('complaint.nota_exemptions')))],
-            'outlet_id' => ['nullable', 'exists:outlets,id'],
-            'category' => ['required', Rule::in(array_keys(config('complaint.categories')))],
-            'sub_category' => ['nullable', 'string', 'max:120'],
-            'priority' => ['required', Rule::in(array_keys(config('complaint.priorities')))],
-            // Batas panjang: tanpa ini 2 juta karakter tersimpan utuh dan
-            // ikut termuat di papan kerja maupun halaman detail. (API-8 T8)
-            'description' => ['required', 'string', 'max:5000'],
-            'attachments.*' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', new GambarSungguhan],
-        ], [
-            'nevira_transaction_number.required_without' => 'Isi nomor nota NEVIRA, atau pilih alasan kenapa complaint ini tidak punya nota.',
-            'nota_exemption.required_without' => 'Pilih alasan kenapa complaint ini tidak punya nomor nota.',
-        ], [
-            'nevira_transaction_number' => 'nomor nota',
-            'nota_exemption' => 'alasan tanpa nota',
-        ]);
+        $data = $request->validated();
 
         // Nota terisi berarti tidak ada pengecualian yang berlaku.
         if (filled($data['nevira_transaction_number'] ?? null)) {
@@ -134,7 +108,7 @@ class ComplaintController extends Controller
         // berkasnya masuk ke folder intake. Itu disengaja: percobaan ulang
         // saat nomor tiket bentrok tidak boleh menulis unggahan yang sama
         // dua kali.
-        [$berkas, $gagalFoto] = $this->simpanFoto($request->file('attachments', []), 'complaints/intake');
+        [$berkas, $gagalFoto] = $this->foto->simpanBanyak($request->file('attachments', []), 'complaints/intake');
 
         $complaint = $this->simpanMeskiNomorBentrok(function () use ($data, $user, $berkas) {
             return DB::transaction(function () use ($data, $user, $berkas) {
@@ -277,25 +251,10 @@ class ComplaintController extends Controller
     }
 
     /** Ubah status, dengan pencatatan riwayat dan penegakan wewenang. */
-    public function updateStatus(Request $request, Complaint $complaint)
+    public function updateStatus(UpdateComplaintStatusRequest $request, Complaint $complaint)
     {
-        $this->authorize('updateStatus', $complaint);
-
         $user = $request->user();
-
-        $data = $request->validate([
-            'status' => ['required', Rule::in(array_keys(config('complaint.statuses')))],
-            // Versi yang dilihat petugas saat halaman dibuka. Tanpa ini,
-            // penyimpanan dari halaman basi menimpa keputusan orang lain
-            // tanpa peringatan ke siapa pun. (API-8 T6)
-            'lock_version' => ['required', 'integer'],
-            'note' => ['nullable', 'string', 'max:2000'],
-            'resolution' => ['nullable', 'string', 'max:5000'],
-            'root_cause' => ['nullable', 'string', 'max:2000'],
-            'compensation_amount' => ['nullable', 'integer', 'min:0'],
-        ], [
-            'lock_version.required' => 'Muat ulang halaman complaint ini sebelum menyimpan.',
-        ], ['lock_version' => 'penanda versi']);
+        $data = $request->validated();
 
         if ((int) $data['lock_version'] !== (int) $complaint->lock_version) {
             // withInput() penting: petugas sudah mengetik resolusi panjang,
@@ -440,31 +399,15 @@ class ComplaintController extends Controller
      * ulang, kondisi barang saat diserahkan kembali. Berkasnya dikecilkan
      * dan dibersihkan dari EXIF sebelum disimpan — lihat PenyimpanFoto.
      */
-    public function addNote(Request $request, Complaint $complaint)
+    public function addNote(AddComplaintNoteRequest $request, Complaint $complaint)
     {
-        $this->authorize('addNote', $complaint);
-
         $user = $request->user();
-
-        $data = $request->validate([
-            'note' => ['required', 'string', 'max:2000'],
-            'photos' => ['array', 'max:'.self::FOTO_PER_CATATAN],
-            // Isi berkas yang menentukan, bukan ekstensinya: aturan image
-            // membaca berkasnya, dan PenyimpanFoto memeriksanya sekali lagi.
-            // HEIC sengaja tidak diterima — gd tidak bisa membacanya, jadi
-            // ia akan tersimpan apa adanya berikut EXIF-nya.
-            'photos.*' => ['file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:'.self::FOTO_MAKS_KB, new GambarSungguhan],
-        ], [
-            'photos.max' => 'Maksimal '.self::FOTO_PER_CATATAN.' foto per catatan.',
-            'photos.*.image' => 'Berkas :position bukan gambar. Unggah foto (JPG, PNG, atau WebP).',
-            'photos.*.mimes' => 'Berkas :position bukan gambar. Unggah foto (JPG, PNG, atau WebP).',
-            'photos.*.max' => 'Foto :position lebih dari '.(int) (self::FOTO_MAKS_KB / 1024).' MB.',
-        ], ['photos' => 'foto']);
+        $data = $request->validated();
 
         // Berkas ditulis sebelum barisnya dibuat, dan kegagalannya tidak
         // menjatuhkan catatan: petugas sudah mengetik temuannya, dan
         // membuangnya karena satu foto gagal adalah kehilangan data.
-        [$berkas, $gagal] = $this->simpanFoto($request->file('photos', []), 'complaints/'.$complaint->id);
+        [$berkas, $gagal] = $this->foto->simpanBanyak($request->file('photos', []), 'complaints/'.$complaint->id);
 
         DB::transaction(function () use ($complaint, $data, $user, $berkas) {
             $activity = ComplaintActivity::create([
@@ -491,30 +434,6 @@ class ComplaintController extends Controller
         }
 
         return back()->with('status', $pesan);
-    }
-
-    /**
-     * Simpan sekumpulan foto, kembalikan atribut lampiran dan berapa yang gagal.
-     *
-     * @return array{0:array<int,array<string,mixed>>,1:int}
-     */
-    private function simpanFoto(array $files, string $dir): array
-    {
-        $berkas = [];
-        $gagal = 0;
-
-        foreach (array_filter($files) as $file) {
-            try {
-                $berkas[] = $this->foto->simpan($file, $dir);
-            } catch (\Throwable $e) {
-                // Foto yang tidak bisa disimpan sama sekali dilewati, bukan
-                // diam-diam: pemanggilnya memberi tahu petugas.
-                report($e);
-                $gagal++;
-            }
-        }
-
-        return [$berkas, $gagal];
     }
 
     /**
@@ -593,33 +512,10 @@ class ComplaintController extends Controller
      * satu centang plus satu alasan, dan sekaligus menutup jalan menyuntikkan
      * nama karyawan sembarangan lewat form.
      */
-    public function addResponsible(Request $request, Complaint $complaint)
+    public function addResponsible(AddResponsibleRequest $request, Complaint $complaint)
     {
-        $this->authorize('manageResponsible', $complaint);
-
         $user = $request->user();
-
-        $peranSah = array_keys(config('complaint.responsible_roles'));
-
-        $data = $request->validate([
-            'pelaku' => ['required_without:manual_nama', 'array'],
-            'pelaku.*' => ['string', 'max:190'],
-            'peran' => ['array'],
-            'peran.*' => [Rule::in($peranSah)],
-            'manual_nama' => ['nullable', 'string', 'max:120'],
-            'manual_nip' => ['nullable', 'string', 'max:40'],
-            'manual_peran' => ['nullable', Rule::in($peranSah)],
-            // Alasan wajib, tanpa pengecualian. Menunjuk orang tanpa alasan
-            // tidak bisa ditinjau ulang dan menempel di catatan kerjanya.
-            'alasan' => ['required', 'string', 'max:2000'],
-        ], [
-            'pelaku.required_without' => 'Pilih siapa yang terlibat, atau tulis namanya di isian bebas.',
-            'alasan.required' => 'Tulis alasannya. Menunjuk orang tanpa alasan tidak bisa ditinjau ulang.',
-        ], [
-            'pelaku' => 'pelaku',
-            'alasan' => 'alasan',
-            'manual_nama' => 'nama karyawan',
-        ]);
+        $data = $request->validated();
 
         $daftar = KandidatPelaku::untuk(
             $complaint,

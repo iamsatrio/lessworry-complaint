@@ -160,4 +160,57 @@ class ComplaintPolicyTest extends TestCase
         $this->assertFalse($this->policy->updateStatus($divisi, $lain));
         $this->assertFalse($this->policy->addNote($divisi, $lain));
     }
+    /* ---------- urutan: wewenang sebelum validasi ---------- */
+
+    /**
+     * Wewenang harus ditolak SEBELUM aturan validasi dijalankan.
+     *
+     * Ini yang gampang bergeser saat validasi pindah ke FormRequest: kalau
+     * pemeriksaannya ditaruh di badan controller, permintaan tidak berwenang
+     * dengan data ngawur menerima 422 berisi pesan validasi lebih dulu.
+     * Karena itu authorize() ada di FormRequest, bukan di controller.
+     */
+    public function test_peran_tak_berwenang_dapat_403_bukan_422_walau_datanya_ngawur(): void
+    {
+        $divisi = $this->userAs('divisi', null, 'produksi');
+        $diteruskan = $this->complaint(['forwarded_division' => 'produksi']);
+        $outlet = Outlet::create(['name' => 'A']);
+        $kasir = $this->userAs('kasir', $outlet);
+        $milikKasir = $this->complaint(['outlet_id' => $outlet->id]);
+
+        // Divisi tidak boleh mencatat complaint — payload sengaja kosong.
+        $this->actingAs($divisi)->post('/complaints', [])->assertForbidden();
+
+        // Divisi tidak boleh menautkan, walau complaint-nya diteruskan padanya.
+        $this->actingAs($divisi)
+            ->put('/complaints/'.$diteruskan->id.'/link', ['nevira_transaction_number' => str_repeat('x', 500)])
+            ->assertForbidden();
+
+        // Kasir tidak boleh menetapkan pelaku — alasan sengaja tidak diisi.
+        $this->actingAs($kasir)
+            ->post('/complaints/'.$milikKasir->id.'/pelaku', ['pelaku' => ['ngawur']])
+            ->assertForbidden();
+
+        // Kasir tidak boleh menugaskan.
+        $this->actingAs($kasir)
+            ->post('/complaints/'.$milikKasir->id.'/assign', ['assigned_to' => 999999])
+            ->assertForbidden();
+    }
+
+    public function test_complaint_outlet_lain_dapat_403_bukan_422(): void
+    {
+        $a = Outlet::create(['name' => 'A']);
+        $b = Outlet::create(['name' => 'B']);
+        $kasir = $this->userAs('kasir', $a);
+        $lain = $this->complaint(['outlet_id' => $b->id]);
+
+        // Status tanpa lock_version: kalau validasi jalan duluan, ini 422.
+        $this->actingAs($kasir)
+            ->post('/complaints/'.$lain->id.'/status', ['status' => 'selesai'])
+            ->assertForbidden();
+
+        $this->actingAs($kasir)
+            ->post('/complaints/'.$lain->id.'/note', [])
+            ->assertForbidden();
+    }
 }

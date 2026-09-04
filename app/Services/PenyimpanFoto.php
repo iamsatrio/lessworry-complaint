@@ -32,6 +32,12 @@ use RuntimeException;
  */
 class PenyimpanFoto
 {
+    /** Batas unggahan foto per catatan penanganan. (API-20) */
+    public const PER_CATATAN = 5;
+
+    /** Foto kamera HP 3–8 MB; di atas ini hampir pasti bukan foto bukti. */
+    public const MAKS_KB = 8192;
+
     /** Sisi terpanjang berkas simpanan, dalam piksel. */
     public const SISI_MAKS = 1600;
 
@@ -131,5 +137,39 @@ class PenyimpanFoto
         }
 
         return $keluaran;
+    }
+
+    /** Batas unggah dalam MB, untuk pesan yang dibaca petugas. */
+    public static function maksMb(): int
+    {
+        return (int) (self::MAKS_KB / 1024);
+    }
+
+    /**
+     * Simpan sekumpulan foto; kembalikan atribut lampiran dan berapa gagal.
+     *
+     * Kegagalan satu foto tidak menjatuhkan sisanya dan tidak menjatuhkan
+     * catatan yang sudah diketik petugas — pemanggilnya yang memberi tahu.
+     * Dilewati diam-diam justru yang berbahaya: foto hilang tanpa ada yang
+     * tahu.
+     *
+     * @param  array<int,mixed>  $files
+     * @return array{0:array<int,array<string,mixed>>,1:int}
+     */
+    public function simpanBanyak(array $files, string $dir): array
+    {
+        $berkas = [];
+        $gagal = 0;
+
+        foreach (array_filter($files) as $file) {
+            try {
+                $berkas[] = $this->simpan($file, $dir);
+            } catch (\Throwable $e) {
+                report($e);
+                $gagal++;
+            }
+        }
+
+        return [$berkas, $gagal];
     }
 }
