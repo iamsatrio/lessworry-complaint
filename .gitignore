@@ -1,4 +1,5 @@
 !.env.example
+!.gitkeep
 # Build output
 # Dependencies
 # Environment & secrets
@@ -21,6 +22,7 @@
 /.cursor/
 /.idea
 /.nova
+/.phpstan.cache
 /.phpunit.cache
 /.vscode
 /.zed
@@ -48,4 +50,4 @@ Homestead.yaml
 Thumbs.db
 _ide_helper.php
 auth.json
-!.gitkeep
+phpstan.neon.dist.bak

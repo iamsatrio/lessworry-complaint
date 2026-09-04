@@ -72,17 +72,21 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // Contoh complaint supaya papan kerja dan laporan tidak kosong saat pertama dibuka.
+        // Bentuknya ditulis supaya analisis statis tidak menyimpulkan tipe
+        // literal dari isi contoh — status di sini data, bukan daftar tetap,
+        // dan penjagaan di bawah harus tetap berlaku kalau barisnya berubah.
+        /** @var list<array{0:string,1:string,2:string,3:string,4:string,5:string,6:string,7:string,8:int,9:string,10:string|null}> $samples */
         $samples = [
             ['wa_cc', 'Ibu Rina', '081234567801', 'hasil_cuci', 'Masih kotor', 'urgent', 'baru',
-             'Kemeja putih masih ada noda di bagian kerah setelah dicuci.', $pusat->id, '-3 hours', null],
+                'Kemeja putih masih ada noda di bagian kerah setelah dicuci.', $pusat->id, '-3 hours', null],
             ['kasir', 'Pak Budi', '081234567802', 'barang_hilang', 'Item kurang', 'high', 'ditangani',
-             'Pelanggan menghitung 12 potong saat menyerahkan, yang kembali 11 potong.', $pusat->id, '-26 hours', null],
+                'Pelanggan menghitung 12 potong saat menyerahkan, yang kembali 11 potong.', $pusat->id, '-26 hours', null],
             ['wa_outlet', 'Mbak Sinta', '081234567803', 'keterlambatan', 'Telat selesai', 'medium', 'selesai',
-             'Dijanjikan selesai Selasa, baru bisa diambil Kamis.', $cabang->id, '-5 days', '-4 days'],
+                'Dijanjikan selesai Selasa, baru bisa diambil Kamis.', $cabang->id, '-5 days', '-4 days'],
             ['wa_cc', 'Ibu Rina', '081234567801', 'salah_tagih', 'Berat tidak sesuai', 'medium', 'selesai',
-             'Ditagih 5kg padahal timbangan menunjukkan 4,2kg.', $pusat->id, '-8 days', '-8 days'],
+                'Ditagih 5kg padahal timbangan menunjukkan 4,2kg.', $pusat->id, '-8 days', '-8 days'],
             ['kasir', 'Pak Deni', '081234567804', 'hasil_cuci', 'Bau', 'high', 'menunggu_pelanggan',
-             'Cucian bau apek. Diminta membawa kembali untuk dicuci ulang.', $cabang->id, '-2 days', null],
+                'Cucian bau apek. Diminta membawa kembali untuk dicuci ulang.', $cabang->id, '-2 days', null],
         ];
 
         foreach ($samples as [$channel, $name, $phone, $cat, $sub, $priority, $status, $desc, $outletId, $created, $resolved]) {

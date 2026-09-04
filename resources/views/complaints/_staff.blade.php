@@ -100,11 +100,11 @@
           <div class="eyebrow">{{ $grup['label'] }}</div>
           @foreach($grup['items'] as $item)
             <div style="display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);flex-wrap:wrap">
-              <label style="display:flex;gap:8px;align-items:center;flex:1;min-width:180px;margin:0">
+              <label class="pick" style="flex:1;min-width:200px">
                 <input type="checkbox" name="pelaku[]" value="{{ $item['key'] }}"
                        @checked(in_array($item['key'], (array) old('pelaku', []), true))>
-                <span>
-                  <b class="display">{{ $item['name'] }}</b>
+                <span style="min-width:0">
+                  <b class="display" style="text-transform:none">{{ $item['name'] }}</b>
                   @if($item['nip'])
                     <span class="muted small" style="font-family:var(--mono)"> · {{ $item['nip'] }}</span>
                   @endif

@@ -32,6 +32,12 @@ use RuntimeException;
  */
 class PenyimpanFoto
 {
+    /** Batas unggahan foto per catatan penanganan. (API-20) */
+    public const PER_CATATAN = 5;
+
+    /** Foto kamera HP 3–8 MB; di atas ini hampir pasti bukan foto bukti. */
+    public const MAKS_KB = 8192;
+
     /** Sisi terpanjang berkas simpanan, dalam piksel. */
     public const SISI_MAKS = 1600;
 
@@ -43,12 +49,12 @@ class PenyimpanFoto
     /**
      * @return array{path:string,thumb_path:?string,mime:string,original_name:string,original_bytes:int,stored_bytes:int,compression_error:?string}
      *
-     * @throws \RuntimeException kalau isinya bukan gambar yang bisa dibaca
+     * @throws RuntimeException kalau isinya bukan gambar yang bisa dibaca
      */
     public function simpan(UploadedFile $file, string $dir): array
     {
-        $asli  = (int) $file->getSize();
-        $nama  = $file->getClientOriginalName();
+        $asli = (int) $file->getSize();
+        $nama = $file->getClientOriginalName();
         $bytes = (string) file_get_contents($file->getRealPath());
 
         if (@getimagesizefromstring($bytes) === false) {
@@ -66,19 +72,19 @@ class PenyimpanFoto
             $kecil = $this->encode($this->skala($gambar, self::SISI_KECIL));
             imagedestroy($gambar);
 
-            $path      = $dir.'/'.Str::random(40).'.jpg';
+            $path = $dir.'/'.Str::random(40).'.jpg';
             $thumbPath = $dir.'/'.Str::random(40).'-kecil.jpg';
 
             Storage::disk('local')->put($path, $penuh);
             Storage::disk('local')->put($thumbPath, $kecil);
 
             return [
-                'path'              => $path,
-                'thumb_path'        => $thumbPath,
-                'mime'              => 'image/jpeg',
-                'original_name'     => $nama,
-                'original_bytes'    => $asli,
-                'stored_bytes'      => strlen($penuh),
+                'path' => $path,
+                'thumb_path' => $thumbPath,
+                'mime' => 'image/jpeg',
+                'original_name' => $nama,
+                'original_bytes' => $asli,
+                'stored_bytes' => strlen($penuh),
                 'compression_error' => null,
             ];
         } catch (\Throwable $e) {
@@ -86,12 +92,12 @@ class PenyimpanFoto
             // petugas. Aslinya disimpan, kegagalannya dicatat, dan halaman
             // tetap bisa menampilkannya — hanya tanpa versi kecil.
             return [
-                'path'              => $file->store($dir, 'local'),
-                'thumb_path'        => null,
-                'mime'              => $file->getMimeType() ?: 'application/octet-stream',
-                'original_name'     => $nama,
-                'original_bytes'    => $asli,
-                'stored_bytes'      => $asli,
+                'path' => $file->store($dir, 'local'),
+                'thumb_path' => null,
+                'mime' => $file->getMimeType() ?: 'application/octet-stream',
+                'original_name' => $nama,
+                'original_bytes' => $asli,
+                'stored_bytes' => $asli,
                 'compression_error' => Str::limit($e->getMessage(), 180),
             ];
         }
@@ -100,7 +106,7 @@ class PenyimpanFoto
     /** @param \GdImage $gambar */
     private function skala($gambar, int $sisi)
     {
-        $lebar  = imagesx($gambar);
+        $lebar = imagesx($gambar);
         $tinggi = imagesy($gambar);
         $sisiTerpanjang = max($lebar, $tinggi);
 
@@ -131,5 +137,39 @@ class PenyimpanFoto
         }
 
         return $keluaran;
+    }
+
+    /** Batas unggah dalam MB, untuk pesan yang dibaca petugas. */
+    public static function maksMb(): int
+    {
+        return (int) (self::MAKS_KB / 1024);
+    }
+
+    /**
+     * Simpan sekumpulan foto; kembalikan atribut lampiran dan berapa gagal.
+     *
+     * Kegagalan satu foto tidak menjatuhkan sisanya dan tidak menjatuhkan
+     * catatan yang sudah diketik petugas — pemanggilnya yang memberi tahu.
+     * Dilewati diam-diam justru yang berbahaya: foto hilang tanpa ada yang
+     * tahu.
+     *
+     * @param  array<int,mixed>  $files
+     * @return array{0:array<int,array<string,mixed>>,1:int}
+     */
+    public function simpanBanyak(array $files, string $dir): array
+    {
+        $berkas = [];
+        $gagal = 0;
+
+        foreach (array_filter($files) as $file) {
+            try {
+                $berkas[] = $this->simpan($file, $dir);
+            } catch (\Throwable $e) {
+                report($e);
+                $gagal++;
+            }
+        }
+
+        return [$berkas, $gagal];
     }
 }

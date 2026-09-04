@@ -1,0 +1,70 @@
+name: CI
+
+# Pint sudah terpasang berminggu-minggu tanpa pernah dijalankan, dan 40
+# berkas menyimpang tanpa ada yang tahu. Gerbang ini yang menahan hal itu
+# terulang: gaya, analisis statis, dan test dijalankan pada setiap push dan
+# setiap pull request.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Satu tempat saja. Versi ini TIDAK boleh diturunkan ke 8.3 meski
+  # composer.json menulis "php": "^8.3": composer.lock mengunci symfony
+  # 8.1.5 yang menuntut php >= 8.4.1, jadi `composer install` gagal di 8.3
+  # sebelum satu test pun jalan. Run pertama workflow ini (33921819310)
+  # merah karena itu.
+  PHP_VERSION: '8.4'
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Siapkan PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          # gd dipakai PenyimpanFoto untuk mengecilkan foto dan membuang
+          # EXIF-nya; tanpa itu test lampiran gagal.
+          extensions: mbstring, gd, sqlite3, pdo_sqlite
+          coverage: none
+
+      - name: Cache dependensi Composer
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ runner.os }}-php${{ env.PHP_VERSION }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php${{ env.PHP_VERSION }}-
+
+      - name: Pasang dependensi
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Siapkan lingkungan
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Gaya kode (Pint)
+        run: vendor/bin/pint --test
+
+      - name: Analisis statis (PHPStan)
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+
+      # Test paling akhir: dua langkah di atas jauh lebih cepat, jadi
+      # kesalahan yang murah ketahuan lebih dulu.
+      # DB test sudah ditetapkan phpunit.xml (sqlite :memory:), jadi tidak
+      # ada env yang perlu ditambahkan di sini.
+      - name: Test
+        run: php artisan test

@@ -96,13 +96,13 @@ return new class extends Migration
             $first = $rows->first();
 
             DB::table('complaints')->where('id', $complaintId)->update([
-                'responsible_staff_id'   => is_numeric($first->nevira_user_id) ? (int) $first->nevira_user_id : null,
+                'responsible_staff_id' => is_numeric($first->nevira_user_id) ? (int) $first->nevira_user_id : null,
                 'responsible_staff_name' => $first->staff_name,
-                'responsible_staff_nip'  => $first->staff_nip,
-                'responsible_stage'      => $first->stage,
-                'responsibility_note'    => $first->reason,
-                'responsibility_set_by'  => $first->set_by,
-                'responsibility_set_at'  => $first->set_at,
+                'responsible_staff_nip' => $first->staff_nip,
+                'responsible_stage' => $first->stage,
+                'responsibility_note' => $first->reason,
+                'responsibility_set_by' => $first->set_by,
+                'responsibility_set_at' => $first->set_at,
             ]);
         }
 
@@ -125,20 +125,20 @@ return new class extends Migration
     {
         foreach ($lama as $row) {
             DB::table('complaint_responsibles')->insert([
-                'complaint_id'   => $row->id,
+                'complaint_id' => $row->id,
                 'nevira_user_id' => $row->responsible_staff_id ? (string) $row->responsible_staff_id : null,
-                'staff_name'     => $row->responsible_staff_name,
-                'staff_nip'      => $row->responsible_staff_nip,
-                'role'           => $this->peranDariTahap($row->responsible_stage),
-                'stage'          => $row->responsible_stage,
+                'staff_name' => $row->responsible_staff_name,
+                'staff_nip' => $row->responsible_staff_nip,
+                'role' => $this->peranDariTahap($row->responsible_stage),
+                'stage' => $row->responsible_stage,
                 // Penetapan lama seharusnya selalu punya alasan, tapi baris
                 // yang lolos sebelum aturan itu ada tetap dipindahkan apa
                 // adanya — ditandai, bukan dikarang.
-                'reason'         => $row->responsibility_note ?: 'Alasan tidak tercatat pada penetapan versi lama.',
-                'set_by'         => $row->responsibility_set_by,
-                'set_at'         => $row->responsibility_set_at,
-                'created_at'     => $row->responsibility_set_at ?: $row->updated_at,
-                'updated_at'     => $row->updated_at,
+                'reason' => $row->responsibility_note ?: 'Alasan tidak tercatat pada penetapan versi lama.',
+                'set_by' => $row->responsibility_set_by,
+                'set_at' => $row->responsibility_set_at,
+                'created_at' => $row->responsibility_set_at ?: $row->updated_at,
+                'updated_at' => $row->updated_at,
             ]);
         }
     }
@@ -148,10 +148,10 @@ return new class extends Migration
         $stage = mb_strtolower((string) $stage);
 
         return match (true) {
-            $stage === ''                                              => 'lainnya',
-            str_contains($stage, 'kasir')                              => 'kasir',
+            $stage === '' => 'lainnya',
+            str_contains($stage, 'kasir') => 'kasir',
             str_contains($stage, 'kurir') || str_contains($stage, 'antar') => 'kurir',
-            default                                                    => 'produksi',
+            default => 'produksi',
         };
     }
 };

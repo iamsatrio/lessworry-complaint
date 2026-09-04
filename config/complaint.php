@@ -6,28 +6,28 @@ return [
     | Kanal masuk complaint. Sesuai API-4: direct kasir, WA outlet, WA customer care.
     */
     'channels' => [
-        'kasir'     => 'Direct Kasir',
+        'kasir' => 'Direct Kasir',
         'wa_outlet' => 'WA Outlet',
-        'wa_cc'     => 'WA Customer Care',
+        'wa_cc' => 'WA Customer Care',
     ],
 
     /*
     | Kategori baku. Nilai awal — final ditetapkan di issue API-6.
     */
     'categories' => [
-        'hasil_cuci'    => ['label' => 'Hasil Cuci', 'sub' => ['Masih kotor', 'Bau', 'Luntur', 'Rusak/sobek', 'Menyusut']],
+        'hasil_cuci' => ['label' => 'Hasil Cuci', 'sub' => ['Masih kotor', 'Bau', 'Luntur', 'Rusak/sobek', 'Menyusut']],
         'barang_hilang' => ['label' => 'Barang Hilang', 'sub' => ['Item kurang', 'Tertukar pelanggan lain']],
         'keterlambatan' => ['label' => 'Keterlambatan', 'sub' => ['Telat selesai', 'Telat antar', 'Telat jemput']],
-        'salah_tagih'   => ['label' => 'Salah Tagih', 'sub' => ['Harga tidak sesuai', 'Berat tidak sesuai', 'Promo tidak masuk']],
+        'salah_tagih' => ['label' => 'Salah Tagih', 'sub' => ['Harga tidak sesuai', 'Berat tidak sesuai', 'Promo tidak masuk']],
         'sikap_petugas' => ['label' => 'Sikap Petugas', 'sub' => ['Pelayanan kasir', 'Pelayanan kurir']],
-        'lainnya'       => ['label' => 'Lainnya', 'sub' => []],
+        'lainnya' => ['label' => 'Lainnya', 'sub' => []],
     ],
 
     'priorities' => [
         'urgent' => 'Mendesak',
-        'high'   => 'Tinggi',
+        'high' => 'Tinggi',
         'medium' => 'Sedang',
-        'low'    => 'Rendah',
+        'low' => 'Rendah',
     ],
 
     /*
@@ -35,17 +35,17 @@ return [
     */
     'sla' => [
         'urgent' => ['response' => 30,   'resolution' => 240],
-        'high'   => ['response' => 60,   'resolution' => 480],
+        'high' => ['response' => 60,   'resolution' => 480],
         'medium' => ['response' => 240,  'resolution' => 1440],
-        'low'    => ['response' => 480,  'resolution' => 2880],
+        'low' => ['response' => 480,  'resolution' => 2880],
     ],
 
     'statuses' => [
-        'baru'               => 'Baru',
-        'ditangani'          => 'Sedang Ditangani',
+        'baru' => 'Baru',
+        'ditangani' => 'Sedang Ditangani',
         'menunggu_pelanggan' => 'Menunggu Pelanggan',
-        'selesai'            => 'Selesai',
-        'ditolak'            => 'Ditolak',
+        'selesai' => 'Selesai',
+        'ditolak' => 'Ditolak',
     ],
 
     'open_statuses' => ['baru', 'ditangani', 'menunggu_pelanggan'],
@@ -77,16 +77,16 @@ return [
     | kurir untuk complaint itu. (API-19)
     */
     'responsible_roles' => [
-        'kasir'         => 'Kasir',
-        'produksi'      => 'Produksi / Cuci',
-        'kurir'         => 'Kurir',
+        'kasir' => 'Kasir',
+        'produksi' => 'Produksi / Cuci',
+        'kurir' => 'Kurir',
         'customer_care' => 'Customer Care',
-        'lainnya'       => 'Lainnya',
+        'lainnya' => 'Lainnya',
     ],
 
     'divisions' => [
         'produksi' => 'Operasional Cuci / Produksi',
-        'kurir'    => 'Kurir / Antar Jemput',
+        'kurir' => 'Kurir / Antar Jemput',
         'keuangan' => 'Keuangan',
     ],
 
@@ -94,9 +94,9 @@ return [
     | Batas wewenang kompensasi per peran, dalam rupiah. Final di API-6.
     */
     'compensation_limit' => [
-        'kasir'          => 50000,
-        'customer_care'  => 200000,
-        'divisi'         => 0,
-        'supervisor'     => PHP_INT_MAX,
+        'kasir' => 50000,
+        'customer_care' => 200000,
+        'divisi' => 0,
+        'supervisor' => PHP_INT_MAX,
     ],
 ];

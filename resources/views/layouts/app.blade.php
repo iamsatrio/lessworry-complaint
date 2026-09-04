@@ -133,10 +133,25 @@ tbody tr:hover td{background:var(--mint)}
 label{display:block;font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.05em;
   text-transform:uppercase;color:var(--muted);margin:18px 0 7px}
 label .req{color:var(--danger)}
-input,select,textarea{width:100%;background:var(--surface);border:1.5px solid var(--line);color:var(--ink);
+input:not([type=checkbox]):not([type=radio]),select,textarea{width:100%;background:var(--surface);border:1.5px solid var(--line);color:var(--ink);
   border-radius:10px;padding:12px 14px;font:16px/1.5 var(--body);min-height:48px}
-input:hover,select:hover,textarea:hover{border-color:#c4ded9}
-input:focus,select:focus,textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 4px rgba(37,157,145,.14)}
+input:not([type=checkbox]):not([type=radio]):hover,select:hover,textarea:hover{border-color:#c4ded9}
+input:not([type=checkbox]):not([type=radio]):focus,select:focus,textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 4px rgba(37,157,145,.14)}
+
+/* Kotak centang dan radio tidak ikut aturan di atas: lebar 100% dan
+   tinggi 48px membuatnya memuai memenuhi barisnya. Sasaran sentuh
+   pindah ke label .pick di bawah, jadi jari kasir tetap punya ruang. */
+input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;flex:none;
+  padding:0;margin:0;border-radius:4px;accent-color:var(--teal);cursor:pointer}
+input[type=radio]{border-radius:50%}
+input[type=checkbox]:focus-visible,input[type=radio]:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+
+/* Label yang membungkus kotak centang adalah baris pilihan, bukan judul
+   kolom — jadi tidak mewarisi huruf kapital dan warna redup dari label. */
+label.pick{display:flex;gap:10px;align-items:center;min-height:44px;margin:0;padding:6px 0;
+  font-family:var(--body);font-size:15px;font-weight:400;letter-spacing:0;
+  text-transform:none;color:var(--ink);cursor:pointer}
+label.pick:hover{color:var(--teal)}
 textarea{min-height:112px;resize:vertical}
 .hint{font-size:13px;color:var(--muted);margin:7px 0 0}
 

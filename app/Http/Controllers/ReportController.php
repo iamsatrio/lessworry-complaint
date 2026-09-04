@@ -28,24 +28,26 @@ class ReportController extends Controller
             : collect();
 
         return view('reports.index', [
-            'from'        => $from,
-            'to'          => $to,
-            'total'       => $complaints->count(),
-            'resolved'    => $resolved->count(),
-            'overdue'     => $complaints->filter->isOverdue()->count(),
+            'from' => $from,
+            'to' => $to,
+            'total' => $complaints->count(),
+            'resolved' => $resolved->count(),
+            'overdue' => $complaints->filter->isOverdue()->count(),
             'compensation' => $complaints->sum('compensation_amount'),
-            'avgMinutes'  => $resolved->isEmpty() ? null : (int) round($resolved->avg(fn ($c) => $c->resolutionMinutes())),
-            'byCategory'  => $complaints->groupBy('category')->map->count()->sortDesc(),
-            'byChannel'   => $complaints->groupBy('channel')->map->count()->sortDesc(),
-            'byOutlet'    => $complaints->groupBy(fn ($c) => $c->outlet?->name ?? 'Tanpa outlet')->map->count()->sortDesc(),
+            'avgMinutes' => $resolved->isEmpty() ? null : (int) round($resolved->avg(fn ($c) => $c->resolutionMinutes())),
+            'byCategory' => $complaints->groupBy('category')->map->count()->sortDesc(),
+            'byChannel' => $complaints->groupBy('channel')->map->count()->sortDesc(),
+            // ?? sudah menahan complaint tanpa outlet: PHP membaca properti
+            // di kirinya secara isset, jadi ?-> di sini mubazir.
+            'byOutlet' => $complaints->groupBy(fn ($c) => $c->outlet->name ?? 'Tanpa outlet')->map->count()->sortDesc(),
             // Rekap per karyawan hanya untuk yang berwenang melihatnya.
             // Tiap pelaku dihitung, bukan satu per complaint: satu keluhan
             // bisa melibatkan kasir, petugas cuci, dan kurir sekaligus.
-            'byStaff'     => $user->canSeeStaffAttribution()
+            'byStaff' => $user->canSeeStaffAttribution()
                 ? $pelaku->groupBy(fn ($p) => $p->staff_name)
                     ->map(fn ($group) => [
-                        'total'  => $group->pluck('complaint_id')->unique()->count(),
-                        'nip'    => $group->pluck('staff_nip')->filter()->first(),
+                        'total' => $group->pluck('complaint_id')->unique()->count(),
+                        'nip' => $group->pluck('staff_nip')->filter()->first(),
                         'stages' => $group
                             ->map(fn ($p) => $p->roleLabel().($p->stage ? ' · '.$p->stage : ''))
                             ->unique()->values()->all(),
@@ -53,7 +55,7 @@ class ReportController extends Controller
                     ->sortByDesc('total')
                 : collect(),
             'unattributed' => $complaints->count() - $pelaku->pluck('complaint_id')->unique()->count(),
-            'repeat'      => $complaints->whereNotNull('reporter_phone')
+            'repeat' => $complaints->whereNotNull('reporter_phone')
                 ->groupBy('reporter_phone')->filter(fn ($g) => $g->count() > 1)
                 ->map(fn ($g) => ['name' => $g->first()->reporter_name, 'count' => $g->count()]),
         ]);

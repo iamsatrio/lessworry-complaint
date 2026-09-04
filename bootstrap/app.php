@@ -1,8 +1,15 @@
 <?php
 
+use App\Http\Middleware\EnsurePasswordChanged;
+use App\Http\Middleware\EnsureUserIsActive;
+use App\Http\Middleware\NoStoreForAuthenticated;
+use App\Http\Responses\SesiKedaluwarsa;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Illuminate\Session\Middleware\AuthenticateSession;
+use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -18,7 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Berlaku untuk semua permintaan web.
         $middleware->web(append: [
-            \App\Http\Middleware\NoStoreForAuthenticated::class,
+            NoStoreForAuthenticated::class,
         ]);
 
         $middleware->alias([
@@ -26,9 +33,9 @@ return Application::configure(basePath: dirname(__DIR__))
             // hash password di sesi tidak pernah dibandingkan dengan yang
             // tersimpan, jadi sesi di perangkat lain hidup terus setelah
             // password diganti atau direset. (API-14 #2)
-            'auth.session'     => \Illuminate\Session\Middleware\AuthenticateSession::class,
-            'active'           => \App\Http\Middleware\EnsureUserIsActive::class,
-            'password.changed' => \App\Http\Middleware\EnsurePasswordChanged::class,
+            'auth.session' => AuthenticateSession::class,
+            'active' => EnsureUserIsActive::class,
+            'password.changed' => EnsurePasswordChanged::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -46,9 +53,9 @@ return Application::configure(basePath: dirname(__DIR__))
         | render callback dipanggil, jadi ditangani di lapisan responsnya.
         */
         $exceptions->respond(function (
-            \Symfony\Component\HttpFoundation\Response $response,
-            \Throwable $e,
-            \Illuminate\Http\Request $request
+            Response $response,
+            Throwable $e,
+            Request $request
         ) {
             if ($response->getStatusCode() !== 419) {
                 return $response;
@@ -60,7 +67,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 ], 419);
             }
 
-            return app(\App\Http\Responses\SesiKedaluwarsa::class)->render($request);
+            return app(SesiKedaluwarsa::class)->render($request);
         });
         //
     })->create();
