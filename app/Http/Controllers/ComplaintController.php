@@ -2,34 +2,29 @@
 
 namespace App\Http\Controllers;
 
-use App\Exceptions\NeviraAccessDenied;
-use App\Exceptions\NeviraException;
-use App\Http\Requests\AddComplaintNoteRequest;
-use App\Http\Requests\AddResponsibleRequest;
 use App\Http\Requests\StoreComplaintRequest;
-use App\Http\Requests\UpdateComplaintStatusRequest;
 use App\Models\Complaint;
-use App\Models\ComplaintAttachment;
-use App\Models\ComplaintResponsible;
 use App\Models\Outlet;
 use App\Models\User;
+use App\Services\DaftarPetugas;
 use App\Services\JejakComplaint;
 use App\Services\KandidatPelaku;
-use App\Services\NeviraGate;
+use App\Services\PenyelarasNevira;
 use App\Services\PenyimpanFoto;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class ComplaintController extends Controller
 {
     public function __construct(
-        private NeviraGate $nevira,
         private PenyimpanFoto $foto,
         private JejakComplaint $jejak,
+        private DaftarPetugas $petugas,
+        private PenyelarasNevira $penyelaras,
     ) {}
 
     /** Papan kerja: complaint terbuka, disaring per peran. */
@@ -88,8 +83,40 @@ class ComplaintController extends Controller
     public function store(StoreComplaintRequest $request)
     {
         $user = $request->user();
-        $data = $request->validated();
+        $data = $this->kunciKeWewenang($request->validated(), $user);
 
+        // Berkas ditulis SEBELUM transaksi, jadi nomor complaint-nya belum
+        // ada dan berkasnya masuk ke folder intake. Itu disengaja: percobaan
+        // ulang saat nomor tiket bentrok tidak boleh menulis unggahan yang
+        // sama dua kali.
+        //
+        // Disk privat, bukan 'public': foto bukti berisi barang dan kadang
+        // wajah pelanggan. Dikecilkan dan dibuang EXIF-nya lewat penyimpan
+        // yang sama dengan foto catatan penanganan — foto pelanggan dari
+        // ponsel membawa koordinat GPS di mana pun ia diunggah. (API-20)
+        [$berkas] = $this->foto->simpanBanyak($request->file('attachments', []), 'complaints/intake');
+
+        $complaint = $this->simpanMeskiNomorBentrok(
+            fn () => $this->simpanComplaint($data, $user, $berkas)
+        );
+
+        // Tarik data order NEVIRA kalau ID diisi. Kegagalan tidak boleh
+        // membatalkan complaint — dicatat, bisa dicoba lagi nanti. (API-8)
+        if (filled($complaint->nevira_transaction_number)) {
+            $this->penyelaras->selaraskan($complaint, $user);
+        }
+
+        return $this->keHalamanComplaintBaru($complaint, $user);
+    }
+
+    /**
+     * Kunci isian yang tidak boleh ditentukan pengirim form.
+     *
+     * @param  array<string,mixed>  $data
+     * @return array<string,mixed>
+     */
+    private function kunciKeWewenang(array $data, User $user): array
+    {
         // Nota terisi berarti tidak ada pengecualian yang berlaku.
         if (filled($data['nevira_transaction_number'] ?? null)) {
             $data['nota_exemption'] = null;
@@ -100,46 +127,41 @@ class ComplaintController extends Controller
             $data['outlet_id'] = $user->outlet_id;
         }
 
-        // Berkas ditulis SEBELUM transaksi supaya percobaan ulang di bawah
-        // tidak menulis unggahan yang sama dua kali. Disk privat, bukan
-        // 'public': foto bukti berisi barang dan kadang wajah pelanggan; di
-        // disk publik siapa pun yang memegang URL bisa membukanya tanpa login.
-        // Dikecilkan dan dibuang EXIF-nya lewat penyimpan yang sama dengan
-        // foto catatan penanganan: foto pelanggan dari ponsel membawa
-        // koordinat GPS di mana pun ia diunggah. (API-20)
-        //
-        // Ditulis SEBELUM transaksi, jadi nomor complaint-nya belum ada dan
-        // berkasnya masuk ke folder intake. Itu disengaja: percobaan ulang
-        // saat nomor tiket bentrok tidak boleh menulis unggahan yang sama
-        // dua kali.
-        [$berkas, $gagalFoto] = $this->foto->simpanBanyak($request->file('attachments', []), 'complaints/intake');
+        return $data;
+    }
 
-        $complaint = $this->simpanMeskiNomorBentrok(function () use ($data, $user, $berkas) {
-            return DB::transaction(function () use ($data, $user, $berkas) {
-                $complaint = new Complaint($data);
-                $complaint->ticket_number = Complaint::nextTicketNumber();
-                $complaint->status = 'baru';
-                $complaint->created_by = $user->id;
-                $complaint->created_at = now();
-                $complaint->applySla();
-                $complaint->save();
+    /**
+     * Satu percobaan penyimpanan: complaint, jejaknya, dan lampirannya.
+     *
+     * Ketiganya jatuh bersama atau tidak sama sekali — complaint tanpa baris
+     * riwayat tidak bisa ditelusuri asal-usulnya.
+     *
+     * @param  array<string,mixed>  $data
+     * @param  array<int,array<string,mixed>>  $berkas
+     */
+    private function simpanComplaint(array $data, User $user, array $berkas): Complaint
+    {
+        return DB::transaction(function () use ($data, $user, $berkas) {
+            $complaint = new Complaint($data);
+            $complaint->ticket_number = Complaint::nextTicketNumber();
+            $complaint->status = 'baru';
+            $complaint->created_by = $user->id;
+            $complaint->created_at = now();
+            $complaint->applySla();
+            $complaint->save();
 
-                $this->jejak->dibuat($complaint, $user);
+            $this->jejak->dibuat($complaint, $user);
 
-                foreach ($berkas as $b) {
-                    $complaint->attachments()->create($b);
-                }
+            foreach ($berkas as $b) {
+                $complaint->attachments()->create($b);
+            }
 
-                return $complaint;
-            });
+            return $complaint;
         });
+    }
 
-        // Tarik data order NEVIRA kalau ID diisi. Kegagalan tidak boleh
-        // membatalkan complaint — dicatat, bisa dicoba lagi nanti. (API-8)
-        if (filled($complaint->nevira_transaction_number)) {
-            $this->syncNevira($complaint, $user);
-        }
-
+    private function keHalamanComplaintBaru(Complaint $complaint, User $user): RedirectResponse
+    {
         $redirect = redirect()
             ->route('complaints.show', $complaint)
             ->with('status', 'Complaint '.$complaint->ticket_number.' tercatat.')
@@ -210,7 +232,7 @@ class ComplaintController extends Controller
         // penanggung jawab. Sebelumnya setiap kasir menerima nama dan
         // peran seluruh pegawai perusahaan, termasuk outlet lain.
         // (API-14 #6)
-        $penggunaSistem = $user->canAssignResponsibility() ? $this->penggunaSistem() : collect();
+        $penggunaSistem = $user->canAssignResponsibility() ? $this->petugas->penggunaSistem() : collect();
 
         return view('complaints.show', [
             'complaint' => $complaint,
@@ -220,117 +242,9 @@ class ComplaintController extends Controller
             // outletnya, lalu pengguna sistem. Kasir tidak pernah menerimanya
             // — daftar nama karyawan bukan konsumsinya. (API-19)
             'kandidat' => $user->canAssignResponsibility()
-                ? KandidatPelaku::untuk($complaint, $this->karyawanOutlet($user, $complaint), $penggunaSistem)
+                ? KandidatPelaku::untuk($complaint, $this->petugas->karyawanOutlet($user, $complaint), $penggunaSistem)
                 : null,
         ]);
-    }
-
-    /** Pengguna sistem complaint yang bisa ditugasi atau ditetapkan sebagai pelaku. */
-    private function penggunaSistem()
-    {
-        return User::where('is_active', true)
-            ->whereIn('role', ['kasir', 'customer_care', 'supervisor'])
-            ->orderBy('name')->get();
-    }
-
-    /**
-     * Karyawan outlet nota ini, lewat NeviraGate.
-     *
-     * Outlet complaint sudah ditentukan otomatis dari nota, jadi daftarnya
-     * langsung tersaring — petugas tidak perlu memilih outlet dulu.
-     */
-    private function karyawanOutlet(User $user, Complaint $complaint): array
-    {
-        try {
-            return $this->nevira->outletStaff($user, $complaint->neviraOutletId());
-        } catch (NeviraAccessDenied) {
-            return [];
-        }
-    }
-
-    /** Ubah status, dengan pencatatan riwayat dan penegakan wewenang. */
-    public function updateStatus(UpdateComplaintStatusRequest $request, Complaint $complaint)
-    {
-        $user = $request->user();
-        $data = $request->validated();
-
-        if ((int) $data['lock_version'] !== (int) $complaint->lock_version) {
-            // withInput() penting: petugas sudah mengetik resolusi panjang,
-            // dan menghukumnya dengan mengosongkan form membuat pengaman ini
-            // dibenci lalu diakali.
-            return back()->withInput()->withErrors([
-                'lock_version' => 'Complaint ini sudah diubah orang lain sejak halaman ini dibuka — '
-                    .'sekarang berstatus '.$complaint->statusLabel().'. Muat ulang halamannya, '
-                    .'baca perubahannya, lalu simpan lagi kalau masih perlu.',
-            ]);
-        }
-
-        $closing = in_array($data['status'], ['selesai', 'ditolak'], true);
-
-        if ($closing && ! $user->canResolve()) {
-            return back()->withErrors(['status' => 'Peranmu tidak berwenang menutup complaint.']);
-        }
-
-        // Batas wewenang kompensasi berlaku dua arah. Batas atas sudah
-        // dijaga; yang tidak adalah penurunan — kasir bisa memangkas angka
-        // yang sudah disetujui supervisor jadi 1. Yang menentukan bukan arah
-        // perubahannya, tapi apakah KEDUA nilai ada di dalam wewenangnya.
-        // (API-14 #10)
-        $sekarang = (int) $complaint->compensation_amount;
-        $compensation = $request->has('compensation_amount')
-            ? (int) ($data['compensation_amount'] ?? 0)
-            : $sekarang;
-        $batas = $user->compensationLimit();
-
-        if ($compensation !== $sekarang && $compensation > $batas) {
-            return back()->withErrors([
-                'compensation_amount' => 'Nilai kompensasi melebihi batas wewenang '.$user->roleLabel()
-                    .' (Rp '.number_format($batas, 0, ',', '.').'). Naikkan ke supervisor.',
-            ]);
-        }
-
-        if ($compensation !== $sekarang && $sekarang > $batas) {
-            return back()->withErrors([
-                'compensation_amount' => 'Kompensasi Rp '.number_format($sekarang, 0, ',', '.')
-                    .' disetujui di atas batas wewenang '.$user->roleLabel()
-                    .'. Hanya yang berwenang di angka itu yang boleh mengubahnya.',
-            ]);
-        }
-
-        $from = $complaint->status;
-
-        DB::transaction(function () use ($complaint, $data, $user, $from, $closing, $compensation, $sekarang) {
-            $complaint->status = $data['status'];
-            $complaint->lock_version = (int) $complaint->lock_version + 1;
-            $complaint->resolution = $data['resolution'] ?? $complaint->resolution;
-            $complaint->root_cause = $data['root_cause'] ?? $complaint->root_cause;
-
-            // Nilai yang sama artinya tidak ada perubahan; 0 yang dikirim
-            // sengaja memang mengosongkan kompensasi.
-            $complaint->compensation_amount = $compensation;
-
-            if ($complaint->first_response_at === null) {
-                $complaint->first_response_at = now();
-            }
-
-            if ($closing && $complaint->resolved_at === null) {
-                $complaint->resolved_at = now();
-            }
-
-            if (! $closing) {
-                $complaint->resolved_at = null;
-            }
-
-            $complaint->save();
-
-            $this->jejak->statusBerubah($complaint, $user, $from, $complaint->status, $data['note'] ?? null);
-
-            if ($compensation !== $sekarang) {
-                $this->jejak->kompensasiBerubah($complaint, $user, $sekarang, $compensation);
-            }
-        });
-
-        return back()->with('status', 'Status diperbarui: '.$complaint->statusLabel());
     }
 
     /**
@@ -365,391 +279,5 @@ class ComplaintController extends Controller
         $this->jejak->penugasan($complaint, $user, $data['forwarded_division'] ?? null);
 
         return back()->with('status', 'Penugasan diperbarui.');
-    }
-
-    /**
-     * Tambah catatan penanganan, dengan foto bukti kalau ada. (API-20)
-     *
-     * Foto sering justru yang menentukan: noda yang tersisa setelah cuci
-     * ulang, kondisi barang saat diserahkan kembali. Berkasnya dikecilkan
-     * dan dibersihkan dari EXIF sebelum disimpan — lihat PenyimpanFoto.
-     */
-    public function addNote(AddComplaintNoteRequest $request, Complaint $complaint)
-    {
-        $user = $request->user();
-        $data = $request->validated();
-
-        // Berkas ditulis sebelum barisnya dibuat, dan kegagalannya tidak
-        // menjatuhkan catatan: petugas sudah mengetik temuannya, dan
-        // membuangnya karena satu foto gagal adalah kehilangan data.
-        [$berkas, $gagal] = $this->foto->simpanBanyak($request->file('photos', []), 'complaints/'.$complaint->id);
-
-        DB::transaction(function () use ($complaint, $data, $user, $berkas) {
-            $activity = $this->jejak->catatan($complaint, $user, $data['note']);
-
-            foreach ($berkas as $b) {
-                $complaint->attachments()->create($b + ['complaint_activity_id' => $activity->id]);
-            }
-        });
-
-        if ($complaint->first_response_at === null) {
-            $complaint->forceFill(['first_response_at' => now()])->save();
-        }
-
-        $pesan = 'Catatan ditambahkan.';
-
-        if ($gagal > 0) {
-            return back()->with('status', $pesan)
-                ->with('warning', $gagal.' foto gagal disimpan. Catatannya tetap tersimpan — coba unggah ulang fotonya.');
-        }
-
-        return back()->with('status', $pesan);
-    }
-
-    /**
-     * Pasang atau perbaiki tautan ke order NEVIRA setelah complaint tersimpan.
-     *
-     * Form intake menjanjikan complaint boleh disimpan tanpa nomor order dan
-     * ditautkan menyusul — janji itu perlu ada tempatnya. Ini juga jalan untuk
-     * membetulkan nomor yang salah ketik.
-     *
-     * Isi complaint tidak pernah diubah diam-diam: setiap perubahan tautan
-     * tercatat di riwayat beserta nomor lama dan barunya.
-     */
-    public function updateLink(Request $request, Complaint $complaint)
-    {
-        // Menautkan berarti menarik data pelanggan dari NEVIRA. Peran yang
-        // tidak mencatat complaint tidak berkepentingan dengan itu.
-        $this->authorize('link', $complaint);
-
-        $user = $request->user();
-
-        $data = $request->validate([
-            'nevira_transaction_number' => ['nullable', 'string', 'max:64'],
-            'nota_exemption' => ['nullable', Rule::in(array_keys(config('complaint.nota_exemptions')))],
-        ], [], ['nevira_transaction_number' => 'nomor nota']);
-
-        $new = trim((string) ($data['nevira_transaction_number'] ?? ''));
-        $old = (string) $complaint->nevira_transaction_number;
-
-        if ($new === $old) {
-            return back()->with('status', 'Nomor order tidak berubah.');
-        }
-
-        $complaint->forceFill([
-            'nevira_transaction_number' => $new !== '' ? $new : null,
-            'nevira_transaction_id' => null,
-            'nota_exemption' => $new !== '' ? null : ($data['nota_exemption'] ?? $complaint->nota_exemption),
-            // Snapshot lama milik order lain — buang, jangan sampai tertinggal
-            // dan menampilkan data order yang bukan miliknya.
-            'nevira_snapshot' => null,
-            'nevira_customer_id' => null,
-            'nevira_synced_at' => null,
-            'nevira_sync_error' => null,
-        ])->save();
-
-        $this->jejak->tautanOrder($complaint, $user, $old, $new);
-
-        if ($new !== '') {
-            $this->syncNevira($complaint, $user);
-
-            return back()->with('status', $complaint->fresh()->nevira_sync_error
-                ? 'Nomor order disimpan, tapi datanya belum bisa ditarik: '.$complaint->fresh()->nevira_sync_error
-                : 'Complaint tertaut ke order '.$new.'.');
-        }
-
-        return back()->with('status', 'Tautan order dilepas.');
-    }
-
-    /**
-     * Tetapkan satu atau beberapa orang sebagai pelaku complaint ini. (API-19)
-     *
-     * Sistem TIDAK menyimpulkan ini sendiri. NEVIRA hanya memberi tahu siapa
-     * mengerjakan tahap apa; menautkan keluhan ke orang adalah penilaian, dan
-     * penilaian harus punya nama pembuatnya serta alasannya.
-     *
-     * Yang dikirim browser hanya KUNCI kandidat — nama, NIP, dan id NEVIRA
-     * dibaca server dari daftarnya sendiri. Itu yang membuat pengisian cukup
-     * satu centang plus satu alasan, dan sekaligus menutup jalan menyuntikkan
-     * nama karyawan sembarangan lewat form.
-     */
-    public function addResponsible(AddResponsibleRequest $request, Complaint $complaint)
-    {
-        $user = $request->user();
-        $data = $request->validated();
-
-        $daftar = KandidatPelaku::untuk(
-            $complaint,
-            $this->karyawanOutlet($user, $complaint),
-            $this->penggunaSistem()
-        );
-
-        $dipilih = [];
-
-        foreach ($data['pelaku'] ?? [] as $kunci) {
-            $kandidat = $daftar->find($kunci);
-
-            if (! $kandidat) {
-                // Daftar kandidat disusun ulang tiap permintaan; kalau NEVIRA
-                // sedang mati, karyawan outlet tidak ada di dalamnya. Ditolak
-                // dengan terang, bukan diam-diam dilewati — pelaku yang
-                // dicentang lalu tidak tersimpan adalah kehilangan data.
-                return back()->withInput()->withErrors([
-                    'pelaku' => 'Ada pilihan yang tidak lagi dikenali — daftarnya mungkin berubah. '
-                        .'Muat ulang halaman ini, lalu pilih lagi.',
-                ]);
-            }
-
-            $dipilih[] = [
-                'staff_id' => $kandidat['staff_id'],
-                'name' => $kandidat['name'],
-                'nip' => $kandidat['nip'],
-                'role' => $data['peran'][$kunci] ?? $kandidat['role'],
-                'stage' => $kandidat['stage'],
-            ];
-        }
-
-        // Isian bebas tetap ada untuk orang yang tidak ada di daftar
-        // (mis. kurir outlet lain) — tapi bukan jalur utamanya.
-        if (filled($data['manual_nama'] ?? null)) {
-            $dipilih[] = [
-                'staff_id' => null,
-                'name' => trim($data['manual_nama']),
-                'nip' => $data['manual_nip'] ?? null,
-                'role' => $data['manual_peran'] ?? 'lainnya',
-                'stage' => null,
-            ];
-        }
-
-        $sudahAda = $complaint->responsibles()->get()->map->identity()->all();
-        $baru = [];
-
-        foreach ($dipilih as $calon) {
-            $identity = ComplaintResponsible::identityFor($calon['staff_id'], $calon['nip'], $calon['name']);
-
-            if (in_array($identity, $sudahAda, true)) {
-                continue;
-            }
-
-            $sudahAda[] = $identity;
-            $baru[] = $calon;
-        }
-
-        if ($baru === []) {
-            return back()->with('status', 'Semua yang dipilih sudah tercatat sebagai pelaku complaint ini.');
-        }
-
-        // Penetapan dan jejaknya harus jatuh bersama. Penetapan yang tersimpan
-        // tanpa catatan riwayat adalah tuduhan tanpa asal-usul.
-        DB::transaction(function () use ($complaint, $baru, $user, $data) {
-            foreach ($baru as $calon) {
-                $complaint->responsibles()->create([
-                    'nevira_user_id' => $calon['staff_id'],
-                    'staff_name' => $calon['name'],
-                    'staff_nip' => $calon['nip'],
-                    'role' => $calon['role'],
-                    'stage' => $calon['stage'],
-                    'reason' => $data['alasan'],
-                    'set_by' => $user->id,
-                    'set_at' => now(),
-                ]);
-            }
-
-            $this->jejak->pelakuDitetapkan($complaint, $user, $baru, $data['alasan']);
-        });
-
-        return back()->with('status', count($baru).' pelaku ditetapkan.');
-    }
-
-    /** Ubah peran atau alasan seorang pelaku. Perubahan ikut ke riwayat. */
-    public function updateResponsible(Request $request, Complaint $complaint, ComplaintResponsible $responsible)
-    {
-        $this->authorize('manageResponsible', $complaint);
-        // 404, bukan 403: ini keutuhan rute, bukan wewenang.
-        abort_unless($responsible->complaint_id === $complaint->id, 404);
-
-        $user = $request->user();
-
-        $data = $request->validate([
-            'peran' => ['required', Rule::in(array_keys(config('complaint.responsible_roles')))],
-            'alasan' => ['required', 'string', 'max:2000'],
-        ], [
-            'alasan.required' => 'Tulis alasannya. Menunjuk orang tanpa alasan tidak bisa ditinjau ulang.',
-        ], ['peran' => 'peran', 'alasan' => 'alasan']);
-
-        DB::transaction(function () use ($complaint, $responsible, $data, $user) {
-            $responsible->forceFill([
-                'role' => $data['peran'],
-                'reason' => $data['alasan'],
-                'set_by' => $user->id,
-                'set_at' => now(),
-            ])->save();
-
-            $this->jejak->pelakuDiperbarui($complaint, $user, $responsible, $data['alasan']);
-        });
-
-        return back()->with('status', 'Penetapan '.$responsible->staff_name.' diperbarui.');
-    }
-
-    /** Cabut penetapan seorang pelaku. Pencabutan juga masuk riwayat. */
-    public function destroyResponsible(Request $request, Complaint $complaint, ComplaintResponsible $responsible)
-    {
-        $this->authorize('manageResponsible', $complaint);
-        // 404, bukan 403: ini keutuhan rute, bukan wewenang.
-        abort_unless($responsible->complaint_id === $complaint->id, 404);
-
-        $user = $request->user();
-
-        $nama = $responsible->staff_name;
-
-        DB::transaction(function () use ($complaint, $responsible, $user, $nama) {
-            $responsible->delete();
-
-            $this->jejak->pelakuDicabut($complaint, $user, $nama);
-        });
-
-        return back()->with('status', 'Penetapan '.$nama.' dicabut.');
-    }
-
-    /**
-     * Sajikan foto bukti lewat pemeriksaan wewenang.
-     *
-     * Sebelumnya berkas ini duduk di disk publik: siapa pun yang memegang
-     * URL-nya bisa membuka foto barang pelanggan tanpa login sama sekali.
-     */
-    public function attachment(Request $request, Complaint $complaint, ComplaintAttachment $attachment)
-    {
-        $this->authorize('viewAttachment', $complaint);
-        abort_unless($attachment->complaint_id === $complaint->id, 404);
-        abort_unless(Storage::disk('local')->exists($attachment->path), 404);
-
-        return Storage::disk('local')->response($attachment->path, $attachment->original_name, [
-            'Cache-Control' => 'private, max-age=0, no-store',
-        ]);
-    }
-
-    /**
-     * Versi kecil untuk lini masa. (API-20)
-     *
-     * Wewenangnya diperiksa persis sama dengan berkas penuh — kalau tidak,
-     * versi kecil jadi jalan memutar untuk melihat foto yang sama.
-     */
-    public function attachmentThumb(Request $request, Complaint $complaint, ComplaintAttachment $attachment)
-    {
-        $this->authorize('viewAttachment', $complaint);
-        abort_unless($attachment->complaint_id === $complaint->id, 404);
-
-        // Foto yang kompresinya gagal tidak punya versi kecil; yang disajikan
-        // berkas penuhnya, bukan 404 yang membuat lini masa terlihat rusak.
-        $path = $attachment->thumb_path ?: $attachment->path;
-
-        abort_unless(Storage::disk('local')->exists($path), 404);
-
-        return Storage::disk('local')->response($path, $attachment->original_name, [
-            'Cache-Control' => 'private, max-age=0, no-store',
-        ]);
-    }
-
-    /** Coba tautkan ulang ke NEVIRA (dipakai saat sinkron pertama gagal). */
-    public function resync(Complaint $complaint)
-    {
-        $this->authorize('link', $complaint);
-
-        $this->syncNevira($complaint, Auth::user());
-
-        return back()->with('status', $complaint->nevira_sync_error
-            ? 'Sinkron NEVIRA gagal: '.$complaint->nevira_sync_error
-            : 'Data NEVIRA berhasil ditarik.');
-    }
-
-    /**
-     * Isi identitas pelapor dari pelanggan pada nota — hanya kolom yang
-     * masih kosong. Yang sudah diketik petugas tidak pernah ditimpa:
-     * pelapor bisa saja bukan pemilik order, misalnya yang mengantarkan.
-     */
-    /**
-     * Tentukan outlet complaint dari outlet pada nota.
-     *
-     * Kasir tetap terkunci ke outletnya sendiri (diputuskan di store), jadi
-     * ini hanya mengisi yang belum ditentukan — biasanya complaint dari
-     * Customer Care, yang tidak tahu outlet mana sebelum notanya dicek.
-     */
-    private function fillOutletFromOrder(Complaint $complaint, array $summary): void
-    {
-        if (filled($complaint->outlet_id)) {
-            return;
-        }
-
-        $idNevira = $summary['outlet_id'] ?? null;
-
-        if (blank($idNevira)) {
-            return;
-        }
-
-        $outlet = Outlet::where('nevira_outlet_id', (string) $idNevira)->first();
-
-        if ($outlet) {
-            $complaint->forceFill(['outlet_id' => $outlet->id])->save();
-        }
-    }
-
-    private function fillReporterFromOrder(Complaint $complaint, array $summary): void
-    {
-        $isi = [];
-
-        if (blank($complaint->reporter_name) && filled($summary['customer_name'] ?? null)) {
-            $isi['reporter_name'] = $summary['customer_name'];
-        }
-
-        if (blank($complaint->reporter_phone) && filled($summary['customer_phone'] ?? null)) {
-            $isi['reporter_phone'] = $summary['customer_phone'];
-        }
-
-        if ($isi) {
-            $complaint->forceFill($isi)->save();
-        }
-    }
-
-    /**
-     * Tarik data order NEVIRA lewat NeviraGate.
-     *
-     * Semua pemeriksaan akses ada di gate, bukan di sini — itu inti
-     * perbaikan T1. Penolakan yang bersifat wewenang dilempar ke atas
-     * (403); sisanya dicatat sebagai kegagalan sinkron supaya complaint
-     * tetap hidup walau NEVIRA menolak atau mati. (API-8, API-10)
-     */
-    private function syncNevira(Complaint $complaint, User $user): void
-    {
-        try {
-            $resolved = $this->nevira->resolve($user, $complaint->nevira_transaction_number);
-            $summary = $resolved['summary'];
-
-            // Perjalanan kurir ditarik terpisah: detail transaksi tidak
-            // membawa nama kurirnya. Gagal di sini tidak membatalkan sinkron
-            // order — data kurir sifatnya pelengkap.
-            if (filled($summary['invoice'])) {
-                $summary['deliveries'] = $this->nevira->deliveries($summary['invoice']);
-            }
-
-            $complaint->forceFill([
-                // Id internal disimpan untuk panggilan API berikutnya, dan
-                // tidak pernah dirender ke halaman mana pun.
-                'nevira_transaction_id' => $resolved['id'],
-                'nevira_transaction_number' => $resolved['number'] ?? $complaint->nevira_transaction_number,
-                'nevira_snapshot' => $summary,
-                'nevira_customer_id' => $summary['customer_id'] ?? null,
-                'nevira_synced_at' => now(),
-                'nevira_sync_error' => null,
-            ])->save();
-
-            $this->fillReporterFromOrder($complaint, $summary);
-            $this->fillOutletFromOrder($complaint, $summary);
-        } catch (NeviraAccessDenied $e) {
-            abort(403);
-        } catch (NeviraException $e) {
-            $complaint->forceFill([
-                'nevira_sync_error' => mb_substr($e->userMessage(), 0, 190),
-            ])->save();
-        }
     }
 }
