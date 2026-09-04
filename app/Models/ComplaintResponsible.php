@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * Satu orang yang ditetapkan terlibat dalam satu complaint. (API-19)
@@ -11,6 +13,19 @@ use Illuminate\Database\Eloquent\Model;
  * petugas yang mencuci, kurir yang mengantar. Yang disimpan bukan jabatan
  * sehari-hari orangnya, melainkan perannya DALAM KEJADIAN INI — plus alasan
  * yang wajib, karena penetapan tanpa alasan tidak bisa ditinjau ulang.
+ */
+/**
+ * @property int $id
+ * @property int $complaint_id
+ * @property string|null $nevira_user_id
+ * @property string $staff_name
+ * @property string|null $staff_nip
+ * @property string $role
+ * @property string|null $stage
+ * @property string $reason
+ * @property int|null $set_by
+ * @property Carbon|null $set_at
+ * @property-read User|null $setter
  */
 class ComplaintResponsible extends Model
 {
@@ -28,12 +43,14 @@ class ComplaintResponsible extends Model
         return ['set_at' => 'datetime'];
     }
 
-    public function complaint()
+    /** @return BelongsTo<Complaint, $this> */
+    public function complaint(): BelongsTo
     {
         return $this->belongsTo(Complaint::class);
     }
 
-    public function setter()
+    /** @return BelongsTo<User, $this> */
+    public function setter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'set_by');
     }

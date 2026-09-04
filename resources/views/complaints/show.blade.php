@@ -93,8 +93,8 @@
         <label for="photos">Foto bukti</label>
         <input id="photos" type="file" name="photos[]" accept="image/jpeg,image/png,image/webp" multiple>
         <p class="hint">
-          Maksimal {{ App\Http\Controllers\ComplaintController::FOTO_PER_CATATAN }} foto,
-          {{ (int) (App\Http\Controllers\ComplaintController::FOTO_MAKS_KB / 1024) }} MB per foto.
+          Maksimal {{ App\Services\PenyimpanFoto::PER_CATATAN }} foto,
+          {{ App\Services\PenyimpanFoto::maksMb() }} MB per foto.
           Fotonya dikecilkan otomatis dan data lokasi dari kamera dibuang sebelum disimpan.
         </p>
         <div style="margin-top:12px"><button class="ghost">Simpan Catatan</button></div>

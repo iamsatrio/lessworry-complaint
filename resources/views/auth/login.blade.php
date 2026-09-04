@@ -18,7 +18,7 @@
       <div style="margin-top:22px"><button style="width:100%">Masuk</button></div>
     </form>
   </div>
-  <p class="muted small" style="text-align:center">Lupa password? Hubungi supervisor outletmu.</p>
+  <p class="muted small" style="text-align:center">Lupa password? Hubungi admin sistem.</p>
 </div>
 @if(session('bersihkan_semua_draft'))
 <script>

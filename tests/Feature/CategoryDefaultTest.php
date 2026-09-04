@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Complaint;
 use App\Models\Outlet;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -92,6 +93,6 @@ class CategoryDefaultTest extends TestCase
             ])
             ->assertSessionHasErrors('category');
 
-        $this->assertSame(0, \App\Models\Complaint::count());
+        $this->assertSame(0, Complaint::count());
     }
 }

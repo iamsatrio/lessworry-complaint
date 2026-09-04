@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 /**
  * Jalan pulang saat pengelolaan pengguna terkunci. (API-14 #1)
  *
- * Pengaman di UserController mencegah supervisor aktif terakhir hilang, tapi
+ * Pengaman di UserController mencegah admin aktif terakhir hilang, tapi
  * pengaman saja tidak cukup: basis data bisa terlanjur sampai ke keadaan itu
  * lewat seeder, migrasi data, atau perbaikan manual yang meleset. Tanpa
  * perintah ini satu-satunya jalan keluar adalah menulis langsung ke basis
@@ -18,7 +18,7 @@ use Illuminate\Support\Str;
  * Dijalankan dari shell server, jadi tidak melewati pemeriksaan peran HTTP —
  * yang memegang shell memang sudah memegang basis datanya.
  */
-class PulihkanSupervisor extends Command
+class PulihkanAdmin extends Command
 {
     protected $signature = 'lessworry:pulihkan-admin
                             {email : email akun yang mau diangkat}

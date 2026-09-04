@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Complaint;
 use App\Models\ComplaintResponsible;
+use App\Models\User;
 
 /**
  * Daftar orang yang bisa ditetapkan sebagai pelaku satu complaint. (API-19)
@@ -32,7 +33,7 @@ class KandidatPelaku
 
     /**
      * @param  array<int,array{staff_id:?string,name:string,nip:?string}>  $karyawanOutlet
-     * @param  iterable<\App\Models\User>  $penggunaSistem
+     * @param  iterable<User>  $penggunaSistem
      */
     public static function untuk(Complaint $complaint, array $karyawanOutlet = [], iterable $penggunaSistem = []): self
     {
@@ -43,18 +44,18 @@ class KandidatPelaku
             'Karyawan '.($complaint->outlet?->name ? 'outlet '.$complaint->outlet->name : 'outlet nota ini'),
             collect($karyawanOutlet)->map(fn ($k) => [
                 'staff_id' => $k['staff_id'] ?? null,
-                'name'     => $k['name'],
-                'nip'      => $k['nip'] ?? null,
-                'role'     => 'lainnya',
-                'stage'    => null,
+                'name' => $k['name'],
+                'nip' => $k['nip'] ?? null,
+                'role' => 'lainnya',
+                'stage' => null,
             ])->all()
         );
         $daftar->tambahGrup('Pengguna sistem complaint', collect($penggunaSistem)->map(fn ($u) => [
             'staff_id' => null,
-            'name'     => $u->name,
-            'nip'      => null,
-            'role'     => $u->isCustomerCare() ? 'customer_care' : ($u->isKasir() ? 'kasir' : 'lainnya'),
-            'stage'    => null,
+            'name' => $u->name,
+            'nip' => null,
+            'role' => $u->isCustomerCare() ? 'customer_care' : ($u->isKasir() ? 'kasir' : 'lainnya'),
+            'stage' => null,
         ])->all());
 
         return $daftar;
@@ -90,10 +91,10 @@ class KandidatPelaku
 
             $items[] = [
                 'staff_id' => isset($h['staff_id']) ? (string) $h['staff_id'] : null,
-                'name'     => $h['name'],
-                'nip'      => $h['nip'] ?? null,
-                'role'     => $kasir ? 'kasir' : 'produksi',
-                'stage'    => $kasir ? null : $h['stage'],
+                'name' => $h['name'],
+                'nip' => $h['nip'] ?? null,
+                'role' => $kasir ? 'kasir' : 'produksi',
+                'stage' => $kasir ? null : $h['stage'],
             ];
         }
 
@@ -104,10 +105,10 @@ class KandidatPelaku
 
             $items[] = [
                 'staff_id' => isset($d['courier_id']) ? (string) $d['courier_id'] : null,
-                'name'     => $d['courier_name'],
-                'nip'      => $d['courier_nip'] ?? null,
-                'role'     => 'kurir',
-                'stage'    => null,
+                'name' => $d['courier_name'],
+                'nip' => $d['courier_nip'] ?? null,
+                'role' => 'kurir',
+                'stage' => null,
             ];
         }
 

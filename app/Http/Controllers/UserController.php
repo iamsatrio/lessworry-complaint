@@ -22,14 +22,14 @@ use Illuminate\Validation\ValidationException;
  */
 class UserController extends Controller
 {
-    private function authorizeSupervisor(Request $request): void
+    private function authorizeAdmin(Request $request): void
     {
         abort_unless($request->user()->canManageUsers(), 403);
     }
 
     public function index(Request $request)
     {
-        $this->authorizeSupervisor($request);
+        $this->authorizeAdmin($request);
 
         return view('users.index', [
             'users' => User::with('outlet')->orderBy('is_active', 'desc')->orderBy('name')->get(),
@@ -38,21 +38,21 @@ class UserController extends Controller
 
     public function create(Request $request)
     {
-        $this->authorizeSupervisor($request);
+        $this->authorizeAdmin($request);
 
         return view('users.create', ['outlets' => Outlet::orderBy('name')->get()]);
     }
 
     public function store(Request $request)
     {
-        $this->authorizeSupervisor($request);
+        $this->authorizeAdmin($request);
 
         $data = $request->validate([
-            'name'      => ['required', 'string', 'max:120'],
-            'email'     => ['required', 'email', 'max:190', 'unique:users,email'],
-            'role'      => ['required', Rule::in(['kasir', 'customer_care', 'divisi', 'supervisor', 'admin'])],
+            'name' => ['required', 'string', 'max:120'],
+            'email' => ['required', 'email', 'max:190', 'unique:users,email'],
+            'role' => ['required', Rule::in(['kasir', 'customer_care', 'divisi', 'supervisor', 'admin'])],
             'outlet_id' => ['nullable', 'exists:outlets,id'],
-            'division'  => ['nullable', Rule::in(array_keys(config('complaint.divisions')))],
+            'division' => ['nullable', Rule::in(array_keys(config('complaint.divisions')))],
         ]);
 
         // Password sementara dibuat sistem, bukan diketik admin —
@@ -68,31 +68,31 @@ class UserController extends Controller
         // Password sementara hanya ditampilkan sekali, lewat flash session.
         // Tidak disimpan, tidak dicatat di log.
         return redirect()->route('users.index')->with('temporary_password', [
-            'name'     => $user->name,
-            'email'    => $user->email,
+            'name' => $user->name,
+            'email' => $user->email,
             'password' => $temporary,
         ]);
     }
 
     public function edit(Request $request, User $user)
     {
-        $this->authorizeSupervisor($request);
+        $this->authorizeAdmin($request);
 
         return view('users.edit', [
-            'user'    => $user,
+            'user' => $user,
             'outlets' => Outlet::orderBy('name')->get(),
         ]);
     }
 
     public function update(Request $request, User $user)
     {
-        $this->authorizeSupervisor($request);
+        $this->authorizeAdmin($request);
 
         $data = $request->validate([
-            'name'      => ['required', 'string', 'max:120'],
-            'role'      => ['required', Rule::in(['kasir', 'customer_care', 'divisi', 'supervisor', 'admin'])],
+            'name' => ['required', 'string', 'max:120'],
+            'role' => ['required', Rule::in(['kasir', 'customer_care', 'divisi', 'supervisor', 'admin'])],
             'outlet_id' => ['nullable', 'exists:outlets,id'],
-            'division'  => ['nullable', Rule::in(array_keys(config('complaint.divisions')))],
+            'division' => ['nullable', Rule::in(array_keys(config('complaint.divisions')))],
             'is_active' => ['nullable', 'boolean'],
         ]);
 
@@ -121,7 +121,7 @@ class UserController extends Controller
     }
 
     /**
-     * Jaga JUMLAH SUPERVISOR AKTIF, bukan cuma kolom is_active. (API-14 #1)
+     * Jaga JUMLAH ADMIN AKTIF, bukan cuma kolom is_active. (API-14 #1)
      *
      * Pengaman lama hanya menyala saat is_active dimatikan, sehingga
      * admin aktif terakhir bisa melucuti dirinya sendiri lewat dropdown
@@ -133,6 +133,12 @@ class UserController extends Controller
      * dengan penguncian baris supaya dua permintaan bersamaan tidak sama-sama
      * membaca "masih ada 2". (API-14 #8)
      *
+     * Barisnya dikunci dalam urutan id yang tetap, dan TANPA mengecualikan
+     * baris yang sedang diubah. Mengecualikan diri sendiri membuat dua
+     * permintaan mengunci baris lawannya masing-masing lalu saling menunggu;
+     * mengunci himpunan yang sama dalam urutan yang sama membuat yang kedua
+     * antre, lalu membaca keadaan yang sudah diperbarui.
+     *
      * Kalau basis data terlanjur sampai ke keadaan nol admin — lewat
      * seeder atau perbaikan manual — jalan pulihnya:
      *
@@ -141,17 +147,20 @@ class UserController extends Controller
     private function pastikanMasihAdaAdmin(User $user, string $peranBaru, bool $isActive): void
     {
         $tadinyaAdminAktif = $user->role === 'admin' && $user->is_active;
-        $tetapAdminAktif   = $peranBaru === 'admin' && $isActive;
+        $tetapAdminAktif = $peranBaru === 'admin' && $isActive;
 
         if (! $tadinyaAdminAktif || $tetapAdminAktif) {
             return;
         }
 
-        $tersisa = User::where('role', 'admin')
+        $adminAktif = User::where('role', 'admin')
             ->where('is_active', true)
-            ->where('id', '!=', $user->id)
+            ->orderBy('id')
             ->lockForUpdate()
-            ->count();
+            ->pluck('id');
+
+        // $user masih tercatat admin aktif saat ini — itu yang sedang dicabut.
+        $tersisa = $adminAktif->reject(fn ($id) => $id === $user->id)->count();
 
         if ($tersisa > 0) {
             return;
@@ -168,18 +177,18 @@ class UserController extends Controller
     /** Setel ulang password jadi sementara — untuk pegawai yang lupa. */
     public function resetPassword(Request $request, User $user)
     {
-        $this->authorizeSupervisor($request);
+        $this->authorizeAdmin($request);
 
         $temporary = Str::password(12, symbols: false);
 
         $user->forceFill([
-            'password'             => $temporary,
+            'password' => $temporary,
             'must_change_password' => true,
         ])->save();
 
         return redirect()->route('users.index')->with('temporary_password', [
-            'name'     => $user->name,
-            'email'    => $user->email,
+            'name' => $user->name,
+            'email' => $user->email,
             'password' => $temporary,
         ]);
     }

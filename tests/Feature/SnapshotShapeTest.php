@@ -47,7 +47,7 @@ class SnapshotShapeTest extends TestCase
     {
         // Baris versi lama: hanya punya sebagian kunci.
         $complaint = $this->complaintDenganSnapshot([
-            'invoice'    => 'INV/118/1/1',
+            'invoice' => 'INV/118/1/1',
             'deliveries' => [['status' => 'Diantar', 'date' => '2026-05-03']],
         ]);
 
@@ -60,7 +60,7 @@ class SnapshotShapeTest extends TestCase
     public function test_baris_kurir_kosong_sama_sekali_tidak_memecahkan_halaman(): void
     {
         $complaint = $this->complaintDenganSnapshot([
-            'invoice'    => 'INV/118/1/1',
+            'invoice' => 'INV/118/1/1',
             'deliveries' => [[]],
         ]);
 
@@ -72,7 +72,7 @@ class SnapshotShapeTest extends TestCase
     public function test_deliveries_yang_bukan_daftar_tidak_memecahkan_halaman(): void
     {
         $complaint = $this->complaintDenganSnapshot([
-            'invoice'    => 'INV/118/1/1',
+            'invoice' => 'INV/118/1/1',
             'deliveries' => 'bukan daftar',
         ]);
 
@@ -93,7 +93,7 @@ class SnapshotShapeTest extends TestCase
     public function test_baris_kurir_lengkap_tetap_tampil_utuh(): void
     {
         $complaint = $this->complaintDenganSnapshot([
-            'invoice'    => 'INV/118/1/1',
+            'invoice' => 'INV/118/1/1',
             'deliveries' => [[
                 'status' => 'Diantar', 'date' => '2026-05-03', 'courier_name' => 'Budi Kurir',
                 'courier_nip' => 'NIP-1', 'queue_no' => 7, 'distance' => 1.2,

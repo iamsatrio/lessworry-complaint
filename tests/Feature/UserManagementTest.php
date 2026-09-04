@@ -96,8 +96,8 @@ class UserManagementTest extends TestCase
         $user->update(['must_change_password' => true]);
 
         $this->actingAs($user)->put('/password', [
-            'current_password'      => 'secret123',
-            'password'              => 'rahasiabaru9',
+            'current_password' => 'secret123',
+            'password' => 'rahasiabaru9',
             'password_confirmation' => 'rahasiabaru9',
         ])->assertRedirect('/dashboard');
 
@@ -112,8 +112,8 @@ class UserManagementTest extends TestCase
         $user = $this->userAs('kasir');
 
         $this->actingAs($user)->put('/password', [
-            'current_password'      => 'salah',
-            'password'              => 'rahasiabaru9',
+            'current_password' => 'salah',
+            'password' => 'rahasiabaru9',
             'password_confirmation' => 'rahasiabaru9',
         ])->assertSessionHasErrors('current_password');
 
@@ -125,8 +125,8 @@ class UserManagementTest extends TestCase
         $user = $this->userAs('kasir');
 
         $this->actingAs($user)->put('/password', [
-            'current_password'      => 'secret123',
-            'password'              => 'secret123',
+            'current_password' => 'secret123',
+            'password' => 'secret123',
             'password_confirmation' => 'secret123',
         ])->assertSessionHasErrors('password');
     }
@@ -136,8 +136,8 @@ class UserManagementTest extends TestCase
         $user = $this->userAs('kasir');
 
         $this->actingAs($user)->put('/password', [
-            'current_password'      => 'secret123',
-            'password'              => 'pendek',
+            'current_password' => 'secret123',
+            'password' => 'pendek',
             'password_confirmation' => 'pendek',
         ])->assertSessionHasErrors('password');
     }
@@ -158,7 +158,7 @@ class UserManagementTest extends TestCase
     public function test_admin_aktif_terakhir_tidak_bisa_dinonaktifkan(): void
     {
         $satu = $this->userAs('admin');
-        $dua  = $this->userAs('admin');
+        $dua = $this->userAs('admin');
 
         // Masih ada dua supervisor: menonaktifkan salah satunya boleh.
         $this->actingAs($satu)->put('/users/'.$dua->id, [

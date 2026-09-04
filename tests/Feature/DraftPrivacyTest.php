@@ -137,7 +137,7 @@ class DraftPrivacyTest extends TestCase
     public function test_draft_dibersihkan_setelah_complaint_benar_benar_tersimpan(): void
     {
         $outlet = Outlet::create(['name' => 'Outlet A', 'nevira_outlet_id' => '1']);
-        $kasir  = $this->userAs('kasir', $outlet);
+        $kasir = $this->userAs('kasir', $outlet);
 
         $this->actingAs($kasir)->post('/complaints', [
             'channel' => 'kasir', 'reporter_name' => 'Budi', 'category' => 'hasil_cuci',

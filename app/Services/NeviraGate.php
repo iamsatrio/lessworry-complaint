@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\NeviraAccessDenied;
+use App\Exceptions\NeviraException;
 use App\Exceptions\NeviraInputRejected;
 use App\Exceptions\NeviraOutletMismatch;
 use App\Exceptions\NeviraRateLimited;
@@ -47,7 +48,7 @@ class NeviraGate
      *
      * @return array{id:string,number:?string,summary:array}
      *
-     * @throws \App\Exceptions\NeviraException
+     * @throws NeviraException
      */
     public function resolve(User $user, string $input): array
     {
@@ -56,13 +57,13 @@ class NeviraGate
         $this->pastikanBelumMelewatiBatas($user);
 
         $resolved = $this->client->resolveTransaction($input);
-        $summary  = $this->client->summarizeTransaction($resolved['payload']);
+        $summary = $this->client->summarizeTransaction($resolved['payload']);
 
         $this->pastikanOutletCocok($user, $summary);
 
         return [
-            'id'      => $resolved['id'],
-            'number'  => $resolved['number'],
+            'id' => $resolved['id'],
+            'number' => $resolved['number'],
             'summary' => $summary,
         ];
     }
@@ -181,7 +182,7 @@ class NeviraGate
         }
 
         $outletKasir = $user->outlet?->nevira_outlet_id;
-        $outletNota  = $summary['outlet_id'] ?? null;
+        $outletNota = $summary['outlet_id'] ?? null;
 
         if (blank($outletKasir) || blank($outletNota) || (string) $outletKasir !== (string) $outletNota) {
             throw new NeviraOutletMismatch('Nota ini bukan milik outletmu. Minta Customer Care yang menanganinya.');

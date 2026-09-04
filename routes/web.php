@@ -1,7 +1,12 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ComplaintAttachmentController;
 use App\Http\Controllers\ComplaintController;
+use App\Http\Controllers\ComplaintLinkController;
+use App\Http\Controllers\ComplaintNoteController;
+use App\Http\Controllers\ComplaintResponsibleController;
+use App\Http\Controllers\ComplaintStatusController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\NeviraLookupController;
 use App\Http\Controllers\PasswordController;
@@ -34,18 +39,19 @@ Route::middleware(['auth', 'auth.session', 'active', 'password.changed'])->group
     Route::get('/complaints/create', [ComplaintController::class, 'create'])->name('complaints.create');
     Route::post('/complaints', [ComplaintController::class, 'store'])->name('complaints.store');
     Route::get('/complaints/{complaint}', [ComplaintController::class, 'show'])->name('complaints.show');
-    Route::post('/complaints/{complaint}/status', [ComplaintController::class, 'updateStatus'])->name('complaints.status');
+    Route::post('/complaints/{complaint}/status', [ComplaintStatusController::class, 'update'])->name('complaints.status');
     Route::post('/complaints/{complaint}/assign', [ComplaintController::class, 'assign'])->name('complaints.assign');
-    Route::post('/complaints/{complaint}/note', [ComplaintController::class, 'addNote'])->name('complaints.note');
-    Route::post('/complaints/{complaint}/resync', [ComplaintController::class, 'resync'])->name('complaints.resync');
-    Route::put('/complaints/{complaint}/link', [ComplaintController::class, 'updateLink'])->name('complaints.link');
-    Route::get('/complaints/{complaint}/lampiran/{attachment}', [ComplaintController::class, 'attachment'])->name('complaints.attachment');
-    Route::get('/complaints/{complaint}/lampiran/{attachment}/kecil', [ComplaintController::class, 'attachmentThumb'])->name('complaints.attachment.thumb');
+    Route::post('/complaints/{complaint}/note', [ComplaintNoteController::class, 'store'])->name('complaints.note');
+    Route::post('/complaints/{complaint}/resync', [ComplaintLinkController::class, 'resync'])->name('complaints.resync');
+    Route::put('/complaints/{complaint}/link', [ComplaintLinkController::class, 'update'])->name('complaints.link');
+    Route::get('/complaints/{complaint}/lampiran/{attachment}', [ComplaintAttachmentController::class, 'show'])->name('complaints.attachment');
+    Route::get('/complaints/{complaint}/lampiran/{attachment}/kecil', [ComplaintAttachmentController::class, 'thumb'])->name('complaints.attachment.thumb');
     // Pelaku complaint — beberapa orang per complaint, wewenangnya dicek
-    // di controller (Customer Care dan supervisor saja). (API-19)
-    Route::post('/complaints/{complaint}/pelaku', [ComplaintController::class, 'addResponsible'])->name('complaints.responsibles.store');
-    Route::put('/complaints/{complaint}/pelaku/{responsible}', [ComplaintController::class, 'updateResponsible'])->name('complaints.responsibles.update');
-    Route::delete('/complaints/{complaint}/pelaku/{responsible}', [ComplaintController::class, 'destroyResponsible'])->name('complaints.responsibles.destroy');
+    // ComplaintPolicy::manageResponsible (Customer Care dan supervisor
+    // saja). (API-19)
+    Route::post('/complaints/{complaint}/pelaku', [ComplaintResponsibleController::class, 'store'])->name('complaints.responsibles.store');
+    Route::put('/complaints/{complaint}/pelaku/{responsible}', [ComplaintResponsibleController::class, 'update'])->name('complaints.responsibles.update');
+    Route::delete('/complaints/{complaint}/pelaku/{responsible}', [ComplaintResponsibleController::class, 'destroy'])->name('complaints.responsibles.destroy');
 
     // Dibatasi lajunya: tanpa ini nomor nota bisa dicoba satu per satu.
     Route::get('/nevira/lookup', NeviraLookupController::class)
@@ -55,7 +61,7 @@ Route::middleware(['auth', 'auth.session', 'active', 'password.changed'])->group
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
 
-    // Pengelolaan pengguna — hanya supervisor (dicek di controller).
+    // Pengelolaan pengguna — hanya admin (dicek di controller).
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
     Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
     Route::post('/users', [UserController::class, 'store'])->name('users.store');

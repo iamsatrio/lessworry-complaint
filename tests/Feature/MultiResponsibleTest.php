@@ -40,18 +40,18 @@ class MultiResponsibleTest extends TestCase
             '*/login' => Http::response(['access_token' => 'tok'], 200),
             '*/user/by-outlet/*' => Http::response(['data' => [
                 [
-                    'id_user'  => self::ID_KARYAWAN_OUTLET,
+                    'id_user' => self::ID_KARYAWAN_OUTLET,
                     'username' => self::KARYAWAN_OUTLET,
-                    'nip'      => self::NIP_KARYAWAN_OUTLET,
-                    'id_role'  => 4,
-                    'status'   => 1,
+                    'nip' => self::NIP_KARYAWAN_OUTLET,
+                    'id_role' => 4,
+                    'status' => 1,
                 ],
                 [
-                    'id_user'  => 8802,
+                    'id_user' => 8802,
                     'username' => 'Karyawan Nonaktif',
-                    'nip'      => 'LW/06-0312',
-                    'id_role'  => 4,
-                    'status'   => 0,
+                    'nip' => 'LW/06-0312',
+                    'id_role' => 4,
+                    'status' => 0,
                 ],
             ]], 200),
         ]);
@@ -86,15 +86,15 @@ class MultiResponsibleTest extends TestCase
         $complaint->save();
 
         $complaint->forceFill(['nevira_snapshot' => [
-            'invoice'      => 'INV/118/1787749345365/1',
-            'outlet_id'    => 118,
+            'invoice' => 'INV/118/1787749345365/1',
+            'outlet_id' => 118,
             'cashier_name' => 'Gilang Ramadhan',
-            'cashier_nip'  => 'LW/06-0002',
-            'cashier_id'   => 535,
-            'processes'    => [
+            'cashier_nip' => 'LW/06-0002',
+            'cashier_id' => 535,
+            'processes' => [
                 ['stage' => 'Cuci', 'staff_name' => 'Budi Santoso', 'staff_nip' => 'LW/02', 'staff_id' => 244, 'status' => 'COMPLETED', 'duration' => 600],
             ],
-            'deliveries'   => [[
+            'deliveries' => [[
                 'id' => 1, 'date' => '2026-08-20', 'status_code' => 2, 'status' => 'Diantar',
                 'courier_name' => 'Rizky Kurir', 'courier_nip' => 'LW/07-0010', 'courier_id' => 196,
                 'queue_no' => 3, 'proof_count' => 0,
@@ -161,7 +161,7 @@ class MultiResponsibleTest extends TestCase
 
         $this->tetapkan($cc, $complaint, [
             'pelaku' => ['staff:'.self::ID_KARYAWAN_OUTLET],
-            'peran'  => ['staff:'.self::ID_KARYAWAN_OUTLET => 'produksi'],
+            'peran' => ['staff:'.self::ID_KARYAWAN_OUTLET => 'produksi'],
             'alasan' => 'Mengerjakan ulang cucian ini di luar catatan NEVIRA.',
         ])->assertSessionHasNoErrors();
 
@@ -190,10 +190,10 @@ class MultiResponsibleTest extends TestCase
         $complaint = $this->complaint();
 
         $this->tetapkan($cc, $complaint, [
-            'manual_nama'  => 'Kurir Outlet Lain',
-            'manual_nip'   => 'LW/09-0001',
+            'manual_nama' => 'Kurir Outlet Lain',
+            'manual_nip' => 'LW/09-0001',
             'manual_peran' => 'kurir',
-            'alasan'       => 'Mengantar dari outlet lain, tidak tercatat di nota ini.',
+            'alasan' => 'Mengantar dari outlet lain, tidak tercatat di nota ini.',
         ])->assertSessionHasNoErrors();
 
         $pelaku = $complaint->responsibles()->sole();
@@ -299,7 +299,7 @@ class MultiResponsibleTest extends TestCase
         $pelaku = $complaint->responsibles()->sole();
 
         $this->actingAs($cc)->put('/complaints/'.$complaint->id.'/pelaku/'.$pelaku->id, [
-            'peran'  => 'kurir',
+            'peran' => 'kurir',
             'alasan' => 'Ternyata rusaknya saat diantar, bukan saat dicuci.',
         ])->assertSessionHasNoErrors();
 
@@ -383,7 +383,7 @@ class MultiResponsibleTest extends TestCase
     {
         $cc = $this->userAs('customer_care');
         $satu = $this->complaint();
-        $dua  = $this->complaint();
+        $dua = $this->complaint();
 
         $this->tetapkan($cc, $satu, ['pelaku' => ['staff:244'], 'alasan' => 'Noda.']);
         $pelaku = $satu->responsibles()->sole();

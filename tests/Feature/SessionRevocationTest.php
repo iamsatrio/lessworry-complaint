@@ -60,8 +60,8 @@ class SessionRevocationTest extends TestCase
 
         // Perangkat B: pemiliknya mengganti password.
         $this->actingAs($user->fresh())->put('/password', [
-            'current_password'      => 'lama12345',
-            'password'              => 'baru123456',
+            'current_password' => 'lama12345',
+            'password' => 'baru123456',
             'password_confirmation' => 'baru123456',
         ])->assertRedirect(route('dashboard'));
 

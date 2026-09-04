@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Complaint;
+use App\Models\Outlet;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -152,5 +153,88 @@ class PeranAdminTest extends TestCase
 
         $this->assertNotNull($kasir->outlet_id, 'Kasir tanpa outlet tidak bisa melihat complaint mana pun.');
         $this->assertSame('Tebet', $kasir->outlet->name);
+    }
+
+    /* ---------- Mesin yang sudah pernah memakai seeder lama ---------- */
+
+    /**
+     * Seeder lama membuat empat akun berpassword harfiah `password`, dan
+     * sengaja tidak menandai must_change_password. Tiga emailnya dipakai
+     * ulang oleh daftar baru.
+     */
+    private function seederLama(): void
+    {
+        $tebet = Outlet::firstOrCreate(
+            ['nevira_outlet_id' => '118'], ['name' => 'Tebet']
+        );
+
+        User::create(['name' => 'Satrio Wibowo', 'email' => 'satrio@lessworry.id',
+            'password' => 'password', 'role' => 'supervisor']);
+        User::create(['name' => 'Customer Care', 'email' => 'cc@lessworry.id',
+            'password' => 'password', 'role' => 'customer_care']);
+        User::create(['name' => 'Kasir Pusat', 'email' => 'kasir@lessworry.id',
+            'password' => 'password', 'role' => 'kasir', 'outlet_id' => $tebet->id]);
+        User::create(['name' => 'Divisi Produksi', 'email' => 'produksi@lessworry.id',
+            'password' => 'password', 'role' => 'divisi', 'division' => 'produksi']);
+        User::create(['name' => 'Kasir Cabang (baru)', 'email' => 'kasirbaru@lessworry.id',
+            'password' => 'password', 'role' => 'kasir', 'outlet_id' => $tebet->id,
+            'must_change_password' => true]);
+    }
+
+    public function test_akun_seeder_lama_diperbaiki_bukan_dilewati(): void
+    {
+        $this->seederLama();
+        $this->seed(DatabaseSeeder::class);
+
+        $satrio = User::where('email', 'satrio@lessworry.id')->first();
+
+        $this->assertSame('admin', $satrio->role, 'Pemilik sistem tetap terkunci dari pengelolaan pengguna.');
+        $this->assertTrue((bool) $satrio->must_change_password);
+        $this->assertSame(3, User::where('role', 'admin')->where('is_active', true)->count());
+    }
+
+    public function test_password_seeder_lama_tidak_lagi_tembus(): void
+    {
+        $this->seederLama();
+        $this->seed(DatabaseSeeder::class);
+
+        // Password harfiah `password` ada di riwayat commit publik.
+        foreach (['satrio@lessworry.id', 'kasir@lessworry.id', 'produksi@lessworry.id'] as $email) {
+            $this->post('/login', ['email' => $email, 'password' => 'password']);
+            $this->assertFalse(auth()->check(), 'Akun '.$email.' masih menerima password yang bocor.');
+            $this->post('/logout');
+        }
+    }
+
+    public function test_akun_demo_lama_yang_tidak_dipakai_lagi_dimatikan(): void
+    {
+        $this->seederLama();
+        $this->seed(DatabaseSeeder::class);
+
+        foreach (['cc@lessworry.id', 'kasirbaru@lessworry.id'] as $email) {
+            $user = User::where('email', $email)->first();
+
+            $this->assertNotNull($user, 'Akun demo dihapus — jejak audit ikut hilang.');
+            $this->assertFalse((bool) $user->is_active, $email.' masih hidup.');
+
+            $this->post('/login', ['email' => $email, 'password' => 'password']);
+            $this->assertGuest();
+            $this->post('/logout');
+        }
+    }
+
+    public function test_tidak_ada_akun_tanpa_wajib_ganti_password_setelah_perbaikan(): void
+    {
+        $this->seederLama();
+        $this->seed(DatabaseSeeder::class);
+
+        $this->assertSame(0, User::where('must_change_password', false)->count());
+    }
+
+    /* ---------- Admin ikut terhitung sebagai petugas ---------- */
+
+    public function test_admin_bisa_ditugasi_sebuah_complaint(): void
+    {
+        $this->assertContains('admin', User::peranBisaDitugasi());
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Satu berkas bukti. Menempel pada complaint saat dibuat, atau pada satu
@@ -10,6 +11,14 @@ use Illuminate\Database\Eloquent\Model;
  *
  * Selalu di disk privat, selalu keluar lewat rute yang memeriksa wewenang:
  * foto bukti memuat barang pelanggan dan kadang wajahnya.
+ */
+/**
+ * @property int $id
+ * @property int $complaint_id
+ * @property int|null $complaint_activity_id
+ * @property string $path
+ * @property string|null $thumb_path
+ * @property string|null $original_name
  */
 class ComplaintAttachment extends Model
 {
@@ -22,11 +31,12 @@ class ComplaintAttachment extends Model
     {
         return [
             'original_bytes' => 'integer',
-            'stored_bytes'   => 'integer',
+            'stored_bytes' => 'integer',
         ];
     }
 
-    public function complaint()
+    /** @return BelongsTo<Complaint, $this> */
+    public function complaint(): BelongsTo
     {
         return $this->belongsTo(Complaint::class);
     }

@@ -30,10 +30,10 @@ class AdminLockoutTest extends TestCase
     private function payload(User $user, array $override = []): array
     {
         return array_merge([
-            'name'      => $user->name,
-            'role'      => $user->role,
+            'name' => $user->name,
+            'role' => $user->role,
             'outlet_id' => $user->outlet_id,
-            'division'  => $user->division,
+            'division' => $user->division,
             'is_active' => 1,
         ], $override);
     }
