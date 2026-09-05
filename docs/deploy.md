@@ -5,6 +5,8 @@ Daftar periksa sebelum sistem ini menyentuh data pelanggan sungguhan.
 ## Wajib — jangan lewati satu pun
 
 - [ ] `APP_ENV=production` dan `APP_DEBUG=false`.
+      Di server percobaan pakai `APP_ENV=staging`: setiap halaman memunculkan
+      pita "Lingkungan uji" supaya data uji tidak dikira data pelanggan.
       `APP_DEBUG=true` menampilkan isi variabel dan potongan kode ke siapa pun
       yang memicu error, termasuk kredensial NEVIRA.
 - [ ] `php artisan key:generate` di server produksi. Jangan menyalin `APP_KEY`
@@ -16,6 +18,13 @@ Daftar periksa sebelum sistem ini menyentuh data pelanggan sungguhan.
       sekali di produksi. Akun demo memakai password `password`.
 - [ ] `SESSION_SECURE_COOKIE=true` supaya cookie sesi tidak pernah lewat HTTP.
 - [ ] Kredensial NEVIRA diisi dari service account, bukan akun pribadi.
+- [ ] **`NEVIRA_ENABLED=true`.** Kalau `false`, `/health` membalas
+      `nevira: disabled` dan tetap 200 — pemantau tetap hijau walau integrasi
+      POS mati total, dan complaint diam-diam kehilangan tautan ordernya.
+- [ ] `HEALTH_CACHE_STORE` **bukan** `database`. Store bawaan produksi adalah
+      `database`; kalau `/health` ikut memakainya, database yang mati membuat
+      `/health` ikut mati — pemadaman yang paling perlu dibedakan justru yang
+      membuatnya bisu.
 - [ ] Izin tulis untuk `storage/` dan `bootstrap/cache/`.
       Foto bukti disimpan di disk privat (`storage/app/private`) dan disajikan
       lewat rute yang memeriksa wewenang — `storage:link` TIDAK diperlukan
@@ -45,12 +54,38 @@ yang menganggur adalah akun yang menganggur.
 
 **Backup yang belum pernah diuji pulih bukan backup, itu asumsi.**
 
-- [ ] Backup database terjadwal otomatis, harian.
-- [ ] Backup folder `storage/app/public` — foto bukti complaint ada di sana,
-      dan tidak ikut kalau hanya database yang dicadangkan.
-- [ ] Simpan salinan di luar server aplikasi.
-- [ ] **Lakukan satu kali uji pemulihan** ke lingkungan terpisah, dan catat
+Sudah ada di dalam aplikasi (API-27):
+
+```bash
+php artisan backup:database    # dump terkompresi + rotasi 7 hari
+php artisan backup:verify      # pulihkan dump terakhir, hitung baris complaints
+```
+
+`backup:database` sudah terdaftar di penjadwal Laravel, harian pukul 02.00.
+Yang perlu ditambahkan di server hanyalah satu baris crontab:
+
+```cron
+* * * * * cd /var/www/care && php artisan schedule:run >> /dev/null 2>&1
+```
+
+- [ ] Baris `schedule:run` di atas terpasang, dan sudah dibuktikan dengan
+      melihat berkas baru muncul keesokan harinya.
+- [ ] `BACKUP_PATH` diarahkan ke direktori yang **hanya** dipakai backup —
+      rotasi menghapus isi direktori itu.
+- [ ] Backup folder `storage/app/private` — foto bukti complaint ada di sana,
+      dan **tidak** ikut dalam dump database.
+- [ ] Simpan salinan di luar server aplikasi. Backup yang duduk di mesin yang
+      sama akan ikut hilang bersama mesinnya.
+- [ ] **Jalankan `backup:verify` satu kali setelah pasang**, dan catat
       tanggalnya. Ulangi tiap kuartal.
+- [ ] `BACKUP_VERIFY_CONNECTION` diisi, dengan pengguna database tersendiri
+      yang **tidak punya hak apa pun di database produksi**. Tanpa itu
+      `backup:verify` menolak berjalan di MySQL — disengaja. Perintah itu
+      memulihkan berkas yang isinya tidak dipercaya, dan yang menahannya
+      menulis ke produksi adalah hak akses, bukan pembacaan isi dumpnya
+      (`--one-database` hanya mengikuti `USE`; `INSERT INTO produksi.tabel`
+      lewat begitu saja). Caranya di `deploy-care-lessworry.md`.
+- [ ] Pengguna yang dipakai proses web **tidak** punya `CREATE`/`DROP DATABASE`.
 
 ## Optimasi
 
@@ -66,7 +101,23 @@ tidak terbaca.
 
 ## Pemantauan
 
-- [ ] Pemberitahuan saat aplikasi mati.
+`GET /health` — terbuka tanpa autentikasi, tanpa membocorkan apa pun:
+
+```
+200  {"status":"ok","checks":{"database":"ok","nevira":"ok","storage":"ok"}}
+503  ada yang tidak "ok"
+```
+
+Yang dibaca pemantau adalah **kode statusnya**; isi JSON untuk manusia yang
+menyusul. Hasil pemeriksaan NEVIRA disimpan 60 detik, jadi pemantau yang
+memanggil tiap menit tidak menambah beban ke NEVIRA — termasuk saat NEVIRA
+sedang mati.
+
+- [ ] Pemantau apa pun (UptimeRobot, Healthchecks, curl di cron) menembak
+      `https://care.lessworry.id/health` tiap menit dan memberi tahu saat
+      jawabannya bukan 200.
+- [ ] Pemberitahuan saat `nevira_sync_error` melonjak — pertanda integrasi
+      NEVIRA putus, dan complaint mulai kehilangan tautan ordernya.
 - [ ] Pemberitahuan saat `nevira_sync_error` melonjak — pertanda integrasi
       NEVIRA putus, dan complaint mulai kehilangan tautan ordernya.
 - [ ] Rotasi log supaya `storage/logs` tidak menghabiskan disk.

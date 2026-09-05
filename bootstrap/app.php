@@ -9,6 +9,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\AuthenticateSession;
+use Illuminate\Support\Facades\Route;
 use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -16,6 +17,11 @@ return Application::configure(basePath: dirname(__DIR__))
         web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        // /health dipasang di sini, bukan di routes/web.php: rutenya tidak
+        // boleh memakai middleware web. Alasannya ditulis di routes/health.php.
+        then: function () {
+            Route::group([], base_path('routes/health.php'));
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Berlaku untuk semua permintaan web.
