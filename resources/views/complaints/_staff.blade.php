@@ -89,8 +89,14 @@
     </p>
   @endforelse
 
-  <details class="link-editor" @if($complaint->responsibles->isEmpty()) open @endif style="margin-top:10px">
-    <summary>Tambah pelaku</summary>
+  {{-- Sengaja TIDAK terbuka sendiri. Daftar kandidat memuat satu baris
+       centang dan satu select peran per pengguna sistem — sekitar 1500px di
+       390px — sementara penetapan pelaku adalah tindakan jarang. Selama blok
+       ini terbuka bawaan, semua orang yang hanya ingin memperbarui status
+       harus menggulirinya lebih dulu. Membukanya tetap satu ketukan.
+       (API-38 #6) --}}
+  <details class="link-editor" style="margin-top:10px">
+    <summary>Tetapkan pelaku complaint ini</summary>
 
     <form method="POST" action="{{ route('complaints.responsibles.store',$complaint) }}" style="margin-top:12px">
       @csrf
