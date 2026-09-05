@@ -35,6 +35,8 @@
 /public/hot
 /public/storage
 /storage/*.key
+/storage/app/backups/*
+/storage/app/impor/*
 /storage/app/private/*
 /storage/app/public/*
 /storage/framework/cache/*

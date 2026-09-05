@@ -51,6 +51,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $created_by
  * @property string|null $import_source
  * @property int|null $import_row
+ * @property string|null $import_fingerprint
  * @property string|null $legacy_nota_number
  * @property string|null $legacy_outlet_name
  * @property string|null $legacy_pelaku
@@ -573,8 +574,18 @@ class Complaint extends Model
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         return match ($user->role) {
-            'kasir' => $query->where('outlet_id', $user->outlet_id),
-            'divisi' => $query->where('forwarded_division', $user->division),
+            // whereNotNull lebih dulu, bukan hiasan: kasir yang outlet-nya
+            // belum diisi punya outlet_id null, dan `where('outlet_id', null)`
+            // diterjemahkan Eloquent jadi `whereNull` — yang justru cocok
+            // dengan complaint impor yang outletnya tidak punya padanan.
+            // Cakupan kosong harus berarti TIDAK MELIHAT APA PUN, bukan
+            // melihat semua yang sama-sama kosong. (Review PR #7, P2-2)
+            'kasir' => $user->outlet_id === null
+                ? $query->whereRaw('1 = 0')
+                : $query->where('outlet_id', $user->outlet_id),
+            'divisi' => $user->division === null
+                ? $query->whereRaw('1 = 0')
+                : $query->where('forwarded_division', $user->division),
             default => $query,
         };
     }

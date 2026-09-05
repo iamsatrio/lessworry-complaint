@@ -53,7 +53,15 @@ h3{font-size:16px;font-weight:700;margin:0}
 .eyebrow::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--yellow);flex:none}
 
 /* ---------- Shell ---------- */
+/* Pita lingkungan uji. Sengaja mencolok dan sengaja di paling atas: yang
+   dicegah adalah orang menutup complaint sungguhan di server percobaan. */
+.envbar{background:#8a3ffc;color:#fff;font-family:var(--display);font-weight:700;
+  font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;text-align:center;
+  padding:7px 14px;position:sticky;top:0;z-index:30}
 header.top{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+/* Pita uji tetap terlihat saat halaman digulir, dan header menempel di
+   bawahnya, bukan menimpanya. */
+body.staging header.top{top:32px}
 .topin{max-width:1240px;margin:0 auto;padding:0 22px;display:flex;align-items:center;gap:26px;min-height:66px}
 .brand{font-family:var(--display);font-weight:800;font-size:19px;line-height:1;color:var(--teal-deep);white-space:nowrap}
 .brand span{display:block;font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:3px}
@@ -248,7 +256,11 @@ details.filters .body{padding:0 22px 20px}
 @media(prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
 </style>
 </head>
-<body>
+<body class="{{ config('app.env') === 'staging' ? 'staging' : '' }}">
+@if(config('app.env') === 'staging')
+  {{-- Dibaca dari APP_ENV. Di produksi pita ini tidak pernah muncul. --}}
+  <div class="envbar" role="status">Lingkungan uji &middot; data di sini bukan data pelanggan sungguhan</div>
+@endif
 @auth
 <script>
 /* Kunci draft form intake — terikat pengguna, bukan perangkat. Perangkat

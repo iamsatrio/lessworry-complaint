@@ -8,6 +8,7 @@ use App\Models\Outlet;
 use App\Models\User;
 use App\Services\PemetaBarisImpor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -385,6 +386,19 @@ class ImporComplaintTest extends TestCase
         $this->assertStringContainsString('Sebarannya cocok bulan per bulan.', $isi);
     }
 
+    public function test_dry_run_tidak_mengklaim_sudah_membandingkan_basis_data(): void
+    {
+        $this->impor();
+
+        $isi = file_get_contents($this->laporan);
+
+        // Dry-run tidak membaca basis data. Tabel yang menutup dengan "cocok"
+        // menyatakan sesuatu yang tidak diperiksa. (Review PR #7, P3-1)
+        $this->assertStringContainsString('| 2025-03 | 1 | — | — |', $isi);
+        $this->assertStringContainsString('Belum dibandingkan: dry-run tidak membaca basis data.', $isi);
+        $this->assertStringNotContainsString('Sebarannya cocok bulan per bulan.', $isi);
+    }
+
     public function test_quality_incident_dihitung_walau_tidak_diimpor(): void
     {
         $this->impor(['--tulis' => true]);
@@ -417,6 +431,148 @@ class ImporComplaintTest extends TestCase
         $laporan->assertSee('Kurang Bersih');
         $laporan->assertSee('Tidak tercatat (impor data lama)');
         $laporan->assertSee('Tanpa outlet');
+    }
+
+    /* ---------- pencegah ganda berdasar isi, bukan label ---------- */
+
+    public function test_sumber_berbeda_tidak_menggandakan_berkas_yang_sama(): void
+    {
+        $this->impor(['--tulis' => true]);
+        $this->impor(['--tulis' => true, '--sumber' => 'label-lain']);
+
+        // Dua perintah yang sama-sama wajar — `--sumber` lupa diisi lalu
+        // diisi — dulu menghasilkan 1.090 baris tanpa satu peringatan pun.
+        // (Review PR #7, P1-4)
+        $this->assertSame(12, Complaint::count());
+        $this->assertSame(0, Complaint::where('import_source', 'label-lain')->count());
+
+        $this->assertStringContainsString(
+            '| Dilewati (sudah ada dari impor sebelumnya) | 12 |',
+            file_get_contents($this->laporan),
+        );
+    }
+
+    public function test_sidik_jari_diisi_dan_unik_untuk_setiap_baris(): void
+    {
+        $this->impor(['--tulis' => true]);
+
+        $sidik = Complaint::pluck('import_fingerprint');
+
+        $this->assertCount(12, $sidik->filter());
+        $this->assertCount(12, $sidik->unique());
+    }
+
+    public function test_sidik_jari_tidak_berubah_karena_spasi_berbeda(): void
+    {
+        $pemeta = app(PemetaBarisImpor::class);
+
+        // Ekspor ulang spreadsheet yang merapikan spasi tidak boleh membuat
+        // baris yang sama terbaca sebagai complaint baru.
+        $this->assertSame(
+            $pemeta->sidikJari(['Date' => '3/5/2025', 'Name' => 'Pelapor Satu', 'Issue' => 'Noda  di kerah']),
+            $pemeta->sidikJari(['Date' => '3/5/2025', 'Name' => 'Pelapor  Satu ', 'Issue' => 'Noda di kerah']),
+        );
+    }
+
+    public function test_sidik_jari_berbeda_kalau_isinya_berbeda(): void
+    {
+        $pemeta = app(PemetaBarisImpor::class);
+
+        $this->assertNotSame(
+            $pemeta->sidikJari(['Date' => '3/5/2025', 'Name' => 'Pelapor Satu', 'Issue' => 'Noda di kerah']),
+            $pemeta->sidikJari(['Date' => '3/5/2025', 'Name' => 'Pelapor Satu', 'Issue' => 'Kancing hilang']),
+        );
+    }
+
+    /* ---------- data pelanggan tidak keluar lewat pesan galat ---------- */
+
+    public function test_galat_penyimpanan_tidak_membawa_isi_baris_ke_laporan(): void
+    {
+        // Satu insert digagalkan di tingkat basis data, persis seperti MySQL
+        // strict mode menolak nilai yang terlalu panjang. Sebelum perbaikan,
+        // QueryException::getMessage() menyulih bindings ke dalam SQL dan
+        // seluruh isi baris masuk ke berkas laporan. (Review PR #7, P1-2)
+        DB::statement(
+            "create trigger tolak_satu before insert on complaints for each row\n"
+            ."when new.import_row = 3\n"
+            ."begin select raise(abort, 'kolom penuh'); end;"
+        );
+
+        $this->impor(['--tulis' => true]);
+
+        $isi = file_get_contents($this->laporan);
+
+        $this->assertStringContainsString('- baris 3: gagal disimpan (QueryException', $isi);
+
+        // Nilai baris 3 di fixture. Tidak satu pun boleh muncul.
+        $this->assertStringNotContainsString('Pelapor Dua', $isi);
+        $this->assertStringNotContainsString('Satu potong kurang', $isi);
+        $this->assertStringNotContainsString('2138 (Juli)', $isi);
+        // Jejak khas pesan QueryException.
+        $this->assertStringNotContainsString('insert into', $isi);
+        $this->assertStringNotContainsString('SQLSTATE', $isi);
+        $this->assertStringNotContainsString(database_path(), $isi);
+
+        // Sisanya tetap masuk: satu baris gagal tidak menghentikan yang lain.
+        $this->assertSame(11, Complaint::count());
+    }
+
+    /* ---------- baris tanpa outlet tidak bocor ke cakupan kosong ---------- */
+
+    public function test_kasir_tanpa_outlet_tidak_melihat_complaint_tanpa_outlet(): void
+    {
+        $this->impor(['--tulis' => true]);
+
+        $tanpaOutlet = $this->baris(4);
+        $this->assertNull($tanpaOutlet->outlet_id);
+
+        $kasir = User::create([
+            'name' => 'Kasir Tanpa Outlet', 'email' => 'kasirnull@lessworry.id',
+            'password' => 'secret123', 'role' => 'kasir', 'outlet_id' => null,
+        ]);
+
+        // null === null dulu bernilai true, jadi cakupan yang kosong justru
+        // membuka complaint impor yang outletnya juga kosong.
+        // (Review PR #7, P2-2)
+        $this->assertFalse($kasir->canView($tanpaOutlet));
+        $this->assertSame(0, Complaint::visibleTo($kasir)->count());
+        $this->actingAs($kasir)->get('/complaints/'.$tanpaOutlet->id)->assertForbidden();
+    }
+
+    public function test_divisi_tanpa_divisi_tidak_melihat_complaint_impor(): void
+    {
+        $this->impor(['--tulis' => true]);
+
+        $divisi = User::create([
+            'name' => 'Divisi Kosong', 'email' => 'divisinull@lessworry.id',
+            'password' => 'secret123', 'role' => 'divisi', 'division' => null,
+        ]);
+
+        $this->assertFalse($divisi->canView($this->baris(1)));
+        $this->assertSame(0, Complaint::visibleTo($divisi)->count());
+    }
+
+    /* ---------- halaman laporan menyebut Close tanpa alasan ---------- */
+
+    public function test_laporan_menyebut_tiket_close_tanpa_alasan_penutupan(): void
+    {
+        $this->impor(['--tulis' => true]);
+
+        $supervisor = User::create([
+            'name' => 'Supervisor Dua', 'email' => 'sv2@lessworry.id',
+            'password' => 'secret123', 'role' => 'supervisor',
+        ]);
+
+        $halaman = $this->actingAs($supervisor)->get('/reports?from=2025-01-01&to=2026-12-31')->assertOk();
+
+        // 10 tiket Close tanpa close_reason. Tanpa angkanya sendiri, halaman
+        // melaporkan "selesai 0, ditolak 0" untuk tiket yang jelas tertutup.
+        // (Review PR #7, P2-3)
+        $halaman->assertSee('Ditutup Tanpa Alasan (data lama)');
+        $halaman->assertSeeInOrder(['Ditutup Tanpa Alasan (data lama)']);
+
+        $tutup = Complaint::where('status', 'close')->whereNull('close_reason')->count();
+        $this->assertSame(11, $tutup);
     }
 
     /* ---------- jalan mundur ---------- */

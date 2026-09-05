@@ -55,6 +55,16 @@ class PemetaBarisImpor
         'satuan - non cloth' => 'satuan_non_cloth',
     ];
 
+    /**
+     * Kolom yang menentukan identitas satu complaint, untuk sidik jari.
+     * Urutannya bagian dari sidik jarinya — jangan diurutkan ulang.
+     */
+    private const KOLOM_IDENTITAS = [
+        'Date', 'Name', 'No HP', 'Outlet', 'Category Complaint', 'Issue Category',
+        'Issue', 'Layanan', 'Tindak Lanjut Category', 'Tindak lanjut', 'Status',
+        'Nomor Nota', 'Tindak lanjut cost', 'Date status close', 'Pelaku', 'Note',
+    ];
+
     /** Kanal masuk tidak dicatat di spreadsheet. Ditandai, bukan dikarang. */
     public const KANAL = 'impor';
 
@@ -145,6 +155,34 @@ class PemetaBarisImpor
         ];
 
         return ['data' => $data, 'anomali' => $anomali, 'galat' => []];
+    }
+
+    /**
+     * Sidik jari dari ISI baris. (Review PR #7, P1-4)
+     *
+     * Inilah yang menentukan dua baris itu complaint yang sama atau bukan —
+     * bukan `--sumber`, yang labelnya dipilih orang dan bawaannya nama
+     * berkas. Dua perintah yang sama-sama wajar terhadap berkas yang sama
+     * dulu menghasilkan 1.090 baris tanpa satu peringatan pun.
+     *
+     * Kolom yang ikut dihitung adalah kolom yang menentukan identitas satu
+     * kejadian. `Tahun`/`Bulan`/`Minggu ke`/`Completion time` sengaja TIDAK
+     * ikut: semuanya turunan dari `Date`, jadi memasukkannya hanya menambah
+     * cara bagi baris yang sama untuk terlihat berbeda.
+     *
+     * Nilainya dinormalkan (spasi dirapatkan, huruf disamakan) supaya ekspor
+     * ulang spreadsheet yang mengubah spasi tidak dibaca sebagai baris baru.
+     *
+     * @param  array<string,string>  $baris
+     */
+    public function sidikJari(array $baris): string
+    {
+        $bahan = array_map(
+            fn (string $kolom) => $this->normal($this->ambil($baris, $kolom)),
+            self::KOLOM_IDENTITAS,
+        );
+
+        return hash('sha256', implode("\x1f", $bahan));
     }
 
     /** Catatan bebas yang menempel pada complaint, kalau ada. */

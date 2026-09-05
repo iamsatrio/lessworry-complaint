@@ -27,7 +27,7 @@ class DaftarPetugas
     public function penggunaSistem(): Collection
     {
         return User::where('is_active', true)
-            ->whereIn('role', ['kasir', 'customer_care', 'supervisor'])
+            ->whereIn('role', User::peranBisaDitugasi())
             ->orderBy('name')->get();
     }
 

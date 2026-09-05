@@ -139,7 +139,11 @@ class LaporanImpor
             return [...$baris, 'Tidak ada baris yang gagal.', ''];
         }
 
-        $baris[] = 'Alasan tiap kegagalan — nomor baris saja, isinya tidak dikutip:';
+        // Nomor baris dan jenis galatnya saja. Isi barisnya TIDAK ikut, dan
+        // itu ditegakkan di sumbernya: ImporComplaint tidak pernah memanggil
+        // getMessage(), yang pada QueryException memuat seluruh nilai baris.
+        // (Review PR #7, P1-2)
+        $baris[] = 'Alasan tiap kegagalan — nomor baris dan jenis galat saja, isinya tidak dikutip:';
         $baris[] = '';
 
         foreach ($this->gagal as $g) {
@@ -238,20 +242,32 @@ class LaporanImpor
         sort($bulan);
         $selisihTotal = 0;
 
+        // Dry-run tidak membaca basis data sama sekali, jadi kolomnya `—`
+        // dan tidak ada vonis cocok/tidak. Tabel yang menyatakan sesuatu yang
+        // tidak diperiksa lebih buruk daripada tabel yang mengaku tidak tahu.
+        // (Review PR #7, P3-1)
+        $diperiksa = ! $this->kering;
+
         foreach ($bulan as $b) {
             $csv = $this->sebaranCsv[$b] ?? 0;
             $db = $this->sebaranDb[$b] ?? 0;
             $selisihTotal += abs($csv - $db);
-            $baris[] = '| '.$b.' | '.$csv.' | '.$db.' | '.($db - $csv).' |';
+            $baris[] = $diperiksa
+                ? '| '.$b.' | '.$csv.' | '.$db.' | '.($db - $csv).' |'
+                : '| '.$b.' | '.$csv.' | — | — |';
         }
 
-        $baris[] = '| **Total** | **'.array_sum($this->sebaranCsv).'** | **'
-            .array_sum($this->sebaranDb).'** | **'
-            .(array_sum($this->sebaranDb) - array_sum($this->sebaranCsv)).'** |';
+        $baris[] = $diperiksa
+            ? '| **Total** | **'.array_sum($this->sebaranCsv).'** | **'
+                .array_sum($this->sebaranDb).'** | **'
+                .(array_sum($this->sebaranDb) - array_sum($this->sebaranCsv)).'** |'
+            : '| **Total** | **'.array_sum($this->sebaranCsv).'** | **—** | **—** |';
         $baris[] = '';
-        $baris[] = $selisihTotal === 0
-            ? 'Sebarannya cocok bulan per bulan.'
-            : '**Tidak cocok** — selisih mutlak '.$selisihTotal.' baris.';
+        $baris[] = match (true) {
+            ! $diperiksa => 'Belum dibandingkan: dry-run tidak membaca basis data.',
+            $selisihTotal === 0 => 'Sebarannya cocok bulan per bulan.',
+            default => '**Tidak cocok** — selisih mutlak '.$selisihTotal.' baris.',
+        };
 
         return [...$baris, ''];
     }

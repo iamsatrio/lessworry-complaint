@@ -18,9 +18,10 @@ use Throwable;
  * 1. **Menghitung dulu, menulis kemudian.** Tanpa `--tulis` perintah ini
  *    tidak menyentuh basis data sama sekali. Impor pertama ke sistem yang
  *    akan dipakai kasir tidak boleh bisa terjadi karena salah ketik.
- * 2. **Bisa diulang.** Pasangan `import_source` + `import_row` unik, dan
- *    baris yang sudah masuk dilewati. Menjalankan perintah ini dua kali
- *    tidak menggandakan satu baris pun.
+ * 2. **Bisa diulang.** Yang mengenali baris yang sudah masuk adalah sidik
+ *    jari dari ISI barisnya, bukan label `--sumber` yang dipilih orang.
+ *    Menjalankan perintah ini dua kali tidak menggandakan satu baris pun —
+ *    termasuk kalau `--sumber`-nya berbeda. (Review PR #7, P1-4)
  * 3. **Satu baris gagal tidak menghentikan sisanya.** Kegagalan dikumpulkan
  *    dan dilaporkan di akhir, bukan melempar 544 baris lain ke luar.
  *
@@ -45,6 +46,18 @@ class ImporComplaint extends Command
      */
     private array $urutTiket = [];
 
+    /**
+     * Berapa kali sebuah sidik jari sudah muncul di berkas INI.
+     *
+     * Dua baris yang isinya identik di satu berkas adalah kejadian yang
+     * memang tercatat dua kali, bukan satu baris yang tergandakan — jadi
+     * yang kedua diberi urutan supaya tidak dibuang diam-diam. Berkas 545
+     * baris yang ada tidak punya satu pun; ini menjaga berkas berikutnya.
+     *
+     * @var array<string,int>
+     */
+    private array $urutSidik = [];
+
     public function handle(PemetaBarisImpor $pemeta, JejakComplaint $jejak): int
     {
         $berkas = (string) $this->argument('berkas');
@@ -54,6 +67,13 @@ class ImporComplaint extends Command
 
             return self::FAILURE;
         }
+
+        // Keadaan per-jalan, dibersihkan di awal. Instance perintah dipakai
+        // ulang antar-pemanggilan (dan test memanggilnya berkali-kali), jadi
+        // hitungan yang tertinggal dari jalan sebelumnya membuat sidik jari
+        // baris yang sama berubah — lalu tidak dikenali dan dicoba disimpan lagi.
+        $this->urutTiket = [];
+        $this->urutSidik = [];
 
         $kering = ! $this->option('tulis') || (bool) $this->option('dry-run');
         $sumber = (string) ($this->option('sumber') ?: basename($berkas));
@@ -70,7 +90,11 @@ class ImporComplaint extends Command
             $this->olah($isi, $nomor, $sumber, $kering, $pemeta, $jejak, $laporan);
         }
 
-        $laporan->sebaranDb = $kering ? $laporan->sebaranCsv : $this->sebaranDb($sumber);
+        // Dry-run tidak boleh MENGKLAIM sudah membandingkan dengan basis
+        // data. Dulu kolomnya diisi ulang dari CSV, jadi bagian 5 selalu
+        // menutup dengan "cocok bulan per bulan" walau basis datanya kosong.
+        // (Review PR #7, P3-1)
+        $laporan->sebaranDb = $kering ? [] : $this->sebaranDb($sumber);
 
         $tujuan = $this->simpanLaporan($laporan);
 
@@ -172,9 +196,13 @@ class ImporComplaint extends Command
         $masuk = $hasil['data']['created_at'];
         $laporan->sebaranCsv[$masuk->format('Y-m')] = ($laporan->sebaranCsv[$masuk->format('Y-m')] ?? 0) + 1;
 
-        // Sudah pernah masuk: dilewati, tidak ditulis ulang. Ini yang membuat
-        // perintah aman dijalankan dua kali.
-        if (Complaint::where('import_source', $sumber)->where('import_row', $nomor)->exists()) {
+        $sidik = $this->sidikJari($isi, $pemeta, $laporan);
+
+        // Sudah pernah masuk: dilewati, tidak ditulis ulang. Dicari menurut
+        // sidik jari isi barisnya, TANPA menyaring `import_source` — impor
+        // kedua dengan label berbeda harus mengenali baris yang sama, bukan
+        // memasukkannya lagi. (Review PR #7, P1-4)
+        if (Complaint::where('import_fingerprint', $sidik)->exists()) {
             $laporan->dilewati++;
 
             return;
@@ -187,18 +215,61 @@ class ImporComplaint extends Command
         }
 
         try {
-            $this->simpan($hasil['data'], $nomor, $sumber, $pemeta->catatan($isi), $jejak);
+            $this->simpan($hasil['data'], $nomor, $sumber, $sidik, $pemeta->catatan($isi), $jejak);
             $laporan->masuk++;
         } catch (Throwable $e) {
-            // Pesan galat tidak boleh membawa isi baris: di dalamnya ada nama
-            // dan keluhan pelanggan, dan laporan ini ditempel ke issue.
-            $laporan->gagal[] = ['baris' => $nomor, 'alasan' => class_basename($e).': '.$e->getMessage()];
+            // HANYA nama kelas dan kodenya. `getMessage()` TIDAK BOLEH masuk
+            // ke sini: QueryException menyulih bindings ke dalam SQL-nya,
+            // jadi pesannya memuat nama pelapor, uraian keluhan, dan path
+            // absolut basis data — dan laporan ini ditempel ke issue.
+            // (Review PR #7, P1-2)
+            //
+            // Yang hilang adalah keterangan sebabnya. Penggantinya bukan
+            // pesan yang lebih pendek: baris ini tetap ada di berkas
+            // sumbernya, dan orang yang perlu tahu sebabnya membuka baris
+            // itu di berkasnya — bukan membaca ulang isinya dari laporan.
+            $kode = (string) $e->getCode();
+
+            $laporan->gagal[] = [
+                'baris' => $nomor,
+                'alasan' => 'gagal disimpan ('.class_basename($e).($kode !== '' && $kode !== '0' ? ' '.$kode : '').')',
+            ];
         }
     }
 
-    /** @param array<string,mixed> $data */
-    private function simpan(array $data, int $nomor, string $sumber, ?string $catatan, JejakComplaint $jejak): void
+    /**
+     * Sidik jari baris ini, dengan urutan kalau isinya sudah pernah muncul
+     * di berkas yang sama.
+     *
+     * @param  array<string,string>  $isi
+     */
+    private function sidikJari(array $isi, PemetaBarisImpor $pemeta, LaporanImpor $laporan): string
     {
+        $sidik = $pemeta->sidikJari($isi);
+        $urut = ($this->urutSidik[$sidik] ?? 0) + 1;
+        $this->urutSidik[$sidik] = $urut;
+
+        if ($urut === 1) {
+            return $sidik;
+        }
+
+        // Dilaporkan, bukan didiamkan: dua baris beisi sama persis di satu
+        // berkas hampir selalu salah salin di spreadsheet, dan yang berhak
+        // memutuskannya orang — bukan perintah ini.
+        $laporan->catatKeanehan('Baris berisi sama persis dengan baris lain di berkas yang sama');
+
+        return $sidik.':'.$urut;
+    }
+
+    /** @param array<string,mixed> $data */
+    private function simpan(
+        array $data,
+        int $nomor,
+        string $sumber,
+        string $sidik,
+        ?string $catatan,
+        JejakComplaint $jejak,
+    ): void {
         /** @var Carbon $masuk */
         $masuk = $data['created_at'];
 
@@ -206,6 +277,7 @@ class ImporComplaint extends Command
         $complaint->forceFill($data);
         $complaint->import_source = $sumber;
         $complaint->import_row = $nomor;
+        $complaint->import_fingerprint = $sidik;
         $complaint->ticket_number = $this->nomorTiket($masuk);
         $complaint->updated_at = $data['resolved_at'] ?? $masuk;
         $complaint->applySla();

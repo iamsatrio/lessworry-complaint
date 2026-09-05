@@ -58,6 +58,22 @@ class User extends Authenticatable
 
     /* ---------- Peran (API-13) ---------- */
 
+    /**
+     * Peran yang boleh ditugasi sebuah complaint dan muncul sebagai kandidat
+     * pelaku. Ditulis sekali di sini supaya penambahan peran tidak perlu
+     * diingat di dua controller dan satu service — cara peran `admin`
+     * sempat tertinggal.
+     */
+    public static function peranBisaDitugasi(): array
+    {
+        return ['kasir', 'customer_care', 'supervisor', 'admin'];
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
     public function isSupervisor(): bool
     {
         return $this->role === 'supervisor';
@@ -81,12 +97,12 @@ class User extends Authenticatable
     /** Boleh melihat seluruh outlet. */
     public function seesAllOutlets(): bool
     {
-        return in_array($this->role, ['supervisor', 'customer_care'], true);
+        return in_array($this->role, ['admin', 'supervisor', 'customer_care'], true);
     }
 
     public function canCreateComplaint(): bool
     {
-        return in_array($this->role, ['kasir', 'customer_care', 'supervisor'], true);
+        return in_array($this->role, ['kasir', 'customer_care', 'supervisor', 'admin'], true);
     }
 
     /**
@@ -145,7 +161,7 @@ class User extends Authenticatable
      */
     private function bobotDalamWewenang(?Complaint $complaint): bool
     {
-        if (in_array($this->role, ['customer_care', 'supervisor'], true)) {
+        if (in_array($this->role, ['customer_care', 'supervisor', 'admin'], true)) {
             return true;
         }
 
@@ -163,18 +179,27 @@ class User extends Authenticatable
      */
     public function canSeeStaffAttribution(): bool
     {
-        return in_array($this->role, ['customer_care', 'supervisor'], true);
+        return in_array($this->role, ['customer_care', 'supervisor', 'admin'], true);
     }
 
     /** Menetapkan penanggung jawab adalah penilaian, bukan pencatatan. */
     public function canAssignResponsibility(): bool
     {
-        return in_array($this->role, ['customer_care', 'supervisor'], true);
+        return in_array($this->role, ['customer_care', 'supervisor', 'admin'], true);
     }
 
+    /**
+     * Mengelola pengguna adalah wewenang Admin, bukan Supervisor.
+     *
+     * Supervisor memimpin pekerjaan di lapangan — melihat seluruh outlet,
+     * menutup complaint apa pun bobotnya, menyetujui kompensasi tanpa batas.
+     * Yang TIDAK dipegangnya: membuat akun, mengubah peran orang lain, dan
+     * menonaktifkan orang. Itu memisahkan wewenang operasional dari wewenang
+     * atas siapa yang boleh masuk ke sistem.
+     */
     public function canManageUsers(): bool
     {
-        return $this->role === 'supervisor';
+        return $this->role === 'admin';
     }
 
     /**
@@ -195,11 +220,20 @@ class User extends Authenticatable
         return (int) config('complaint.compensation_limit.'.$this->role, 0);
     }
 
+    /**
+     * Cakupan yang kosong berarti tidak melihat apa pun.
+     *
+     * Tanpa penjagaan null di bawah, `null === null` bernilai true: kasir
+     * yang outlet-nya belum diisi bisa membuka complaint yang outletnya juga
+     * kosong — dan complaint tanpa outlet memang ada sejak impor data lama
+     * menyimpan baris yang nama outletnya tidak punya padanan.
+     * Pasangannya ada di Complaint::scopeVisibleTo. (Review PR #7, P2-2)
+     */
     public function canView(Complaint $complaint): bool
     {
         return match ($this->role) {
-            'kasir' => $complaint->outlet_id === $this->outlet_id,
-            'divisi' => $complaint->forwarded_division === $this->division,
+            'kasir' => $this->outlet_id !== null && $complaint->outlet_id === $this->outlet_id,
+            'divisi' => $this->division !== null && $complaint->forwarded_division === $this->division,
             default => true,
         };
     }
@@ -209,8 +243,11 @@ class User extends Authenticatable
         return match ($this->role) {
             'kasir' => 'Kasir',
             'customer_care' => 'Customer Care',
-            'divisi' => 'Divisi '.config('complaint.divisions.'.$this->division, $this->division),
+            // Divisi boleh belum diisi — jangan balas null, halaman Pengguna
+            // memanggil ini untuk setiap baris.
+            'divisi' => (string) (config('complaint.divisions.'.$this->division, $this->division) ?: 'Produksi / Kurir'),
             'supervisor' => 'Supervisor',
+            'admin' => 'Admin',
             default => $this->role,
         };
     }

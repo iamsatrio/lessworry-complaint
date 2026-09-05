@@ -2,19 +2,34 @@
 
 namespace Database\Seeders;
 
-use App\Models\Complaint;
-use App\Models\ComplaintActivity;
 use App\Models\Outlet;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
+    /**
+     * Outlet nyata dan akun tim. Tidak ada complaint contoh.
+     *
+     * Complaint karangan pernah ada di sini supaya papan kerja tidak kosong.
+     * Dibuang atas permintaan satrio, dan itu keputusan yang benar: data
+     * karangan membuat laporan terlihat masuk akal padahal isinya tidak
+     * pernah terjadi, dan tidak ada yang tahu mana yang nyata saat data
+     * sungguhan mulai masuk. Papan yang kosong justru jujur.
+     *
+     * Complaint nyata masuk lewat backfill spreadsheet (API-28).
+     */
     public function run(): void
     {
-        // Outlet nyata beserta id NEVIRA-nya, supaya penentuan outlet dari
-        // nota berfungsi tanpa menunggu `php artisan nevira:sync-outlets`.
-        $daftarOutlet = [
+        $this->outlet();
+        $this->pengguna();
+    }
+
+    private function outlet(): void
+    {
+        $daftar = [
             '115' => 'Kemang',
             '116' => 'Cipete',
             '117' => 'Hampton Gading Serpong',
@@ -28,112 +43,170 @@ class DatabaseSeeder extends Seeder
             '179' => 'Citra Garden Serpong',
         ];
 
-        foreach ($daftarOutlet as $idNevira => $nama) {
-            Outlet::create(['name' => $nama, 'nevira_outlet_id' => $idNevira]);
+        foreach ($daftar as $idNevira => $nama) {
+            Outlet::firstOrCreate(
+                ['nevira_outlet_id' => $idNevira],
+                ['name' => $nama],
+            );
         }
+    }
 
-        $pusat = Outlet::where('nevira_outlet_id', '118')->first();   // Tebet
-        $cabang = Outlet::where('nevira_outlet_id', '123')->first();  // Park Serpong
+    /**
+     * Akun demo dari seeder lama. Tiga di antaranya memakai email yang
+     * sekarang dipakai akun sungguhan, dan semuanya memakai password
+     * harfiah `password` yang ada di riwayat commit publik.
+     *
+     * Yang emailnya dipakai ulang diperbaiki oleh daftar di bawah. Yang
+     * tidak dipakai lagi harus dinonaktifkan — kalau hanya dilewati, akun
+     * itu hidup terus dengan password yang bisa dibaca siapa pun.
+     */
+    private const DEMO_LAMA = ['cc@lessworry.id', 'kasirbaru@lessworry.id'];
 
-        // Password contoh untuk lingkungan pengembangan. WAJIB diganti sebelum produksi.
-        //
-        // Akun demo di bawah sengaja TIDAK ditandai must_change_password supaya
-        // sistem bisa langsung ditelusuri. Akun sungguhan yang dibuat lewat
-        // halaman Pengguna selalu memakai password sementara dan wajib diganti
-        // saat pertama masuk.
-        $pw = 'password';
+    /**
+     * Password harfiah yang dibagikan seeder-seeder lama, dan yang karena itu
+     * ada di riwayat commit. Dipakai untuk mengenali akun yang masih bisa
+     * dimasuki siapa pun yang membaca repositori.
+     */
+    private const PASSWORD_BOCOR = 'password';
 
-        $supervisor = User::create([
-            'name' => 'Satrio Wibowo', 'email' => 'satrio@lessworry.id',
-            'password' => $pw, 'role' => 'supervisor',
-        ]);
+    /**
+     * Akun tim.
+     *
+     * Seeder ini **memperbaiki keadaan**, bukan sekadar membuat yang belum
+     * ada. Melewati akun yang sudah ada terasa aman tapi tidak: di mesin
+     * yang pernah memakai seeder lama, `satrio@lessworry.id` akan tetap
+     * supervisor dengan password `password` — terkunci dari pengelolaan
+     * pengguna, sekaligus bisa dimasuki siapa pun yang membaca repositori.
+     *
+     * Password sementara acak dicetak sekali ke layar orang yang menjalankan
+     * perintah. Tidak ditulis ke berkas, tidak masuk log, tidak masuk
+     * repositori. Password yang sudah dipilih sendiri oleh orangnya TIDAK
+     * pernah disetel ulang — yang diterbitkan ulang hanya akun yang masih
+     * menerima password bocor, jadi seeder aman dijalankan tiap deploy.
+     */
+    private function pengguna(): void
+    {
+        $tebet = Outlet::where('nevira_outlet_id', '118')->first();
 
-        $cc = User::create([
-            'name' => 'Customer Care', 'email' => 'cc@lessworry.id',
-            'password' => $pw, 'role' => 'customer_care',
-        ]);
+        $daftar = [
+            ['Satrio Wibowo', 'satrio@lessworry.id', 'admin', null, null],
+            ['Ainul Ghozi', 'ghozi@lessworry.id', 'admin', null, null],
+            ['Eric', 'eric@lessworry.id', 'admin', null, null],
 
-        $kasir = User::create([
-            'name' => 'Kasir Pusat', 'email' => 'kasir@lessworry.id',
-            'password' => $pw, 'role' => 'kasir', 'outlet_id' => $pusat->id,
-        ]);
+            ['Tsulasa', 'tsulasa@lessworry.id', 'supervisor', null, null],
+            ['Samsuri', 'samsuri@lessworry.id', 'supervisor', null, null],
 
-        User::create([
-            'name' => 'Divisi Produksi', 'email' => 'produksi@lessworry.id',
-            'password' => $pw, 'role' => 'divisi', 'division' => 'produksi',
-        ]);
+            ['Audry', 'audry@lessworry.id', 'customer_care', null, null],
+            ['Adhyasta Dwi Yudistira', 'adhyasta@lessworry.id', 'customer_care', null, null],
 
-        // Satu akun contoh yang masih memegang password sementara, supaya alur
-        // "wajib ganti password saat pertama masuk" bisa dilihat langsung.
-        User::create([
-            'name' => 'Kasir Cabang (baru)', 'email' => 'kasirbaru@lessworry.id',
-            'password' => $pw, 'role' => 'kasir', 'outlet_id' => $cabang->id,
-            'must_change_password' => true,
-        ]);
+            ['Arifin', 'arifin@lessworry.id', 'divisi', 'produksi', null],
 
-        // Contoh complaint supaya papan kerja dan laporan tidak kosong saat pertama dibuka.
-        // Kategori, bobot, layanan, dan status memakai taksonomi tim. (API-25)
-        //
-        // Bentuknya ditulis supaya analisis statis tidak menyimpulkan tipe
-        // literal dari isi contoh — status di sini data, bukan daftar tetap,
-        // dan penjagaan di bawah harus tetap berlaku kalau barisnya berubah.
-        /** @var list<array{0:string,1:string,2:string,3:string,4:string|null,5:string,6:string,7:string,8:string|null,9:string|null,10:string,11:int,12:string,13:string|null}> $samples */
-        $samples = [
-            ['wa_cc', 'Ibu Rina', '081234567801', 'kurang_bersih', null, 'sedang', 'kiloan_cuset', 'open', null, null,
-                'Kemeja putih masih ada noda di bagian kerah setelah dicuci.', $pusat->id, '-3 hours', null],
-            ['kasir', 'Pak Budi', '081234567802', 'barang_hilang', 'Item kurang', 'berat', 'kiloan', 'handling', null, null,
-                'Pelanggan menghitung 12 potong saat menyerahkan, yang kembali 11 potong.', $pusat->id, '-26 hours', null],
-            ['wa_outlet', 'Mbak Sinta', '081234567803', 'terlambat', 'Telat selesai', 'ringan', 'satuan_cloth', 'close', 'selesai', 'proses_ulang',
-                'Dijanjikan selesai Selasa, baru bisa diambil Kamis.', $cabang->id, '-5 days', '-4 days'],
-            ['wa_cc', 'Ibu Rina', '081234567801', 'kurang_rapih', null, 'ringan', 'satuan_bedding', 'close', 'ditolak', 'terkonfirmasi',
-                'Sprei terlihat kusut saat diterima.', $pusat->id, '-8 days', '-8 days'],
-            ['kasir', 'Pak Deni', '081234567804', 'berbau', null, 'sedang', 'kiloan_culip', 'handling', null, null,
-                'Cucian bau apek. Diminta membawa kembali untuk dicuci ulang.', $cabang->id, '-2 days', null],
+            ['Kasir', 'kasir@lessworry.id', 'kasir', null, $tebet?->id],
+            ['Produksi', 'produksi@lessworry.id', 'divisi', 'produksi', null],
+            ['Kurir', 'kurir@lessworry.id', 'divisi', 'kurir', null],
         ];
 
-        foreach ($samples as [$channel, $name, $phone, $cat, $sub, $bobot, $layanan, $status, $closeReason, $tindakLanjut, $desc, $outletId, $created, $resolved]) {
-            $complaint = new Complaint([
-                'channel' => $channel, 'reporter_name' => $name, 'reporter_phone' => $phone,
-                'category' => $cat, 'sub_category' => $sub, 'bobot' => $bobot, 'layanan' => $layanan,
-                'description' => $desc, 'outlet_id' => $outletId,
-            ]);
+        $dicetak = [];
 
-            $complaint->status = $status;
-            $complaint->close_reason = $closeReason;
-            $complaint->tindak_lanjut = $tindakLanjut;
-            $complaint->created_at = now()->parse($created);
-            $complaint->updated_at = $complaint->created_at;
-            $complaint->ticket_number = Complaint::nextTicketNumber();
-            $complaint->created_by = $channel === 'kasir' ? $kasir->id : $cc->id;
-            $complaint->assigned_to = $status === 'open' ? null : $cc->id;
-            $complaint->applySla();
+        foreach ($daftar as [$nama, $email, $peran, $divisi, $outletId]) {
+            $user = User::where('email', $email)->first();
 
-            if ($status !== 'open') {
-                $complaint->first_response_at = $complaint->created_at->copy()->addMinutes(35);
+            $atribut = [
+                'name' => $nama,
+                'role' => $peran,
+                'division' => $divisi,
+                'outlet_id' => $outletId,
+            ];
+
+            // `is_active` hanya disetel saat akun DIBUAT. Menonaktifkan orang
+            // adalah keputusan manusia yang berumur — itu satu-satunya cara
+            // mencabut akses, karena akun tidak pernah dihapus. Deploy
+            // berikutnya tidak boleh menghidupkannya kembali tanpa ada yang
+            // memutuskan begitu.
+            if ($user === null) {
+                $atribut['is_active'] = true;
             }
 
-            if ($resolved) {
-                $complaint->resolved_at = now()->parse($resolved);
-                $complaint->resolution = 'Dicuci ulang tanpa biaya dan diantar ke pelanggan.';
-                $complaint->root_cause = 'Proses pemeriksaan akhir terlewat saat jam sibuk.';
-                $complaint->compensation_amount = 25000;
+            // Password diterbitkan kalau akunnya baru, atau kalau password
+            // yang bocor MASIH BERLAKU pada akun itu.
+            //
+            // Sebelumnya baris ini memakai `! $user->must_change_password`
+            // sebagai perantara. Perantara itu salah dua arah sekaligus:
+            // seeder paling awal memberi password bocor SEKALIGUS menandai
+            // wajib-ganti, jadi akun yang bisa diambil alih justru dilewati;
+            // dan setelah orang benar-benar mengganti passwordnya, tandanya
+            // kembali false sehingga seeder berikutnya menghapus password
+            // pilihannya sendiri.
+            //
+            // Passwordnya adalah nilai harfiah yang diketahui, jadi tanyakan
+            // faktanya, bukan gejalanya. Tidak ada positif palsu: aturan
+            // password di PasswordController membuat `password` tidak bisa
+            // dipasang siapa pun lewat antarmuka.
+            $perluPasswordBaru = $user === null || Hash::check(self::PASSWORD_BOCOR, $user->password);
+
+            if ($perluPasswordBaru) {
+                // Tanpa simbol: password ini disampaikan lewat pesan dan
+                // diketik ulang orang. Karakter yang mudah salah baca hanya
+                // menambah panggilan "tidak bisa masuk".
+                $sementara = Str::password(14, symbols: false);
+                $atribut['password'] = $sementara;
+                $atribut['must_change_password'] = true;
             }
 
-            $complaint->save();
+            if ($user === null) {
+                $user = User::create($atribut + ['email' => $email]);
+            } else {
+                $user->forceFill($atribut)->save();
+            }
 
-            ComplaintActivity::create([
-                'complaint_id' => $complaint->id, 'user_id' => $complaint->created_by,
-                'type' => 'created', 'to_status' => 'open',
-                'note' => 'Complaint dibuat lewat '.$complaint->channelLabel(),
-            ]);
+            if ($perluPasswordBaru) {
+                $dicetak[] = [$nama, $email, $peran.($divisi ? ' / '.$divisi : ''), $sementara];
+            }
         }
 
-        // Satu contoh tiket yang sedang dijeda: Handling di papan, tapi jam
-        // SLA-nya berhenti sampai pelanggan membalas.
-        $dijeda = Complaint::where('category', 'berbau')->first();
-        $dijeda->forceFill([
-            'paused_at' => now()->subDay(),
-            'pause_reason' => 'menunggu_pelanggan',
-        ])->save();
+        $this->matikanDemoLama();
+
+        if (! $dicetak) {
+            $this->command->info('Semua akun sudah menunggu penggantian password. Tidak ada yang disetel ulang.');
+
+            return;
+        }
+
+        $this->command->newLine();
+        $this->command->table(['Nama', 'Email', 'Peran', 'Password sementara'], $dicetak);
+        $this->command->warn('Password di atas hanya ditampilkan sekali. Tidak tersimpan di mana pun.');
+        $this->command->line('Sampaikan lewat jalur pribadi, jangan grup. Semuanya wajib diganti saat login pertama.');
+    }
+
+    /**
+     * Akun demo yang tidak dipakai lagi dinonaktifkan dan passwordnya diganti
+     * acak — bukan dihapus, supaya jejak audit complaint yang pernah
+     * disentuhnya tetap utuh.
+     */
+    private function matikanDemoLama(): void
+    {
+        $dimatikan = [];
+
+        foreach (self::DEMO_LAMA as $email) {
+            $user = User::where('email', $email)->first();
+
+            if ($user === null) {
+                continue;
+            }
+
+            $user->forceFill([
+                'is_active' => false,
+                'password' => Str::password(24, symbols: false),
+                'must_change_password' => true,
+            ])->save();
+
+            $dimatikan[] = $email;
+        }
+
+        if ($dimatikan) {
+            $this->command->warn(
+                'Akun demo lama dinonaktifkan dan passwordnya dibuang: '.implode(', ', $dimatikan)
+            );
+        }
     }
 }

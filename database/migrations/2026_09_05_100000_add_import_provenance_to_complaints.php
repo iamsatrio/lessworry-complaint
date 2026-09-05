@@ -8,10 +8,16 @@ use Illuminate\Support\Facades\Schema;
  * Asal-usul baris hasil impor spreadsheet, plus tiga kolom untuk nilai lama
  * yang tidak punya rumah di model data. (API-28)
  *
- * `import_source` + `import_row` bukan sekadar catatan: pasangan itu unik,
- * dan keunikan itulah yang membuat perintah impor bisa dijalankan dua kali
- * tanpa menggandakan satu baris pun. Menyimpannya sebagai keterangan bebas
- * membuat pencegahan ganda bergantung pada ketelitian pemanggilnya.
+ * `import_fingerprint` adalah pencegah ganda yang sesungguhnya: sidik jari
+ * dari ISI baris, unik di seluruh tabel. `import_source` + `import_row` juga
+ * unik, tapi hanya di dalam satu label — dan labelnya dipilih orang.
+ * Mengandalkan label berarti dua perintah yang sama-sama wajar
+ * (`--sumber` lupa diisi, lalu `--sumber` diisi) memasukkan berkas yang sama
+ * dua kali dan menggandakan seluruh 545 baris tanpa satu peringatan pun.
+ * (Review PR #7, P1-4)
+ *
+ * `import_source` tetap ada untuk provenance dan untuk jalan mundur
+ * (`complaint:import-hapus <sumber>`), bukan lagi sebagai pencegah ganda.
  *
  * Tiga kolom `legacy_*` sengaja terpisah dari kolom sistem:
  *
@@ -34,6 +40,7 @@ return new class extends Migration
         Schema::table('complaints', function (Blueprint $table) {
             $table->string('import_source')->nullable()->index();
             $table->unsignedInteger('import_row')->nullable();
+            $table->string('import_fingerprint', 80)->nullable()->unique();
             $table->string('legacy_nota_number')->nullable();
             $table->string('legacy_outlet_name')->nullable();
             $table->string('legacy_pelaku')->nullable();
@@ -46,9 +53,10 @@ return new class extends Migration
     {
         Schema::table('complaints', function (Blueprint $table) {
             $table->dropUnique(['import_source', 'import_row']);
+            $table->dropUnique(['import_fingerprint']);
             $table->dropIndex(['import_source']);
             $table->dropColumn([
-                'import_source', 'import_row',
+                'import_source', 'import_row', 'import_fingerprint',
                 'legacy_nota_number', 'legacy_outlet_name', 'legacy_pelaku',
             ]);
         });

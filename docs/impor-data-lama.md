@@ -22,8 +22,10 @@ php artisan complaint:import "DATA COMPLAINT.csv" --sumber=spreadsheet-2026-08 -
 ```
 
 Aman dijalankan dua kali: baris yang sudah masuk dilewati, bukan digandakan.
-Yang mengenalinya adalah pasangan `import_source` + `import_row`, dan pasangan
-itu unik di tingkat basis data.
+Yang mengenalinya adalah **sidik jari dari isi barisnya** (`import_fingerprint`,
+unik di tingkat basis data) — bukan `--sumber`. Jadi berkas yang sama yang
+diimpor dua kali dengan label berbeda tetap dikenali, dan tidak menggandakan
+apa pun.
 
 | Bendera | Arti |
 |---|---|
@@ -79,5 +81,27 @@ bagian: jumlah baris beserta alasan tiap kegagalan, nilai tanpa padanan enum
 per kolom, bentuk nomor nota, tingkat pengisian kolom `Pelaku` (2026 terpisah,
 untuk ambang API-24), sebaran per bulan CSV vs basis data, dan daftar keanehan.
 
-Baris yang gagal dilaporkan **dengan nomor barisnya saja**. Isinya tidak
-dikutip — di dalamnya ada nama dan keluhan pelanggan.
+Baris yang gagal dilaporkan dengan **nomor baris dan jenis galatnya saja** —
+mis. `baris 7: gagal disimpan (QueryException 23000)`. Pesan galat aslinya
+tidak ikut, dan itu disengaja: `QueryException::getMessage()` menyulih seluruh
+nilai baris ke dalam SQL yang ditampilkannya, jadi nama pelapor, uraian
+keluhan, dan path basis data akan ikut masuk ke berkas yang boleh ditempel ke
+issue. Untuk mengetahui sebabnya, buka baris itu di berkas sumbernya.
+
+## Memperbaiki hasil impor yang sudah masuk
+
+Impor ulang **melewati** baris yang sudah ada — ia tidak memperbarui apa pun.
+Jadi memperbaiki peta padanan outlet lalu menjalankan impor lagi **tidak akan
+mengubah** 29 baris Duren Tiga; laporannya hanya akan bilang 545 dilewati.
+
+Jalan yang benar adalah hapus dulu, baru impor lagi:
+
+```bash
+php artisan complaint:import-hapus spreadsheet-2026-08
+php artisan complaint:import "DATA COMPLAINT.csv" --sumber=spreadsheet-2026-08 --tulis
+```
+
+Ini aman selama impornya belum dipakai: complaint hasil impor belum punya
+catatan penanganan dari petugas. Begitu ada orang yang menambah catatan atau
+mengubah status pada baris impor, penghapusan itu ikut membuang pekerjaannya —
+perbaiki barisnya lewat aplikasi, jangan impor ulang.

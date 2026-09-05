@@ -61,7 +61,7 @@ Route::middleware(['auth', 'auth.session', 'active', 'password.changed'])->group
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
 
-    // Pengelolaan pengguna — hanya supervisor (dicek di controller).
+    // Pengelolaan pengguna — hanya admin (dicek di controller).
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
     Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
     Route::post('/users', [UserController::class, 'store'])->name('users.store');

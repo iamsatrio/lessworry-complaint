@@ -39,6 +39,17 @@ class ReportController extends Controller
             // hanya pindah ke close_reason. (API-18 #6)
             'closedDone' => $complaints->where('status', 'close')->where('close_reason', 'selesai')->count(),
             'closedReject' => $complaints->where('status', 'close')->where('close_reason', 'ditolak')->count(),
+            // Tiket Close yang alasannya tidak diketahui — seluruh 541 baris
+            // impor data lama masuk ke sini, karena spreadsheet tim hanya
+            // mengenal Open/Handling/Close dan tidak pernah mencatat alasan
+            // penutupan. Tanpa angka ini, halaman melaporkan 541 tiket Close
+            // sebagai "selesai 0, ditolak 0" dan pembacanya menyimpulkan
+            // datanya rusak. (Review PR #7, P2-3)
+            'closedNoReason' => $complaints->where('status', 'close')->whereNull('close_reason')->count(),
+            // Dihitung dari statusnya sendiri, bukan sisa pengurangan: begitu
+            // ada tiket Close tanpa alasan, "total dikurangi yang selesai dan
+            // yang ditolak" berhenti berarti "masih terbuka".
+            'stillOpen' => $complaints->filter->isOpen()->count(),
             'avgMinutes' => $resolved->isEmpty() ? null : (int) round($resolved->avg(fn ($c) => $c->resolutionMinutes())),
             'byCategory' => $complaints->groupBy('category')->map->count()->sortDesc(),
             'byBobot' => $complaints->groupBy('bobot')->map->count()->sortDesc(),

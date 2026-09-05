@@ -247,6 +247,7 @@ Ulangi tiga perintah ini **setiap kali `.env` atau config berubah** — kalau ti
 ```bash
 curl -I https://care.lessworry.id/login          # harus 200, dan header HTTPS
 curl -I https://care.lessworry.id/storage/       # harus 403 atau 404, TIDAK boleh listing
+curl -s https://care.lessworry.id/health         # ketiga pemeriksaan harus "ok"
 ```
 
 Lalu lewat browser: masuk sebagai supervisor → sistem memaksa ganti password → buat satu akun kasir → catat satu complaint uji → cek nomor nota NEVIRA tertarik.
@@ -268,22 +269,176 @@ Simpan sebagai `deploy.sh` supaya tidak ada langkah terlewat.
 
 ## Backup — jangan ditunda
 
+Perintahnya sudah ada di aplikasi; tidak perlu menulis cron mysqldump sendiri.
+
 ```bash
-sudo mkdir -p /var/backups/care && sudo chown $USER /var/backups/care
-crontab -e
+sudo mkdir -p /var/backups/care
+sudo chown www-data:www-data /var/backups/care
+sudo chmod 750 /var/backups/care
+```
+
+Di `.env`:
+
+```ini
+BACKUP_PATH=/var/backups/care
+BACKUP_KEEP=7
+```
+
+Direktori itu harus **hanya** dipakai backup: rotasi menghapus dump lama di
+dalamnya. Berkas lain memang dilewati, tapi jangan mengandalkan itu.
+
+Jalankan sekali untuk membuktikannya bekerja:
+
+```bash
+php artisan config:cache          # .env baru berubah
+sudo -u www-data php artisan backup:database
+```
+
+### Menguji pemulihan — dengan pengguna database tersendiri
+
+`backup:verify` mengambil dump terakhir, memulihkannya ke database sementara
+`lessworry_care_verify_xxxx`, menghitung baris `complaints`, lalu membuang
+database sementaranya. Itu yang membedakan backup dari berkas yang diasumsikan
+benar.
+
+**Perintah ini memulihkan berkas yang isinya tidak dipercaya.** Siapa pun yang
+bisa menaruh berkas di direktori backup menentukan SQL apa yang dijalankan.
+Karena itu yang menahannya bukan pembacaan isi dumpnya, melainkan hak akses:
+
+> `mysql --one-database` hanya mengikuti pernyataan `USE`. Dump yang menulis
+> dengan nama database lengkap — `INSERT INTO lessworry_care.complaints ...` —
+> lewat begitu saja. Satu-satunya yang benar-benar menahan tulisan seperti itu
+> adalah pengguna database yang tidak punya hak tulis di sana.
+
+Maka **`backup:verify` menolak berjalan di MySQL sampai koneksi pemulihan
+terpisah disiapkan.** Itu disengaja: verify yang menolak jalan bisa diperbaiki
+dalam lima menit; complaint produksi yang tertimpa tidak bisa dikembalikan.
+
+Buat penggunanya — dipakai HANYA oleh cron pemeriksaan, tidak pernah oleh
+proses web:
+
+```bash
+sudo mysql -e "CREATE USER 'care_verify'@'localhost' IDENTIFIED BY 'PASSWORD_LAIN';"
+sudo mysql -e "GRANT ALL PRIVILEGES ON \`lessworry\_care\_verify\_%\`.* TO 'care_verify'@'localhost';"
+sudo mysql -e "FLUSH PRIVILEGES;"
+```
+
+Perhatikan apa yang TIDAK diberikan: tidak ada hak apa pun di
+`lessworry_care`. Pengguna ini bahkan tidak bisa membacanya. Kalau dump jahat
+mencoba menulis ke sana, MySQL sendiri yang menolak.
+
+Lalu di `.env`:
+
+```ini
+BACKUP_VERIFY_CONNECTION=mysql_verify
+DB_VERIFY_USERNAME=care_verify
+DB_VERIFY_PASSWORD=PASSWORD_LAIN
+```
+
+```bash
+php artisan config:cache
+sudo -u www-data php artisan backup:verify
+```
+
+Pengguna `care` yang dipakai proses web tetap tanpa privilege tambahan apa pun
+— tidak `CREATE DATABASE`, tidak `DROP DATABASE`.
+
+**Lebih baik lagi: jalankan di mesin tempat backup disalin.** Salin
+`/var/backups/care` ke mesin lain, pasang kode yang sama di sana, dan jalankan
+`backup:verify` dari situ. Sekaligus menguji salinan luarnya — bukan hanya
+berkas yang duduk di mesin yang sama dengan aplikasinya.
+
+#### Yang menahan, berlapis
+
+| lapis | menahan apa | bergantung pada |
+|---|---|---|
+| pengguna database terpisah | tulisan ke database produksi, termasuk yang bernama lengkap | hak akses MySQL |
+| `--one-database` | `USE` yang memindahkan restore | klien mysql |
+| pemindai isi dump | menolak lebih awal dengan pesan yang jelas | pembacaan teks |
+
+Lapis ketiga sengaja ditaruh paling akhir. Ia sudah ditembus dua kali selama
+peninjauan — sekali dengan `;ATTACH ...` sebaris, sekali dengan 300 spasi di
+depan perintahnya. Selama keamanannya diputuskan oleh seberapa pintar
+pembacanya, akan selalu ada bentuk berikutnya. Gunanya memberi pesan, bukan
+menentukan aman.
+
+Pemindai itu memakai **daftar izin**: hanya bentuk pernyataan yang memang
+dihasilkan `backup:database` dan `mysqldump` yang dilewatkan. Dump buatan orang
+lain dengan `mysqldump --databases`, atau yang memuat `DELIMITER`, akan
+ditolak. Itu disengaja.
+
+Di pengembangan lokal dengan SQLite tidak ada koneksi terpisah yang perlu
+disiapkan: restore-nya dijalankan di proses PHP terpisah dengan `open_basedir`
+dikunci ke satu direktori sementara, jadi `ATTACH DATABASE` ke berkas mana pun
+di luar direktori itu gagal karena memang tidak bisa dibuka.
+
+### Jadwalkan
+
+`backup:database` sudah terdaftar di penjadwal Laravel (harian, 02.00). Yang
+perlu ditambahkan hanya satu baris:
+
+```bash
+sudo crontab -u www-data -e
 ```
 
 ```cron
-0 2 * * * mysqldump -u care -p'PASSWORD' lessworry_care | gzip > /var/backups/care/db-$(date +\%F).sql.gz
-30 2 * * * tar czf /var/backups/care/files-$(date +\%F).tar.gz -C /var/www/care/storage/app private public
-0 3 * * * find /var/backups/care -type f -mtime +30 -delete
+* * * * * cd /var/www/care && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-**Backup database saja tidak cukup** — foto bukti complaint ada di `storage/app`, dan hilang kalau hanya database yang dicadangkan.
+Satu baris ini menjalankan seluruh jadwal aplikasi, sekarang dan nanti — tidak
+perlu diubah lagi setiap ada jadwal baru.
 
-**Uji pemulihannya satu kali, catat tanggalnya.** Backup yang belum pernah dipulihkan itu asumsi, bukan backup.
+### Foto bukti belum ikut
 
-Salin juga ke luar server ini. Backup yang duduk di mesin yang sama akan ikut hilang bersama mesinnya.
+Dump hanya berisi database. Foto complaint ada di `storage/app/private` dan
+tetap butuh barisnya sendiri:
+
+```cron
+30 2 * * * tar czf /var/backups/care/files-$(date +\%F).tar.gz -C /var/www/care/storage/app private
+0  3 * * * find /var/backups/care -name 'files-*.tar.gz' -mtime +30 -delete
+```
+
+### Salin ke luar server
+
+Backup yang duduk di mesin yang sama akan ikut hilang bersama mesinnya. Salin
+`/var/backups/care` ke penyimpanan lain (rclone, rsync ke mesin lain, atau
+objek storage), lalu **uji `backup:verify` dari salinan itu** minimal sekali.
+
+## Pemantauan
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://care.lessworry.id/health
+```
+
+- `200` — database, NEVIRA, dan penyimpanan lampiran ketiganya hidup.
+- `503` — ada yang tidak. Isi jawabannya menyebut yang mana:
+  `{"status":"error","checks":{"database":"ok","nevira":"error","storage":"ok"}}`
+
+Endpoint ini sengaja tidak menyebut versi, nama host, maupun pesan galat —
+terbuka tanpa autentikasi, jadi tidak boleh berguna bagi penyerang. Hasil
+pemeriksaan NEVIRA disimpan 60 detik, aman ditembak tiap menit.
+
+Pasang di pemantau apa pun (UptimeRobot, Healthchecks.io, atau curl di cron
+mesin lain) dengan aturan: **beri tahu kalau bukan 200**.
+
+Yang belum ada: pemberitahuan otomatis ke WhatsApp/Telegram saat mati. Perlu
+keputusan siapa penerimanya dan lewat kanal apa — lihat API-15.
+
+## Server percobaan (staging)
+
+Kalau ada server kedua untuk uji coba, bedakan dengan `APP_ENV`:
+
+```ini
+APP_ENV=staging
+APP_DEBUG=false
+```
+
+Setiap halaman lalu memunculkan pita "Lingkungan uji" di paling atas. Tanpa
+penanda itu, dua tab browser yang terbuka bersamaan terlihat persis sama — dan
+complaint pelanggan sungguhan bisa ditutup di server yang salah.
+
+Staging wajib memakai database dan `APP_KEY` sendiri. Jangan menyalin dump
+produksi ke sana tanpa menyamarkan nomor telepon dan nama pelanggan.
 
 ## Setelah hidup
 

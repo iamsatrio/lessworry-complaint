@@ -5,7 +5,7 @@
   <div class="eyebrow">Keamanan akun</div>
   <h1>Ganti password</h1>
   @if(auth()->user()->must_change_password)
-    <p class="lede">Akunmu masih memakai password sementara dari supervisor. Ganti dulu sebelum memakai sistem.</p>
+    <p class="lede">Akunmu masih memakai password sementara dari admin. Ganti dulu sebelum memakai sistem.</p>
   @else
     <p class="lede">Pakai password yang tidak kamu pakai di tempat lain.</p>
   @endif

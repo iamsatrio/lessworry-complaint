@@ -32,7 +32,7 @@ class AuthController extends Controller
             $request->session()->invalidate();
 
             throw ValidationException::withMessages([
-                'email' => 'Akun ini sudah dinonaktifkan. Hubungi supervisor.',
+                'email' => 'Akun ini sudah dinonaktifkan. Hubungi admin sistem.',
             ]);
         }
 
