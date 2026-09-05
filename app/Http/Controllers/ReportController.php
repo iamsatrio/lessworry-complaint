@@ -48,7 +48,11 @@ class ReportController extends Controller
             'byLayanan' => $complaints->groupBy(fn ($c) => $c->layanan ?: 'tidak_dicatat')->map->count()->sortDesc(),
             'byTindakLanjut' => $complaints->whereNotNull('tindak_lanjut')
                 ->groupBy('tindak_lanjut')->map->count()->sortDesc(),
-            'byChannel' => $complaints->groupBy('channel')->map->count()->sortDesc(),
+            // Dikelompokkan menurut LABEL, bukan kunci: kanal `impor` sengaja
+            // tidak ada di daftar kanal intake (API-28), jadi tampilan yang
+            // mencari labelnya di config('complaint.channels') akan menampilkan
+            // kunci mentah. Yang tahu cara menamai sebuah kanal adalah model.
+            'byChannel' => $complaints->groupBy(fn ($c) => $c->channelLabel())->map->count()->sortDesc(),
             // ?? sudah menahan complaint tanpa outlet: PHP membaca properti
             // di kirinya secara isset, jadi ?-> di sini mubazir.
             'byOutlet' => $complaints->groupBy(fn ($c) => $c->outlet->name ?? 'Tanpa outlet')->map->count()->sortDesc(),

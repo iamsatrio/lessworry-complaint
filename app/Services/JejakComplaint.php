@@ -98,6 +98,27 @@ class JejakComplaint
         return $this->tulis($complaint, $user, 'note', ['note' => $isi]);
     }
 
+    /**
+     * Baris asal untuk complaint yang masuk lewat impor data lama. (API-28)
+     *
+     * Tanpa pengguna: yang membuat baris ini bukan orang, tapi perintah
+     * impor. Menempelkannya ke akun siapa pun akan membuat riwayat berbohong
+     * tentang siapa yang mencatat keluhan itu.
+     */
+    public function diimpor(Complaint $complaint, string $sumber, int $nomorBaris): ComplaintActivity
+    {
+        return $this->tulis($complaint, null, 'created', [
+            'to_status' => 'open',
+            'note' => 'Diimpor dari data lama ('.$sumber.', baris '.$nomorBaris.').',
+        ]);
+    }
+
+    /** Kolom `Note` spreadsheet, dipindahkan apa adanya. (API-28) */
+    public function catatanImpor(Complaint $complaint, string $isi): ComplaintActivity
+    {
+        return $this->tulis($complaint, null, 'note', ['note' => $isi]);
+    }
+
     public function penugasan(Complaint $complaint, User $user, ?string $divisi): ComplaintActivity
     {
         $diteruskan = filled($divisi);
@@ -166,11 +187,11 @@ class JejakComplaint
      *
      * @param  array<string,mixed>  $isi
      */
-    private function tulis(Complaint $complaint, User $user, string $type, array $isi): ComplaintActivity
+    private function tulis(Complaint $complaint, ?User $user, string $type, array $isi): ComplaintActivity
     {
         return ComplaintActivity::create($isi + [
             'complaint_id' => $complaint->id,
-            'user_id' => $user->id,
+            'user_id' => $user?->id,
             'type' => $type,
         ]);
     }

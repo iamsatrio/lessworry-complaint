@@ -55,7 +55,7 @@
     ['Bobot',$byBobot,'complaint.bobot'],
     ['Layanan yang dikeluhkan',$byLayanan,'complaint.layanan'],
     ['Tindak lanjut',$byTindakLanjut,'complaint.tindak_lanjut'],
-    ['Kanal masuk',$byChannel,'complaint.channels'],
+    ['Kanal masuk',$byChannel,null],
     ['Per outlet',$byOutlet,null],
   ] as [$title,$data,$cfg])
   <div class="card">
