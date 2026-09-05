@@ -73,6 +73,8 @@ nav a:hover{background:var(--mint);color:var(--teal-deep)}
 nav a.active{background:var(--mint-deep);color:var(--teal-deep)}
 nav a.cta{background:var(--teal);color:#fff}
 nav a.cta:hover{background:var(--teal-deep);color:#fff}
+.wajib-ganti{font-family:var(--display);font-weight:600;font-size:13.5px;color:var(--muted);
+  display:flex;align-items:center;padding:9px 0}
 .who{text-align:right;font-size:13px;color:var(--muted);line-height:1.35;white-space:nowrap}
 .who b{display:block;font-family:var(--display);font-weight:700;font-size:14px;color:var(--ink)}
 
@@ -205,6 +207,27 @@ details.link-editor>summary::-webkit-details-marker{display:none}
 details.link-editor>summary::before{content:"+";font-size:15px}
 details.link-editor[open]>summary::before{content:"–"}
 
+/* Hanya untuk pembaca layar: label yang tidak perlu terlihat karena
+   placeholder-nya sudah menjelaskan, tapi tetap harus terbaca alat bantu. */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* Kotak cari berdiri sendiri di atas saringan — mencari adalah tindakan
+   utama supervisor di papan kerja, bukan tindakan lanjutan. */
+.searchbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 16px}
+.searchbar input{flex:1;min-width:180px}
+.searchbar .shrink{flex:0 0 auto}
+
+/* ---------- Navigasi halaman ---------- */
+.pager{margin-top:20px}
+.pager-nums{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pager .btn{padding:10px 16px;min-height:44px;font-size:13.5px}
+.pager .btn.num{min-width:44px;padding:10px 12px}
+.pager .btn.now{background:var(--teal-deep);color:#fff}
+.pager .btn.off{opacity:.45;cursor:default;pointer-events:none}
+.pager .gap{color:var(--muted);padding:0 2px}
+.pager-info{margin:10px 0 0}
+
 /* Saringan: terbuka di desktop, dilipat di HP supaya daftar tidak terdorong ke bawah */
 details.filters{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
   margin-bottom:18px;box-shadow:var(--shadow)}
@@ -280,6 +303,13 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
 <header class="top">
   <div class="topin">
     <div class="brand">Less Worry<span>Complaint</span></div>
+    {{-- Selama password sementara belum diganti, setiap tautan di bawah
+         memantul balik ke /password. Menawarkan tiga pintu yang semuanya
+         terkunci membuat orang mengira sistemnya rusak — pada login pertama,
+         kesan pertamanya. Yang tersisa hanya Keluar. (API-38 #12) --}}
+    @if(auth()->user()->must_change_password)
+      <nav><span class="wajib-ganti">Ganti password dulu sebelum memakai sistem</span></nav>
+    @else
     <nav>
       <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">Dashboard</a>
       <a href="{{ route('complaints.index') }}" class="{{ request()->routeIs('complaints.index') ? 'active' : '' }}">Papan Kerja</a>
@@ -291,6 +321,7 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
         <a href="{{ route('complaints.create') }}" class="cta">Catat Complaint</a>
       @endif
     </nav>
+    @endif
     <div class="who">
       <b>{{ auth()->user()->name }}</b>
       {{ auth()->user()->roleLabel() }}@if(auth()->user()->outlet) · {{ auth()->user()->outlet->name }}@endif
@@ -312,7 +343,7 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
 </main>
 
 @auth
-  @if(auth()->user()->canCreateComplaint() && ! request()->routeIs('complaints.create'))
+  @if(auth()->user()->canCreateComplaint() && ! auth()->user()->must_change_password && ! request()->routeIs('complaints.create'))
     <a href="{{ route('complaints.create') }}" class="btn fab">Catat Complaint</a>
   @endif
 @endauth

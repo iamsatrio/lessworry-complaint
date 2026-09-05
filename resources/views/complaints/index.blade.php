@@ -16,12 +16,25 @@
   @if(auth()->user()->isKasir()) Dibatasi outlet {{ auth()->user()->outlet?->name }}. @endif
 </p>
 
-<details class="filters" @if(request()->hasAny(['q','status','category','bobot','layanan','outlet_id'])) open @endif>
-  <summary>Saring &amp; cari</summary>
+{{-- Cari adalah tindakan utama supervisor di halaman ini, bukan tindakan
+     lanjutan: kotaknya berdiri sendiri di atas, tidak di balik panel yang
+     tertutup. Saringan sisanya tetap boleh terlipat. (API-38 #13) --}}
+<form method="GET" class="card searchbar">
+  @foreach(['status','category','bobot','layanan','outlet_id'] as $bawa)
+    @if(request()->filled($bawa))<input type="hidden" name="{{ $bawa }}" value="{{ request($bawa) }}">@endif
+  @endforeach
+  <label for="q" class="sr-only">Cari complaint</label>
+  <input id="q" name="q" value="{{ request('q') }}" placeholder="Cari nomor tiket, nama, telepon, atau nomor nota">
+  <button class="shrink">Cari</button>
+  @if($mencari)
+    <a class="btn ghost shrink" href="{{ route('complaints.index', request()->except(['q','page'])) }}">Hapus</a>
+  @endif
+</form>
+
+<details class="filters" @if(request()->hasAny(['status','category','bobot','layanan','outlet_id'])) open @endif>
+  <summary>Saringan lain</summary>
   <form method="GET" class="row body">
-    <div style="flex:2.4"><label for="q">Cari</label>
-      <input id="q" name="q" value="{{ request('q') }}" placeholder="Nomor tiket, nama, telepon, atau ID transaksi">
-    </div>
+    @if($mencari)<input type="hidden" name="q" value="{{ request('q') }}">@endif
     <div><label for="fs">Status</label>
       <select id="fs" name="status"><option value="">Semua yang terbuka</option>
         @foreach(config('complaint.statuses') as $k=>$v)
