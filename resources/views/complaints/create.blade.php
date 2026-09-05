@@ -41,6 +41,47 @@
 <form method="POST" action="{{ route('complaints.store') }}" enctype="multipart/form-data" id="f">
 @csrf
 
+{{-- NOTA LEBIH DULU.
+
+     Blok ini dulu berada di kartu kedua, sekitar 1362px dari atas — dua layar
+     di bawah titik masuk pada 390px. Petunjuknya sendiri berbunyi "isi ini
+     lebih dulu", tapi kasir yang membaca dari atas ke bawah sudah melewati
+     empat select dan satu textarea sebelum sampai ke kalimat yang menyuruhnya
+     kembali ke atas — jadi pengisian otomatis yang sudah dibangun tidak
+     pernah terpakai.
+
+     Urutan sekarang mengikuti kejadian nyata di konter: pelanggan menyodorkan
+     struk → nota dicek → outlet, nama, dan telepon terisi sendiri → kasir
+     tinggal mengetik keluhannya. (API-38 #5) --}}
+<div class="card">
+  <div class="eyebrow">Mulai dari notanya</div>
+  <label for="nv">Nomor nota NEVIRA <span class="req">*</span></label>
+  <div style="display:flex;gap:10px">
+    <input id="nv" name="nevira_transaction_number" value="{{ $nilai('nevira_transaction_number') }}"
+           placeholder="Salin dari struk, mis. INV/118/1787749345365/1">
+    <button type="button" class="ghost shrink" id="cek">Cek</button>
+  </div>
+  <div id="nvbox" class="panel" style="display:none"></div>
+  <p class="hint">Cek notanya lebih dulu — outlet, nama, dan telepon pelapor terisi sendiri dari data pelanggan pada nota.</p>
+
+  <label for="exempt">Kalau tidak ada notanya, pilih alasannya</label>
+  <select id="exempt" name="nota_exemption">
+    <option value="">— complaint ini punya nomor nota —</option>
+    @foreach(config('complaint.nota_exemptions') as $k=>$v)
+      <option value="{{ $k }}" @selected($nilai('nota_exemption')===$k)>{{ $v }}</option>
+    @endforeach
+  </select>
+
+  @if(!auth()->user()->isKasir())
+    <label for="out">Outlet</label>
+    <select id="out" name="outlet_id">
+      <option value="">Terisi sendiri dari nota</option>
+      @foreach($outlets as $o)<option value="{{ $o->id }}" @selected($nilai('outlet_id')==$o->id)>{{ $o->name }}</option>@endforeach
+    </select>
+    <p class="hint" id="out-hint" style="display:none"></p>
+  @endif
+</div>
+
 <div class="card">
   <div class="eyebrow">Keluhannya apa</div>
   <div class="row">
@@ -87,77 +128,44 @@
 </div>
 
 <div class="card">
-    <div class="eyebrow">Siapa yang melapor</div>
-    <div class="row">
-      @php $kanal = $nilai('channel', auth()->user()->defaultChannel()); @endphp
-      <div><label for="ch">Masuk lewat <span class="req">*</span></label>
-        <select id="ch" name="channel" required>
-          {{-- Kanal ada tiga, peran hanya dua: WA Outlet diterima kasir juga.
-               Jadi yang disimpulkan dari peran adalah NILAI BAWAANNYA, bukan
-               kanalnya — kolomnya tetap tampil, ketiga opsinya tetap bisa
-               dipilih, dan pilihan manual menimpa bawaan.
+  <div class="eyebrow">Siapa yang melapor</div>
+  @php $kanal = $nilai('channel', auth()->user()->defaultChannel()); @endphp
+  <label for="ch">Masuk lewat <span class="req">*</span></label>
+  <select id="ch" name="channel" required>
+    {{-- Kanal ada tiga, peran hanya dua: WA Outlet diterima kasir juga.
+         Jadi yang disimpulkan dari peran adalah NILAI BAWAANNYA, bukan
+         kanalnya — kolomnya tetap tampil, ketiga opsinya tetap bisa
+         dipilih, dan pilihan manual menimpa bawaan.
 
-               Untuk peran yang bawaannya memang tidak ada (supervisor, admin)
-               opsi kosong tetap dipasang. Tanpa itu opsi pertama — Direct
-               Kasir — terpilih diam-diam, persis kesalahan yang sedang
-               diperbaiki. Yang tidak dilakukan adalah memaksa memilih pada
-               peran yang bawaannya sudah benar. (API-38 #4) --}}
-          @if(blank(auth()->user()->defaultChannel()))
-            <option value="" disabled @selected(blank($kanal))>— pilih kanal —</option>
-          @endif
-          @foreach(config('complaint.channels') as $k=>$v)
-            <option value="{{ $k }}" @selected($kanal===$k)>{{ $v }}</option>
-          @endforeach
-        </select>
-        @if(filled(auth()->user()->defaultChannel()) && blank($nilai('channel')))
-          <p class="hint">Terisi dari peranmu. Ganti kalau keluhan ini sebenarnya masuk lewat kanal lain.</p>
-        @endif
-      </div>
-      @if(!auth()->user()->isKasir())
-      <div><label for="out">Outlet</label>
-        <select id="out" name="outlet_id">
-          <option value="">Terisi sendiri dari nota</option>
-          @foreach($outlets as $o)<option value="{{ $o->id }}" @selected($nilai('outlet_id')==$o->id)>{{ $o->name }}</option>@endforeach
-        </select>
-        <p class="hint" id="out-hint" style="display:none"></p>
-      </div>
-      @endif
-    </div>
-    {{-- Nota didahulukan: begitu diisi, identitas pelapor terisi sendiri.
-         Kalau nama diketik lebih dulu, sistem tidak menimpanya, dan
-         pengisian otomatis jadi terasa tidak jalan. --}}
-    <label for="nv">Nomor nota NEVIRA <span class="req">*</span></label>
-    <div style="display:flex;gap:10px">
-      <input id="nv" name="nevira_transaction_number" value="{{ $nilai('nevira_transaction_number') }}"
-             placeholder="Salin dari struk, mis. INV/118/1787749345365/1">
-      <button type="button" class="ghost shrink" id="cek">Cek</button>
-    </div>
-    <div id="nvbox" class="panel" style="display:none"></div>
-    <p class="hint">Isi ini lebih dulu — nama dan telepon pelapor akan terisi sendiri dari data pelanggan pada nota.</p>
+         Untuk peran yang bawaannya memang tidak ada (supervisor, admin)
+         opsi kosong tetap dipasang. Tanpa itu opsi pertama — Direct
+         Kasir — terpilih diam-diam, persis kesalahan yang sedang
+         diperbaiki. Yang tidak dilakukan adalah memaksa memilih pada
+         peran yang bawaannya sudah benar. (API-38 #4) --}}
+    @if(blank(auth()->user()->defaultChannel()))
+      <option value="" disabled @selected(blank($kanal))>— pilih kanal —</option>
+    @endif
+    @foreach(config('complaint.channels') as $k=>$v)
+      <option value="{{ $k }}" @selected($kanal===$k)>{{ $v }}</option>
+    @endforeach
+  </select>
+  @if(filled(auth()->user()->defaultChannel()) && blank($nilai('channel')))
+    <p class="hint">Terisi dari peranmu. Ganti kalau keluhan ini sebenarnya masuk lewat kanal lain.</p>
+  @endif
 
-    <label for="exempt">Kalau tidak ada notanya, pilih alasannya</label>
-    <select id="exempt" name="nota_exemption">
-      <option value="">— complaint ini punya nomor nota —</option>
-      @foreach(config('complaint.nota_exemptions') as $k=>$v)
-        <option value="{{ $k }}" @selected($nilai('nota_exemption')===$k)>{{ $v }}</option>
-      @endforeach
-    </select>
-
-    <label for="rn">Nama pelapor <span class="req">*</span></label>
-    <input id="rn" name="reporter_name" value="{{ $nilai('reporter_name') }}" required>
-    <label for="rp">Nomor telepon</label>
-    <input id="rp" name="reporter_phone" value="{{ $nilai('reporter_phone') }}" inputmode="tel" placeholder="08xxxxxxxxxx">
-    <div id="pakai" style="display:none;margin-top:10px">
-      <button type="button" class="ghost" id="btn-pakai" style="padding:9px 16px;min-height:40px;font-size:13.5px">
-        Pakai data pelanggan dari nota
-      </button>
-      <p class="hint" id="pakai-hint"></p>
-    </div>
-    <p class="hint">
-      Pelapor tidak selalu pemilik order — bisa saja yang mengantarkan. Kalau berbeda, tulis siapa yang benar-benar melapor.
-    </p>
+  <label for="rn">Nama pelapor <span class="req">*</span></label>
+  <input id="rn" name="reporter_name" value="{{ $nilai('reporter_name') }}" required>
+  <label for="rp">Nomor telepon</label>
+  <input id="rp" name="reporter_phone" value="{{ $nilai('reporter_phone') }}" inputmode="tel" placeholder="08xxxxxxxxxx">
+  <div id="pakai" style="display:none;margin-top:10px">
+    <button type="button" class="ghost" id="btn-pakai" style="padding:9px 16px;min-height:40px;font-size:13.5px">
+      Pakai data pelanggan dari nota
+    </button>
+    <p class="hint" id="pakai-hint"></p>
   </div>
-
+  <p class="hint">
+    Pelapor tidak selalu pemilik order — bisa saja yang mengantarkan. Kalau berbeda, tulis siapa yang benar-benar melapor.
+  </p>
 </div>
 
 <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
