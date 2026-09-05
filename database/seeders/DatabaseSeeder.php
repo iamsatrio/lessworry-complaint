@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Outlet;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
@@ -62,6 +63,13 @@ class DatabaseSeeder extends Seeder
     private const DEMO_LAMA = ['cc@lessworry.id', 'kasirbaru@lessworry.id'];
 
     /**
+     * Password harfiah yang dibagikan seeder-seeder lama, dan yang karena itu
+     * ada di riwayat commit. Dipakai untuk mengenali akun yang masih bisa
+     * dimasuki siapa pun yang membaca repositori.
+     */
+    private const PASSWORD_BOCOR = 'password';
+
+    /**
      * Akun tim.
      *
      * Seeder ini **memperbaiki keadaan**, bukan sekadar membuat yang belum
@@ -72,8 +80,9 @@ class DatabaseSeeder extends Seeder
      *
      * Password sementara acak dicetak sekali ke layar orang yang menjalankan
      * perintah. Tidak ditulis ke berkas, tidak masuk log, tidak masuk
-     * repositori. Akun yang sudah menunggu penggantian password tidak
-     * disetel ulang, supaya seeder aman dijalankan berulang.
+     * repositori. Password yang sudah dipilih sendiri oleh orangnya TIDAK
+     * pernah disetel ulang — yang diterbitkan ulang hanya akun yang masih
+     * menerima password bocor, jadi seeder aman dijalankan tiap deploy.
      */
     private function pengguna(): void
     {
@@ -107,13 +116,33 @@ class DatabaseSeeder extends Seeder
                 'role' => $peran,
                 'division' => $divisi,
                 'outlet_id' => $outletId,
-                'is_active' => true,
             ];
 
-            // Password hanya diterbitkan kalau akunnya baru, atau kalau akun
-            // lama belum menunggu penggantian — yang berarti passwordnya masih
-            // password lama yang bocor.
-            $perluPasswordBaru = $user === null || ! $user->must_change_password;
+            // `is_active` hanya disetel saat akun DIBUAT. Menonaktifkan orang
+            // adalah keputusan manusia yang berumur — itu satu-satunya cara
+            // mencabut akses, karena akun tidak pernah dihapus. Deploy
+            // berikutnya tidak boleh menghidupkannya kembali tanpa ada yang
+            // memutuskan begitu.
+            if ($user === null) {
+                $atribut['is_active'] = true;
+            }
+
+            // Password diterbitkan kalau akunnya baru, atau kalau password
+            // yang bocor MASIH BERLAKU pada akun itu.
+            //
+            // Sebelumnya baris ini memakai `! $user->must_change_password`
+            // sebagai perantara. Perantara itu salah dua arah sekaligus:
+            // seeder paling awal memberi password bocor SEKALIGUS menandai
+            // wajib-ganti, jadi akun yang bisa diambil alih justru dilewati;
+            // dan setelah orang benar-benar mengganti passwordnya, tandanya
+            // kembali false sehingga seeder berikutnya menghapus password
+            // pilihannya sendiri.
+            //
+            // Passwordnya adalah nilai harfiah yang diketahui, jadi tanyakan
+            // faktanya, bukan gejalanya. Tidak ada positif palsu: aturan
+            // password di PasswordController membuat `password` tidak bisa
+            // dipasang siapa pun lewat antarmuka.
+            $perluPasswordBaru = $user === null || Hash::check(self::PASSWORD_BOCOR, $user->password);
 
             if ($perluPasswordBaru) {
                 // Tanpa simbol: password ini disampaikan lewat pesan dan

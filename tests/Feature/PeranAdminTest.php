@@ -237,4 +237,82 @@ class PeranAdminTest extends TestCase
     {
         $this->assertContains('admin', User::peranBisaDitugasi());
     }
+
+    /* ---------- Himpunan keadaan bersejarah, bukan satu keadaan ---------- */
+
+    /**
+     * Seeder PALING AWAL (fa9f725) memberi password bocor SEKALIGUS menandai
+     * wajib-ganti. Perantara `! must_change_password` melewatkan akun itu,
+     * lalu menaikkannya jadi admin — password bocor pada peran tertinggi.
+     */
+    private function seederPalingAwal(): void
+    {
+        $tebet = Outlet::firstOrCreate(
+            ['nevira_outlet_id' => '118'], ['name' => 'Tebet']
+        );
+
+        foreach ([
+            ['Satrio Wibowo', 'satrio@lessworry.id', 'supervisor', null],
+            ['Customer Care', 'cc@lessworry.id', 'customer_care', null],
+            ['Kasir Pusat', 'kasir@lessworry.id', 'kasir', $tebet->id],
+            ['Divisi Produksi', 'produksi@lessworry.id', 'divisi', null],
+        ] as [$nama, $email, $peran, $outlet]) {
+            User::create([
+                'name' => $nama, 'email' => $email, 'password' => 'password',
+                'role' => $peran, 'outlet_id' => $outlet,
+                'division' => $peran === 'divisi' ? 'produksi' : null,
+                'must_change_password' => true,
+            ]);
+        }
+    }
+
+    public function test_password_bocor_ditutup_walau_akunnya_sudah_wajib_ganti(): void
+    {
+        $this->seederPalingAwal();
+        $this->seed(DatabaseSeeder::class);
+
+        foreach (['satrio@lessworry.id', 'kasir@lessworry.id', 'produksi@lessworry.id'] as $email) {
+            $this->post('/login', ['email' => $email, 'password' => 'password']);
+            $this->assertFalse(
+                auth()->check(),
+                $email.' masih menerima password bocor — dan sekarang perannya lebih tinggi.'
+            );
+            $this->post('/logout');
+        }
+    }
+
+    public function test_seeder_tidak_menghapus_password_yang_sudah_dipilih_sendiri(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        // Tsulasa menuruti perintah sistem dan mengganti passwordnya.
+        $tsulasa = User::where('email', 'tsulasa@lessworry.id')->first();
+        $tsulasa->forceFill([
+            'password' => 'PasswordSaya123',
+            'must_change_password' => false,
+        ])->save();
+
+        // Deploy berikutnya menjalankan `migrate --seed` lagi.
+        $this->seed(DatabaseSeeder::class);
+
+        $this->post('/login', ['email' => 'tsulasa@lessworry.id', 'password' => 'PasswordSaya123']);
+        $this->assertTrue(auth()->check(), 'Seeder menghapus password yang sudah dipilih sendiri.');
+        $this->assertFalse((bool) $tsulasa->fresh()->must_change_password);
+    }
+
+    public function test_seeder_tidak_menghidupkan_lagi_akun_yang_sengaja_dinonaktifkan(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        // Samsuri berhenti bekerja; admin mencabut aksesnya.
+        $samsuri = User::where('email', 'samsuri@lessworry.id')->first();
+        $samsuri->forceFill(['is_active' => false])->save();
+
+        $this->seed(DatabaseSeeder::class);
+
+        $this->assertFalse(
+            (bool) $samsuri->fresh()->is_active,
+            'Deploy menghidupkan kembali akun yang sengaja dimatikan.'
+        );
+    }
 }

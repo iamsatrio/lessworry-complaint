@@ -23,10 +23,10 @@ class StaffAttributionTest extends TestCase
     private function makeComplaint(array $attrs = []): Complaint
     {
         $c = new Complaint(array_merge([
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelanggan', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'Keluhan uji',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelanggan', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'Keluhan uji',
         ], $attrs));
-        $c->status = $attrs['status'] ?? 'baru';
+        $c->status = $attrs['status'] ?? 'open';
         $c->ticket_number = Complaint::nextTicketNumber();
         $c->created_at = now();
         $c->applySla();

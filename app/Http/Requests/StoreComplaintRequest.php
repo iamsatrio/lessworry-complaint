@@ -35,7 +35,10 @@ class StoreComplaintRequest extends FormRequest
             'outlet_id' => ['nullable', 'exists:outlets,id'],
             'category' => ['required', Rule::in(array_keys(config('complaint.categories')))],
             'sub_category' => ['nullable', 'string', 'max:120'],
-            'priority' => ['required', Rule::in(array_keys(config('complaint.priorities')))],
+            'bobot' => ['required', Rule::in(array_keys(config('complaint.bobot')))],
+            // Layanan wajib: tanpanya laporan tidak bisa menunjukkan layanan
+            // mana yang paling sering bermasalah, dan itu gunanya kolom ini.
+            'layanan' => ['required', Rule::in(array_keys(config('complaint.layanan')))],
             // Batas panjang: tanpa ini 2 juta karakter tersimpan utuh dan
             // ikut termuat di papan kerja maupun halaman detail. (API-8 T8)
             'description' => ['required', 'string', 'max:5000'],

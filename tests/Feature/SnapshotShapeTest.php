@@ -30,12 +30,12 @@ class SnapshotShapeTest extends TestCase
     private function complaintDenganSnapshot(array $snapshot): Complaint
     {
         $complaint = new Complaint([
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'keterlambatan',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'terlambat',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
             'nevira_transaction_number' => 'INV/118/1/1',
         ]);
         $complaint->ticket_number = Complaint::nextTicketNumber();
-        $complaint->status = 'baru';
+        $complaint->status = 'open';
         $complaint->applySla();
         $complaint->save();
         $complaint->forceFill(['nevira_snapshot' => $snapshot, 'nevira_synced_at' => now()])->save();

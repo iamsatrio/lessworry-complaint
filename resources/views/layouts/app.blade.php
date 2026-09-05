@@ -101,16 +101,13 @@ tbody tr:hover td{background:var(--mint)}
 /* ---------- Lencana ---------- */
 .badge{display:inline-flex;align-items:center;font-family:var(--display);font-weight:700;font-size:11.5px;
   padding:5px 11px;border-radius:var(--r-pill);letter-spacing:.02em;white-space:nowrap}
-.b-baru{background:var(--mint-deep);color:var(--teal-deep)}
-.b-ditangani{background:var(--warn-soft);color:#8a6800}
-.b-menunggu_pelanggan{background:#efeaf7;color:#5b3fa0}
-.b-selesai{background:var(--ok-soft);color:#1e6b48}
-.b-ditolak{background:#eef1f0;color:#647471}
-/* Prioritas sengaja lebih sunyi daripada status: hanya urgent yang berteriak. */
-.p-urgent{background:var(--danger);color:#fff}
-.p-high{background:#ffe9d4;color:#9a4a00}
-.p-medium{background:#eef1f0;color:#5c6b68}
-.p-low{background:#f4f7f6;color:#8b9a97}
+.b-open{background:var(--mint-deep);color:var(--teal-deep)}
+.b-handling{background:var(--warn-soft);color:#8a6800}
+.b-close{background:var(--ok-soft);color:#1e6b48}
+/* Bobot sengaja lebih sunyi daripada status: hanya Berat yang berteriak. */
+.w-berat{background:var(--danger);color:#fff}
+.w-sedang{background:#ffe9d4;color:#9a4a00}
+.w-ringan{background:#f4f7f6;color:#8b9a97}
 
 /* ---------- Meteran SLA (elemen tanda tangan) ---------- */
 .sla{min-width:126px}
@@ -120,6 +117,8 @@ tbody tr:hover td{background:var(--mint)}
 .sla.warn .t{color:#9a7400} .sla.warn .track i{background:var(--yellow)}
 .sla.late .t{color:var(--danger)} .sla.late .track i{background:var(--danger)}
 .sla.done .t{color:var(--ok)} .sla.done .track i{background:var(--ok)}
+/* Dijeda: jamnya berhenti, jadi meterannya tidak boleh terlihat memburuk. */
+.sla.paused .t{color:#5b3fa0} .sla.paused .track i{background:#8d74c9}
 
 /* ---------- Form ---------- */
 label{display:block;font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.05em;

@@ -105,10 +105,71 @@ class User extends Authenticatable
         return in_array($this->role, ['kasir', 'customer_care', 'supervisor', 'admin'], true);
     }
 
-    /** Hanya CC, supervisor, dan admin yang boleh menutup complaint. */
-    public function canResolve(): bool
+    /**
+     * Siapa yang boleh menutup complaint. (API-25, keputusan API-18 nomor 1)
+     *
+     * Customer Care dan supervisor: selalu. Kasir: hanya complaint berbobot
+     * Ringan — itu 52,3% kasus pada 2026, dan menahannya di antrean Customer
+     * Care hanya memindahkan pekerjaan yang sudah selesai di outlet.
+     *
+     * Batas kompensasi TIDAK diperiksa di sini. Itu batas yang berdiri
+     * sendiri dan ditegakkan terpisah di ComplaintController: complaint
+     * Ringan berkompensasi Rp 200.000 tetap tidak boleh ditutup kasir.
+     */
+    public function canResolve(?Complaint $complaint = null): bool
     {
-        return in_array($this->role, ['customer_care', 'supervisor', 'admin'], true);
+        return $this->bobotDalamWewenang($complaint);
+    }
+
+    /**
+     * Menjeda memakai sumbu wewenang yang SAMA dengan menutup. (Review PR #1)
+     *
+     * Jeda menghentikan jam SLA, jadi ia menentukan apakah sebuah tiket bisa
+     * berubah merah di papan. Tanpa batas, satu outlet bisa membungkam papan
+     * per tiket — dan masalah yang mau dipecahkan issue ini justru "papan yang
+     * selalu merah akan berhenti dibaca". Perbaikannya tidak boleh memberi
+     * jalan memadamkannya diam-diam.
+     *
+     * Yang dibatasi hanya MEMULAI jeda. Melanjutkan tiket boleh siapa saja
+     * yang boleh memperbarui statusnya: arahnya aman — ia mengembalikan tiket
+     * ke hitungan SLA, bukan menyembunyikannya.
+     */
+    public function canPause(?Complaint $complaint = null): bool
+    {
+        return $this->bobotDalamWewenang($complaint);
+    }
+
+    /**
+     * Membuka kembali tiket yang sudah ditutup memakai wewenang yang sama
+     * dengan menutupnya. (Review PR #1 temuan A)
+     *
+     * Kalau kamu tidak boleh menutupnya, kamu tidak boleh membatalkan
+     * penutupan orang lain — kebalikan sebuah tindakan berwewenang tetap
+     * tindakan berwewenang. Batas kompensasinya diperiksa terpisah di
+     * ComplaintController, persis seperti pada penutupan.
+     */
+    public function canReopen(?Complaint $complaint = null): bool
+    {
+        return $this->bobotDalamWewenang($complaint);
+    }
+
+    /**
+     * Sumbu bobot, dipakai bersama oleh menutup, menjeda, dan membuka kembali.
+     *
+     * Customer Care dan supervisor: selalu. Kasir: hanya complaint Ringan.
+     * Peran lain tidak sama sekali.
+     */
+    private function bobotDalamWewenang(?Complaint $complaint): bool
+    {
+        if (in_array($this->role, ['customer_care', 'supervisor', 'admin'], true)) {
+            return true;
+        }
+
+        if (! $this->isKasir()) {
+            return false;
+        }
+
+        return $complaint !== null && $complaint->bobot === 'ringan';
     }
 
     /**

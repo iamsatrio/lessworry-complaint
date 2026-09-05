@@ -140,8 +140,8 @@ class DraftPrivacyTest extends TestCase
         $kasir = $this->userAs('kasir', $outlet);
 
         $this->actingAs($kasir)->post('/complaints', [
-            'channel' => 'kasir', 'reporter_name' => 'Budi', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'Noda tidak hilang',
+            'channel' => 'kasir', 'reporter_name' => 'Budi', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'Noda tidak hilang',
             'nota_exemption' => 'lebih_sebulan',
         ])->assertSessionHas('bersihkan_draft');
 

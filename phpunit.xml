@@ -18,6 +18,12 @@
         </include>
     </source>
     <php>
+        <!--
+            Suite ini merender banyak halaman penuh dalam satu proses. Dengan
+            batas bawaan 128M, `php artisan test` mati di tengah jalan dan
+            terlihat seperti test yang gagal, padahal yang habis memorinya.
+        -->
+        <ini name="memory_limit" value="512M"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>

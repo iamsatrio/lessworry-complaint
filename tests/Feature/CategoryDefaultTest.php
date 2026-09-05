@@ -88,7 +88,7 @@ class CategoryDefaultTest extends TestCase
             ->from('/complaints/create')
             ->post('/complaints', [
                 'channel' => 'kasir', 'reporter_name' => 'Budi', 'category' => '',
-                'priority' => 'medium', 'description' => 'Noda tidak hilang',
+                'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'Noda tidak hilang',
                 'nota_exemption' => 'lebih_sebulan',
             ])
             ->assertSessionHasErrors('category');

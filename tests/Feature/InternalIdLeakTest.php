@@ -35,12 +35,12 @@ class InternalIdLeakTest extends TestCase
     {
         $complaint = new Complaint([
             'channel' => 'wa_cc', 'reporter_name' => 'Ibu Sari', 'reporter_phone' => '081200001111',
-            'category' => 'hasil_cuci', 'priority' => 'medium', 'description' => 'x',
+            'category' => 'kurang_bersih', 'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
             'nevira_transaction_number' => self::NOTA,
             'outlet_id' => $outlet?->id,
         ]);
         $complaint->ticket_number = Complaint::nextTicketNumber();
-        $complaint->status = 'baru';
+        $complaint->status = 'open';
         $complaint->applySla();
         $complaint->save();
         $complaint->forceFill(['nevira_transaction_id' => self::ID_INTERNAL])->save();

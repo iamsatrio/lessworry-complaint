@@ -51,8 +51,8 @@ class OutletFromOrderTest extends TestCase
         $tebet = Outlet::create(['name' => 'Tebet', 'nevira_outlet_id' => '118']);
 
         $this->actingAs($this->cc())->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Ibu Sari', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'Ibu Sari', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
             'nevira_transaction_number' => self::NOTA,
         ])->assertRedirect();
 
@@ -67,8 +67,8 @@ class OutletFromOrderTest extends TestCase
 
         // Complaint bisa dilaporkan di outlet lain daripada tempat cuciannya.
         $this->actingAs($this->cc())->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Ibu Sari', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x', 'outlet_id' => $lain->id,
+            'channel' => 'wa_cc', 'reporter_name' => 'Ibu Sari', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x', 'outlet_id' => $lain->id,
             'nevira_transaction_number' => self::NOTA,
         ]);
 
@@ -80,8 +80,8 @@ class OutletFromOrderTest extends TestCase
         $this->fake(outletNevira: 999);
 
         $this->actingAs($this->cc())->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Ibu Sari', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'Ibu Sari', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
             'nevira_transaction_number' => self::NOTA,
         ]);
 
