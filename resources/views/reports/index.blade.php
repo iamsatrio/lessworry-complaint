@@ -39,7 +39,13 @@
      tidak boleh hilang — hanya pindah ke alasan penutupan. (API-18 #6) --}}
 <div class="grid g4" style="margin-bottom:18px">
   <div class="stat"><div class="n">{{ $closedReject }}</div><div class="l">Ditutup Ditolak</div></div>
-  <div class="stat"><div class="n">{{ $total - $closedDone - $closedReject }}</div><div class="l">Masih Terbuka</div></div>
+  @if($closedNoReason > 0)
+    {{-- Data lama tidak pernah mencatat alasan penutupan. Disebut apa adanya
+         supaya keempat angka Close bisa dijumlahkan, bukan disembunyikan atau
+         diam-diam dihitung sebagai "selesai". (Review PR #7, P2-3) --}}
+    <div class="stat"><div class="n">{{ $closedNoReason }}</div><div class="l">Ditutup Tanpa Alasan (data lama)</div></div>
+  @endif
+  <div class="stat"><div class="n">{{ $stillOpen }}</div><div class="l">Masih Terbuka</div></div>
 </div>
 
 @if($avgMinutes !== null)
@@ -55,7 +61,7 @@
     ['Bobot',$byBobot,'complaint.bobot'],
     ['Layanan yang dikeluhkan',$byLayanan,'complaint.layanan'],
     ['Tindak lanjut',$byTindakLanjut,'complaint.tindak_lanjut'],
-    ['Kanal masuk',$byChannel,'complaint.channels'],
+    ['Kanal masuk',$byChannel,null],
     ['Per outlet',$byOutlet,null],
   ] as [$title,$data,$cfg])
   <div class="card">

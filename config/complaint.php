@@ -12,6 +12,19 @@ return [
     ],
 
     /*
+    | Kanal untuk data yang kanalnya TIDAK PERNAH DICATAT — spreadsheet lama
+    | tidak punya kolomnya. (API-28)
+    |
+    | Terpisah dari `channels` supaya tidak muncul di dropdown intake:
+    | kasir tidak boleh bisa memilih "impor" untuk keluhan yang baru saja
+    | diceritakan pelanggan di depannya. Labelnya tetap ada supaya laporan
+    | per kanal tidak menampilkan kunci mentah.
+    */
+    'channels_legacy' => [
+        'impor' => 'Tidak tercatat (impor data lama)',
+    ],
+
+    /*
     | Kategori — taksonomi yang benar-benar dipakai tim. (API-25, keputusan
     | API-18 nomor 5; angkanya dikoreksi dari CSV asli, 545 baris)
     |

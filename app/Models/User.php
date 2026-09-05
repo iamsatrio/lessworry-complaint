@@ -220,11 +220,20 @@ class User extends Authenticatable
         return (int) config('complaint.compensation_limit.'.$this->role, 0);
     }
 
+    /**
+     * Cakupan yang kosong berarti tidak melihat apa pun.
+     *
+     * Tanpa penjagaan null di bawah, `null === null` bernilai true: kasir
+     * yang outlet-nya belum diisi bisa membuka complaint yang outletnya juga
+     * kosong — dan complaint tanpa outlet memang ada sejak impor data lama
+     * menyimpan baris yang nama outletnya tidak punya padanan.
+     * Pasangannya ada di Complaint::scopeVisibleTo. (Review PR #7, P2-2)
+     */
     public function canView(Complaint $complaint): bool
     {
         return match ($this->role) {
-            'kasir' => $complaint->outlet_id === $this->outlet_id,
-            'divisi' => $complaint->forwarded_division === $this->division,
+            'kasir' => $this->outlet_id !== null && $complaint->outlet_id === $this->outlet_id,
+            'divisi' => $this->division !== null && $complaint->forwarded_division === $this->division,
             default => true,
         };
     }
