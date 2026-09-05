@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -17,6 +18,7 @@ use Illuminate\Notifications\Notifiable;
  * @property string|null $division
  * @property bool $is_active
  * @property bool $must_change_password
+ * @property Carbon|null $email_verified_at
  * @property-read Outlet|null $outlet
  */
 class User extends Authenticatable
@@ -54,6 +56,37 @@ class User extends Authenticatable
     public function outlet(): BelongsTo
     {
         return $this->belongsTo(Outlet::class);
+    }
+
+    /* ---------- Verifikasi email (API-35) ---------- */
+
+    /*
+     * hasVerifiedEmail() dan markEmailAsVerified() datang dari kelas induk
+     * Laravel — tidak ditulis ulang di sini. Yang TIDAK dipakai adalah
+     * notifikasi bawaannya: suratnya punya bentuk sendiri (App\Mail\VerifikasiEmail)
+     * dan tautannya diterbitkan PengirimVerifikasiEmail.
+     */
+
+    /**
+     * Alamat email yang disamarkan sebagian: `a****y@lessworry.id`.
+     *
+     * Halaman verifikasi dibuka di perangkat outlet yang terlihat orang lain.
+     * Yang perlu diketahui pemilik akun hanya "suratnya ke alamat yang benar
+     * atau tidak" — itu cukup dijawab huruf pertama, huruf terakhir, dan
+     * domainnya. Jumlah bintangnya dipatok empat supaya panjang alamat pun
+     * tidak ikut bocor.
+     */
+    public function emailTersamar(): string
+    {
+        [$lokal, $domain] = array_pad(explode('@', $this->email, 2), 2, '');
+
+        $samar = match (true) {
+            mb_strlen($lokal) <= 1 => '****',
+            mb_strlen($lokal) === 2 => mb_substr($lokal, 0, 1).'****',
+            default => mb_substr($lokal, 0, 1).'****'.mb_substr($lokal, -1),
+        };
+
+        return $domain === '' ? $samar : $samar.'@'.$domain;
     }
 
     /* ---------- Peran (API-13) ---------- */

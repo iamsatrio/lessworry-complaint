@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use App\Models\User;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
@@ -21,9 +22,24 @@ abstract class TestCase extends BaseTestCase
      * Test yang memang ingin meniru sesi basi tetap bisa: panggil
      * withSession(['password_hash_web' => ...]) setelah actingAs().
      */
+    /**
+     * Gerbang verifikasi email (API-35) menahan SETIAP halaman, jadi tanpa ini
+     * setiap test yang tidak ada hubungannya dengan verifikasi akan mendarat di
+     * /verifikasi-email dan gagal karena alasan yang bukan yang sedang diuji.
+     *
+     * Akun yang dipakai test dianggap sudah memverifikasi emailnya, kecuali
+     * test itu memang tentang verifikasi — EmailVerificationTest mematikan ini
+     * lewat properti di bawah dan menyetel sendiri keadaan yang mau diuji.
+     */
+    protected bool $verifikasiOtomatis = true;
+
     public function actingAs(Authenticatable $user, $guard = null)
     {
         $this->flushSession();
+
+        if ($this->verifikasiOtomatis && $user instanceof User && ! $user->hasVerifiedEmail()) {
+            $user->markEmailAsVerified();
+        }
 
         return parent::actingAs($user, $guard);
     }

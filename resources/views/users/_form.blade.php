@@ -1,11 +1,20 @@
 <label for="name">Nama lengkap <span class="req">*</span></label>
 <input id="name" name="name" value="{{ old('name', $user->name ?? '') }}" required>
 
-@if(!isset($user))
 <label for="email">Email <span class="req">*</span></label>
-<input id="email" type="email" name="email" value="{{ old('email') }}" required>
-<p class="hint">Dipakai untuk masuk ke sistem. Tidak bisa diubah setelah akun dibuat.</p>
-@endif
+<input id="email" type="email" name="email" value="{{ old('email', $user->email ?? '') }}" required>
+@isset($user)
+<p class="hint">
+  Dipakai untuk masuk, dan untuk mengirim tautan verifikasi. Kalau alamat ini diganti,
+  verifikasi akun ikut direset dan tautan lama yang sudah terkirim langsung mati —
+  {{ $user->name }} harus memverifikasi alamat barunya sebelum bisa memakai sistem lagi.
+</p>
+@else
+<p class="hint">
+  Dipakai untuk masuk ke sistem, dan untuk mengirim tautan verifikasi.
+  Pastikan kotak suratnya benar-benar ada dan bisa dibuka orangnya — tanpa itu dia tidak bisa masuk.
+</p>
+@endisset
 
 <label for="role">Peran <span class="req">*</span></label>
 <select id="role" name="role" required>
