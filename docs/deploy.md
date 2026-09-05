@@ -37,6 +37,54 @@ Daftar periksa sebelum sistem ini menyentuh data pelanggan sungguhan.
       `client_max_body_size 10m;` di nginx. Kalau servernya menolak lebih dulu,
       petugas menerima 413 tanpa penjelasan alih-alih pesan dari aplikasi.
 
+## Email — menahan rilis
+
+Sejak API-35, **tidak ada seorang pun bisa memakai sistem sebelum
+memverifikasi emailnya.** Login pertama mengirim tautan verifikasi; sampai
+tautan itu dibuka, akunnya hanya bisa membuka halaman verifikasi dan keluar.
+
+Itu membuat kotak surat jadi syarat mutlak untuk masuk, dan membuat dua hal
+di bawah ini menahan rilis — bukan menahan pembangunan:
+
+- [ ] **Kredensial SMTP untuk `lessworry.id` terpasang** (`MAIL_MAILER=smtp`
+      berikut `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`,
+      `MAIL_FROM_ADDRESS`). Semuanya dari environment, tidak pernah dari
+      repositori. Selama `MAIL_MAILER=log`, tautan verifikasi hanya mendarat
+      di `storage/logs` — cukup untuk pengembangan, tidak untuk orang.
+- [ ] **`APP_URL` benar.** Tautan verifikasi dibangun dari nilai ini. `APP_URL`
+      salah = tautan yang menunjuk ke mesin yang tidak ada.
+- [ ] **Daftar alamat email yang benar-benar ada sudah diperiksa satu per
+      satu.** Alamat yang salah ketik berarti akun yang tidak bisa dipakai.
+      Periksa terutama akun Admin: tanpa Admin yang bisa masuk, tidak ada yang
+      bisa memperbaiki akun siapa pun.
+- [ ] **Keputusan untuk akun bersama** (`kasir@`, `produksi@`, `kurir@`) sudah
+      diambil: diberi kotak surat sendiri, atau ditandai terverifikasi manual
+      oleh Admin lewat halaman Ubah Pengguna (alasannya wajib dan tercatat di
+      jejak audit akun).
+
+### Kalau semua orang terkunci di luar
+
+Tiga jalan keluar, dan semuanya sengaja ada:
+
+1. **Admin menandai akun terverifikasi secara manual** — halaman Pengguna →
+   Ubah → Verifikasi email. Alasannya wajib dan masuk jejak audit.
+2. **Admin mengubah alamat email seseorang** — untuk alamat yang salah ketik.
+   Mengubah alamat mereset verifikasinya dan mematikan tautan lama.
+3. **Dari shell, saat SMTP mati dan belum ada Admin terverifikasi:**
+
+   ```
+   php artisan lessworry:pulihkan-admin <email>
+   ```
+
+   Perintah itu mengangkat akun jadi admin aktif **sekaligus** menandainya
+   terverifikasi. Ini jaring pengaman terakhir — tanpa ia, SMTP yang mati di
+   hari rilis berarti tidak ada satu pun jalan masuk lewat antarmuka.
+
+Batas kirim: 3 tautan per 10 menit per akun untuk permintaan kirim ulang, dan
+3 lagi untuk surat otomatis saat login. Kegagalan kirim tidak pernah membalas
+500 — halaman verifikasi mengatakan suratnya gagal dan menyuruh menghubungi
+Admin, sementara galat aslinya masuk log dengan tingkat `error`.
+
 ## Pengaturan sesi
 
 Nilai bawaan sudah disetel untuk perangkat outlet yang dipakai bergantian:

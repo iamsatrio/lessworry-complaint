@@ -8,6 +8,7 @@ use App\Http\Controllers\ComplaintNoteController;
 use App\Http\Controllers\ComplaintResponsibleController;
 use App\Http\Controllers\ComplaintStatusController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\NeviraLookupController;
 use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\ReportController;
@@ -26,12 +27,27 @@ Route::middleware('guest')->group(function () {
 Route::middleware(['auth', 'auth.session', 'active'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-    // Ganti password harus bisa diakses walau password sementara belum diganti.
+    // Verifikasi email berdiri di depan gerbang ganti password (API-35).
+    // Rute-rute ini satu-satunya yang boleh dibuka akun yang emailnya
+    // belum terverifikasi — selain keluar.
+    Route::get('/verifikasi-email', [EmailVerificationController::class, 'notice'])->name('verification.notice');
+    Route::post('/verifikasi-email/kirim-ulang', [EmailVerificationController::class, 'resend'])
+        ->name('verification.send');
+    Route::get('/verifikasi-email/{id}/{hash}', [EmailVerificationController::class, 'verify'])
+        ->middleware('signed')
+        ->name('verification.verify');
+});
+
+// Ganti password harus bisa diakses walau password sementara belum diganti —
+// tapi TIDAK sebelum emailnya terverifikasi. Password sementara beredar lewat
+// chat; tanpa gerbang ini, siapa pun yang membacanya bisa mendahului pemilik
+// akun mengganti password. (API-35)
+Route::middleware(['auth', 'auth.session', 'active', 'email.verified'])->group(function () {
     Route::get('/password', [PasswordController::class, 'edit'])->name('password.edit');
     Route::put('/password', [PasswordController::class, 'update'])->name('password.update');
 });
 
-Route::middleware(['auth', 'auth.session', 'active', 'password.changed'])->group(function () {
+Route::middleware(['auth', 'auth.session', 'active', 'email.verified', 'password.changed'])->group(function () {
 
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
@@ -68,4 +84,7 @@ Route::middleware(['auth', 'auth.session', 'active', 'password.changed'])->group
     Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
     Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
     Route::post('/users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
+    // Jalan keluar saat kotak surat tidak bisa dipakai — akun bersama, atau
+    // alamat yang ternyata salah. Alasannya wajib dan tercatat. (API-35 4a)
+    Route::post('/users/{user}/verifikasi-email', [UserController::class, 'verifyEmail'])->name('users.verify-email');
 });

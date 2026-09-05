@@ -276,7 +276,12 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
 <header class="top">
   <div class="topin">
     <div class="brand">Less Worry<span>Complaint</span></div>
+    {{-- Akun yang emailnya belum terverifikasi tidak boleh ke mana-mana
+         (API-35). Menampilkan menu yang semuanya memantul balik hanya membuat
+         orang mengira sistemnya rusak. Elemen <nav> tetap ada supaya tata
+         letak headernya tidak berubah. --}}
     <nav>
+      @if(auth()->user()->hasVerifiedEmail())
       <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">Dashboard</a>
       <a href="{{ route('complaints.index') }}" class="{{ request()->routeIs('complaints.index') ? 'active' : '' }}">Papan Kerja</a>
       <a href="{{ route('reports.index') }}" class="{{ request()->routeIs('reports.*') ? 'active' : '' }}">Laporan</a>
@@ -285,6 +290,7 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
       @endif
       @if(auth()->user()->canCreateComplaint())
         <a href="{{ route('complaints.create') }}" class="cta">Catat Complaint</a>
+      @endif
       @endif
     </nav>
     <div class="who">
@@ -308,7 +314,7 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
 </main>
 
 @auth
-  @if(auth()->user()->canCreateComplaint() && ! request()->routeIs('complaints.create'))
+  @if(auth()->user()->hasVerifiedEmail() && auth()->user()->canCreateComplaint() && ! request()->routeIs('complaints.create'))
     <a href="{{ route('complaints.create') }}" class="btn fab">Catat Complaint</a>
   @endif
 @endauth

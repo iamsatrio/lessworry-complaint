@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Outlet;
 use App\Models\User;
+use App\Models\UserAudit;
+use App\Services\JejakPengguna;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -81,20 +83,35 @@ class UserController extends Controller
         return view('users.edit', [
             'user' => $user,
             'outlets' => Outlet::orderBy('name')->get(),
+            'jejak' => UserAudit::with('actor')->where('user_id', $user->id)
+                ->orderByDesc('id')->limit(20)->get(),
         ]);
     }
 
-    public function update(Request $request, User $user)
+    public function update(Request $request, User $user, JejakPengguna $jejak)
     {
         $this->authorizeAdmin($request);
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
+            // Alamat email bisa diubah admin. Tanpa ini, satu salah ketik saat
+            // membuat akun berarti akun yang tidak bisa dipakai selamanya —
+            // verifikasi email menjadikan kotak surat syarat mutlak. (API-35 4b)
+            //
+            // `sometimes`, mengikuti aturan yang sudah dipakai is_active di
+            // bawah: kolom yang tidak dikirim berarti "jangan diubah". Alamat
+            // email adalah satu-satunya jalan masuk sebuah akun — permintaan
+            // yang kebetulan tidak memuatnya tidak boleh menyentuhnya.
+            'email' => ['sometimes', 'required', 'email', 'max:190', Rule::unique('users', 'email')->ignore($user->id)],
             'role' => ['required', Rule::in(['kasir', 'customer_care', 'divisi', 'supervisor', 'admin'])],
             'outlet_id' => ['nullable', 'exists:outlets,id'],
             'division' => ['nullable', Rule::in(array_keys(config('complaint.divisions')))],
             'is_active' => ['nullable', 'boolean'],
         ]);
+
+        $emailLama = $user->email;
+        $emailBerubah = isset($data['email'])
+            && mb_strtolower(trim($data['email'])) !== mb_strtolower($emailLama);
 
         // Kolom yang tidak dikirim berarti "jangan diubah", bukan "matikan".
         // $request->boolean() memperlakukan kolom absen sebagai false, jadi
@@ -109,15 +126,35 @@ class UserController extends Controller
             return back()->withErrors(['is_active' => 'Kamu tidak bisa menonaktifkan akunmu sendiri.']);
         }
 
-        DB::transaction(function () use ($user, $data, $isActive) {
+        DB::transaction(function () use ($user, $data, $isActive, $emailBerubah, $emailLama, $jejak, $request) {
             $this->pastikanMasihAdaAdmin($user, $data['role'], $isActive);
 
             $user->fill($data);
             $user->is_active = $isActive;
+
+            // Verifikasi menyatakan "kotak surat ini terbukti dipegang
+            // pemiliknya". Begitu alamatnya diganti, pernyataan itu tidak
+            // berlaku lagi untuk alamat yang baru — jadi statusnya direset,
+            // dan tautan lama ikut mati karena terikat ke alamat lama.
+            if ($emailBerubah) {
+                $user->email_verified_at = null;
+            }
+
             $user->save();
+
+            if ($emailBerubah) {
+                $jejak->emailDiubah($user, $request->user(), $emailLama);
+            }
         });
 
-        return redirect()->route('users.index')->with('status', 'Data '.$user->name.' diperbarui.');
+        $pesan = 'Data '.$user->name.' diperbarui.';
+
+        if ($emailBerubah) {
+            $pesan .= ' Alamat emailnya berubah, jadi verifikasinya direset — '
+                .$user->name.' harus memverifikasi alamat barunya saat masuk lagi.';
+        }
+
+        return redirect()->route('users.index')->with('status', $pesan);
     }
 
     /**
@@ -172,6 +209,42 @@ class UserController extends Controller
             $kolom => 'Ini satu-satunya admin aktif. Angkat admin lain dulu — '
                 .'tanpa admin, tidak ada yang bisa membuka pengelolaan pengguna lagi.',
         ]);
+    }
+
+    /**
+     * Menandai satu akun terverifikasi tanpa lewat email. (API-35 bagian 4a)
+     *
+     * Dibutuhkan dua keadaan yang keduanya nyata: akun bersama yang tidak
+     * punya kotak surat sendiri (Kasir, Produksi, Kurir), dan alamat yang
+     * ternyata tidak ada. Tanpa jalan ini, verifikasi email berubah dari
+     * pengaman menjadi kunci yang mengurung semua orang di luar.
+     *
+     * Ini MELEMAHKAN pengaman, jadi alasannya wajib dan jejaknya dicatat:
+     * siapa menandai siapa, kapan, dan kenapa.
+     */
+    public function verifyEmail(Request $request, User $user, JejakPengguna $jejak)
+    {
+        $this->authorizeAdmin($request);
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:5', 'max:500'],
+        ], [
+            'reason.required' => 'Tulis alasannya. Penandaan tanpa alasan tidak bisa ditelusuri belakangan.',
+        ], [
+            'reason' => 'alasan',
+        ]);
+
+        if ($user->hasVerifiedEmail()) {
+            return back()->with('warning', 'Akun '.$user->name.' sudah terverifikasi.');
+        }
+
+        $user->markEmailAsVerified();
+        $jejak->emailDiverifikasiManual($user, $request->user(), $data['reason']);
+
+        return redirect()->route('users.edit', $user)->with(
+            'status',
+            $user->name.' ditandai terverifikasi. Alasannya tercatat di jejak audit akun ini.'
+        );
     }
 
     /** Setel ulang password jadi sementara — untuk pegawai yang lupa. */

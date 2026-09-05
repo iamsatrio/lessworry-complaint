@@ -176,6 +176,19 @@ class DatabaseSeeder extends Seeder
         $this->command->table(['Nama', 'Email', 'Peran', 'Password sementara'], $dicetak);
         $this->command->warn('Password di atas hanya ditampilkan sekali. Tidak tersimpan di mana pun.');
         $this->command->line('Sampaikan lewat jalur pribadi, jangan grup. Semuanya wajib diganti saat login pertama.');
+        $this->command->newLine();
+        // Seeder TIDAK menandai satu pun akun terverifikasi. Verifikasi harus
+        // dibuktikan, bukan diberikan — kalau seeder memberikannya, gerbang
+        // yang baru dipasang tidak menahan apa pun. Yang perlu diketahui orang
+        // yang menjalankan seeder adalah akibatnya, dan jalan keluarnya.
+        $this->command->warn('Belum ada akun yang terverifikasi emailnya.');
+        $this->command->line(
+            'Login pertama akan mengirim tautan verifikasi ke alamat di atas. Alamat yang '
+            .'tidak ada berarti akun yang tidak bisa dipakai — periksa dulu sebelum dibagikan.'
+        );
+        $this->command->line(
+            'Kalau SMTP belum siap atau semua admin terkurung: php artisan lessworry:pulihkan-admin <email>'
+        );
     }
 
     /**
