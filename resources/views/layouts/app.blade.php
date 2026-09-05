@@ -225,7 +225,6 @@ details.filters .body{padding:0 22px 20px}
 @media(max-width:820px){
   .fab{display:flex;position:fixed;left:16px;right:16px;bottom:16px;z-index:30;
     box-shadow:0 10px 30px -8px rgba(20,124,114,.55)}
-  main{padding-bottom:104px}
   nav a.cta{display:none}
 }
 
@@ -235,7 +234,12 @@ details.filters .body{padding:0 22px 20px}
   .hide-sm{display:none !important}
   .cards{display:block}
   h1{font-size:25px}
-  main{padding:22px 16px 60px}
+  /* Ruang bawah dilebihkan supaya tombol melayang "Catat Complaint"
+     (fixed, bottom:16px, tinggi 49px) mengambang di atas ruang kosong,
+     bukan di atas kartu complaint terakhir. Aturan ini datang SETELAH
+     .fab di atas, jadi padding-bottom-nya tidak boleh mengecil lagi —
+     itu yang dulu menutupi satu kartu di setiap posisi gulir. (API-38 #3) */
+  main{padding:22px 16px 104px}
   /* Nav pindah ke baris sendiri supaya tidak tertimbun tombol Keluar */
   .topin{padding:0 16px;gap:12px;flex-wrap:wrap;min-height:0;padding-top:12px}
   .brand{flex:1}
