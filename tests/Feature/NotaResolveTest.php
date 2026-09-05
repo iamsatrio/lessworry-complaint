@@ -100,8 +100,8 @@ class NotaResolveTest extends TestCase
         $this->fakeOk();
 
         $this->actingAs($this->cc())->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Ibu Sari', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'Noda belum hilang',
+            'channel' => 'wa_cc', 'reporter_name' => 'Ibu Sari', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'Noda belum hilang',
             'nevira_transaction_number' => self::NOTA,
         ])->assertRedirect();
 
@@ -125,8 +125,8 @@ class NotaResolveTest extends TestCase
         $this->fakeOk();
 
         $complaint = new Complaint([
-            'channel' => 'wa_cc', 'reporter_name' => 'Ibu Sari', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'status' => 'baru', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'Ibu Sari', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'status' => 'open', 'description' => 'x',
         ]);
         $complaint->ticket_number = Complaint::nextTicketNumber();
         $complaint->created_at = now();
@@ -150,8 +150,8 @@ class NotaResolveTest extends TestCase
 
         $this->actingAs($this->cc())->post('/complaints', [
             'channel' => 'wa_cc', 'reporter_name' => 'Adik pemilik order',
-            'reporter_phone' => '089999999999', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'Diantar adiknya',
+            'reporter_phone' => '089999999999', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'Diantar adiknya',
             'nevira_transaction_number' => self::NOTA,
         ]);
 

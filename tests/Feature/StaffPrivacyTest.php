@@ -34,13 +34,13 @@ class StaffPrivacyTest extends TestCase
     private function complaintDenganKurir(?Outlet $outlet = null): Complaint
     {
         $complaint = new Complaint([
-            'channel' => 'kasir', 'reporter_name' => 'Pelapor', 'category' => 'keterlambatan',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'kasir', 'reporter_name' => 'Pelapor', 'category' => 'terlambat',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
             'nevira_transaction_number' => 'INV/118/1/1',
             'outlet_id' => $outlet?->id,
         ]);
         $complaint->ticket_number = Complaint::nextTicketNumber();
-        $complaint->status = 'baru';
+        $complaint->status = 'open';
         $complaint->applySla();
         $complaint->save();
 

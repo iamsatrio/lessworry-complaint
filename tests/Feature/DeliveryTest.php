@@ -16,10 +16,10 @@ class DeliveryTest extends TestCase
     private function makeComplaint(array $attrs = []): Complaint
     {
         $c = new Complaint(array_merge([
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelanggan', 'category' => 'keterlambatan',
-            'priority' => 'medium', 'description' => 'Keluhan uji',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelanggan', 'category' => 'terlambat',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'Keluhan uji',
         ], $attrs));
-        $c->status = $attrs['status'] ?? 'baru';
+        $c->status = $attrs['status'] ?? 'open';
         $c->ticket_number = Complaint::nextTicketNumber();
         $c->created_at = now();
         $c->applySla();
@@ -92,8 +92,8 @@ class DeliveryTest extends TestCase
         ]);
 
         $this->actingAs($cc)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Tuti', 'category' => 'keterlambatan',
-            'priority' => 'high', 'description' => 'Telat diantar',
+            'channel' => 'wa_cc', 'reporter_name' => 'Tuti', 'category' => 'terlambat',
+            'bobot' => 'berat', 'layanan' => 'kiloan', 'description' => 'Telat diantar',
             'nevira_transaction_number' => 'INV/123/1',
         ]);
 
@@ -124,8 +124,8 @@ class DeliveryTest extends TestCase
         ]);
 
         $this->actingAs($cc)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Tuti', 'category' => 'keterlambatan',
-            'priority' => 'high', 'description' => 'Telat diantar',
+            'channel' => 'wa_cc', 'reporter_name' => 'Tuti', 'category' => 'terlambat',
+            'bobot' => 'berat', 'layanan' => 'kiloan', 'description' => 'Telat diantar',
             'nevira_transaction_number' => 'INV/123/1',
         ]);
 

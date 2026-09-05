@@ -74,13 +74,13 @@ class MultiResponsibleTest extends TestCase
     private function complaint(array $attrs = []): Complaint
     {
         $complaint = new Complaint(array_merge([
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'Kemeja masih bernoda dan telat diantar.',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'Kemeja masih bernoda dan telat diantar.',
             'nevira_transaction_number' => 'INV/118/1787749345365/1',
             'outlet_id' => $this->outlet()->id,
         ], $attrs));
         $complaint->ticket_number = Complaint::nextTicketNumber();
-        $complaint->status = 'baru';
+        $complaint->status = 'open';
         $complaint->created_at = now();
         $complaint->applySla();
         $complaint->save();

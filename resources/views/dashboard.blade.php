@@ -23,7 +23,7 @@
 @if($avgMinutes !== null)
 <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
   <span class="muted">Rata-rata waktu penyelesaian, 30 hari terakhir</span>
-  <b class="display" style="font-size:20px;color:var(--teal-deep)">{{ intdiv($avgMinutes,60) }} jam {{ $avgMinutes%60 }} menit</b>
+  <b class="display" style="font-size:20px;color:var(--teal-deep)">{{ \App\Models\Complaint::humanMinutes($avgMinutes) }}</b>
 </div>
 @endif
 
@@ -33,14 +33,14 @@
     <h2 style="color:var(--danger)">Lewat tenggat — tangani lebih dulu</h2>
   </div>
   <table>
-    <thead><tr><th>Tiket</th><th>Pelapor</th><th>Kategori</th><th>Prioritas</th><th>Keterlambatan</th></tr></thead>
+    <thead><tr><th>Tiket</th><th>Pelapor</th><th>Kategori</th><th>Bobot</th><th>Keterlambatan</th></tr></thead>
     <tbody>
     @foreach($overdue as $complaint)
     <tr>
       <td><a href="{{ route('complaints.show',$complaint) }}" class="tix">{{ $complaint->ticket_number }}</a></td>
       <td>{{ $complaint->reporter_name }}</td>
       <td>{{ $complaint->categoryLabel() }}</td>
-      <td><span class="badge p-{{ $complaint->priority }}">{{ config('complaint.priorities.'.$complaint->priority) }}</span></td>
+      <td><span class="badge w-{{ $complaint->bobot }}">{{ $complaint->bobotLabel() }}</span></td>
       <td>@include('partials.sla')</td>
     </tr>
     @endforeach
@@ -95,7 +95,7 @@
       <td>{{ $c->reporter_name }}</td>
       <td class="muted small">{{ $c->channelLabel() }}</td>
       <td class="muted small">{{ $c->outlet?->name ?? '—' }}</td>
-      <td><span class="badge b-{{ $c->status }}">{{ $c->statusLabel() }}</span></td>
+      <td><span class="badge b-{{ $c->status }}">{{ $c->statusDisplay() }}</span></td>
       <td class="muted small">{{ $c->created_at->diffForHumans() }}</td>
     </tr>
     @endforeach

@@ -6,6 +6,7 @@ use App\Models\Complaint;
 use App\Models\ComplaintActivity;
 use App\Models\ComplaintResponsible;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 
 /**
  * Satu tempat yang tahu cara menulis riwayat complaint.
@@ -27,7 +28,7 @@ class JejakComplaint
     public function dibuat(Complaint $complaint, User $user): ComplaintActivity
     {
         return $this->tulis($complaint, $user, 'created', [
-            'to_status' => 'baru',
+            'to_status' => 'open',
             'note' => 'Complaint dibuat lewat '.$complaint->channelLabel(),
         ]);
     }
@@ -56,6 +57,38 @@ class JejakComplaint
     {
         return $this->tulis($complaint, $user, 'note', [
             'note' => 'Kompensasi diubah dari Rp '.$this->rupiah($dari).' ke Rp '.$this->rupiah($ke).'.',
+        ]);
+    }
+
+    /**
+     * Jeda SLA dimulai. Jeda memundurkan tenggat, jadi ia harus punya
+     * jejaknya sendiri — bukan menumpang di baris perubahan status.
+     */
+    public function slaDijeda(Complaint $complaint, User $user): ComplaintActivity
+    {
+        return $this->tulis($complaint, $user, 'note', [
+            'note' => 'SLA dijeda: '.$complaint->pauseReasonLabel().'.',
+        ]);
+    }
+
+    public function slaDilanjutkan(Complaint $complaint, User $user, int $menit): ComplaintActivity
+    {
+        return $this->tulis($complaint, $user, 'note', [
+            'note' => 'SLA dilanjutkan setelah dijeda '.Complaint::humanMinutes($menit)
+                .'. Tenggat mundur sebanyak itu.',
+        ]);
+    }
+
+    /**
+     * Penutupan yang dibatalkan. Boleh, tapi tidak boleh tanpa bekas: blok
+     * penerapan status mengosongkan resolved_at, dan tanpa baris ini waktu
+     * penyelesaian yang "selalu dihitung sistem" hilang permanen.
+     */
+    public function penutupanDibatalkan(Complaint $complaint, User $user, Carbon $selesaiSebelumnya): ComplaintActivity
+    {
+        return $this->tulis($complaint, $user, 'note', [
+            'note' => 'Penutupan dibatalkan. Sebelumnya tercatat selesai '
+                .$selesaiSebelumnya->translatedFormat('d M Y, H:i').'.',
         ]);
     }
 

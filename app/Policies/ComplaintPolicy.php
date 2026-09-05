@@ -37,10 +37,53 @@ class ComplaintPolicy
         return $user->canView($complaint);
     }
 
-    /** Mengubah status. Wewenang menutup (selesai/ditolak) dicek terpisah di controller. */
+    /**
+     * Mengubah status. Tiga tindakan di dalamnya punya syarat lebih berat dan
+     * berdiri sendiri di bawah: close(), pause(), dan reopen().
+     */
     public function updateStatus(User $user, Complaint $complaint): bool
     {
         return $user->canView($complaint);
+    }
+
+    /**
+     * Menutup complaint. Kasir hanya boleh yang berbobot Ringan. (API-25 #5)
+     *
+     * Batas kompensasinya TIDAK ikut ke sini: ia bergantung pada angka yang
+     * dikirim form, bukan hanya pada pengguna dan complaint-nya, jadi tempatnya
+     * tetap di ComplaintStatusController — sama seperti alasan main dulu
+     * menyisakan pemeriksaan penutupan di controller.
+     */
+    public function close(User $user, Complaint $complaint): bool
+    {
+        return $user->canView($complaint) && $user->canResolve($complaint);
+    }
+
+    /**
+     * MEMULAI jeda SLA. Sumbu yang sama dengan menutup. (Review PR #1 temuan B)
+     *
+     * Jeda menghentikan jam SLA, jadi ia menentukan apakah sebuah tiket bisa
+     * berubah merah di papan. Tanpa batas, satu outlet punya cara membungkam
+     * papan per tiket.
+     *
+     * Melanjutkan tiket tidak lewat sini: arahnya aman — ia mengembalikan
+     * tiket ke hitungan SLA alih-alih menyembunyikannya.
+     */
+    public function pause(User $user, Complaint $complaint): bool
+    {
+        return $user->canView($complaint) && $user->canPause($complaint);
+    }
+
+    /**
+     * Membuka kembali tiket yang sudah ditutup. (Review PR #1 temuan A)
+     *
+     * Kebalikan sebuah tindakan berwewenang tetap tindakan berwewenang: kalau
+     * kamu tidak boleh menutupnya, kamu tidak boleh membatalkan penutupan
+     * orang lain.
+     */
+    public function reopen(User $user, Complaint $complaint): bool
+    {
+        return $user->canView($complaint) && $user->canReopen($complaint);
     }
 
     /** Menambah catatan penanganan beserta fotonya. */

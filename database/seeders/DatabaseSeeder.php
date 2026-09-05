@@ -72,38 +72,43 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // Contoh complaint supaya papan kerja dan laporan tidak kosong saat pertama dibuka.
+        // Kategori, bobot, layanan, dan status memakai taksonomi tim. (API-25)
+        //
         // Bentuknya ditulis supaya analisis statis tidak menyimpulkan tipe
         // literal dari isi contoh — status di sini data, bukan daftar tetap,
         // dan penjagaan di bawah harus tetap berlaku kalau barisnya berubah.
-        /** @var list<array{0:string,1:string,2:string,3:string,4:string,5:string,6:string,7:string,8:int,9:string,10:string|null}> $samples */
+        /** @var list<array{0:string,1:string,2:string,3:string,4:string|null,5:string,6:string,7:string,8:string|null,9:string|null,10:string,11:int,12:string,13:string|null}> $samples */
         $samples = [
-            ['wa_cc', 'Ibu Rina', '081234567801', 'hasil_cuci', 'Masih kotor', 'urgent', 'baru',
+            ['wa_cc', 'Ibu Rina', '081234567801', 'kurang_bersih', null, 'sedang', 'kiloan_cuset', 'open', null, null,
                 'Kemeja putih masih ada noda di bagian kerah setelah dicuci.', $pusat->id, '-3 hours', null],
-            ['kasir', 'Pak Budi', '081234567802', 'barang_hilang', 'Item kurang', 'high', 'ditangani',
+            ['kasir', 'Pak Budi', '081234567802', 'barang_hilang', 'Item kurang', 'berat', 'kiloan', 'handling', null, null,
                 'Pelanggan menghitung 12 potong saat menyerahkan, yang kembali 11 potong.', $pusat->id, '-26 hours', null],
-            ['wa_outlet', 'Mbak Sinta', '081234567803', 'keterlambatan', 'Telat selesai', 'medium', 'selesai',
+            ['wa_outlet', 'Mbak Sinta', '081234567803', 'terlambat', 'Telat selesai', 'ringan', 'satuan_cloth', 'close', 'selesai', 'proses_ulang',
                 'Dijanjikan selesai Selasa, baru bisa diambil Kamis.', $cabang->id, '-5 days', '-4 days'],
-            ['wa_cc', 'Ibu Rina', '081234567801', 'salah_tagih', 'Berat tidak sesuai', 'medium', 'selesai',
-                'Ditagih 5kg padahal timbangan menunjukkan 4,2kg.', $pusat->id, '-8 days', '-8 days'],
-            ['kasir', 'Pak Deni', '081234567804', 'hasil_cuci', 'Bau', 'high', 'menunggu_pelanggan',
+            ['wa_cc', 'Ibu Rina', '081234567801', 'kurang_rapih', null, 'ringan', 'satuan_bedding', 'close', 'ditolak', 'terkonfirmasi',
+                'Sprei terlihat kusut saat diterima.', $pusat->id, '-8 days', '-8 days'],
+            ['kasir', 'Pak Deni', '081234567804', 'berbau', null, 'sedang', 'kiloan_culip', 'handling', null, null,
                 'Cucian bau apek. Diminta membawa kembali untuk dicuci ulang.', $cabang->id, '-2 days', null],
         ];
 
-        foreach ($samples as [$channel, $name, $phone, $cat, $sub, $priority, $status, $desc, $outletId, $created, $resolved]) {
+        foreach ($samples as [$channel, $name, $phone, $cat, $sub, $bobot, $layanan, $status, $closeReason, $tindakLanjut, $desc, $outletId, $created, $resolved]) {
             $complaint = new Complaint([
                 'channel' => $channel, 'reporter_name' => $name, 'reporter_phone' => $phone,
-                'category' => $cat, 'sub_category' => $sub, 'priority' => $priority,
-                'status' => $status, 'description' => $desc, 'outlet_id' => $outletId,
+                'category' => $cat, 'sub_category' => $sub, 'bobot' => $bobot, 'layanan' => $layanan,
+                'description' => $desc, 'outlet_id' => $outletId,
             ]);
 
+            $complaint->status = $status;
+            $complaint->close_reason = $closeReason;
+            $complaint->tindak_lanjut = $tindakLanjut;
             $complaint->created_at = now()->parse($created);
             $complaint->updated_at = $complaint->created_at;
             $complaint->ticket_number = Complaint::nextTicketNumber();
             $complaint->created_by = $channel === 'kasir' ? $kasir->id : $cc->id;
-            $complaint->assigned_to = $status === 'baru' ? null : $cc->id;
+            $complaint->assigned_to = $status === 'open' ? null : $cc->id;
             $complaint->applySla();
 
-            if ($status !== 'baru') {
+            if ($status !== 'open') {
                 $complaint->first_response_at = $complaint->created_at->copy()->addMinutes(35);
             }
 
@@ -118,9 +123,17 @@ class DatabaseSeeder extends Seeder
 
             ComplaintActivity::create([
                 'complaint_id' => $complaint->id, 'user_id' => $complaint->created_by,
-                'type' => 'created', 'to_status' => 'baru',
+                'type' => 'created', 'to_status' => 'open',
                 'note' => 'Complaint dibuat lewat '.$complaint->channelLabel(),
             ]);
         }
+
+        // Satu contoh tiket yang sedang dijeda: Handling di papan, tapi jam
+        // SLA-nya berhenti sampai pelanggan membalas.
+        $dijeda = Complaint::where('category', 'berbau')->first();
+        $dijeda->forceFill([
+            'paused_at' => now()->subDay(),
+            'pause_reason' => 'menunggu_pelanggan',
+        ])->save();
     }
 }
