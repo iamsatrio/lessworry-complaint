@@ -52,15 +52,36 @@ class DatabaseSeeder extends Seeder
     }
 
     /**
-     * Akun demo dari seeder lama. Tiga di antaranya memakai email yang
-     * sekarang dipakai akun sungguhan, dan semuanya memakai password
-     * harfiah `password` yang ada di riwayat commit publik.
+     * Alamat yang TIDAK BOLEH lagi bisa dimasuki.
      *
-     * Yang emailnya dipakai ulang diperbaiki oleh daftar di bawah. Yang
-     * tidak dipakai lagi harus dinonaktifkan — kalau hanya dilewati, akun
-     * itu hidup terus dengan password yang bisa dibaca siapa pun.
+     * Tiga sumbernya, satu perlakuannya:
+     *
+     * 1. Akun demo seeder lama (`cc@`, `kasirbaru@`) — password harfiah
+     *    `password` yang ada di riwayat commit publik.
+     * 2. Empat orang yang dibuang dari daftar akun (API-36): `samsuri@`,
+     *    `arifin@`, `adhyasta@`, `audry@`. Cukup dihapus dari daftar hanya
+     *    kalau basis datanya baru; di mesin yang sudah memuat 11 akun versi
+     *    lama, menghapus barisnya dari `$daftar` justru MENINGGALKANNYA
+     *    HIDUP — seeder tidak menyentuh apa yang tidak disebutnya.
+     * 3. Tiga alamat yang berganti domain: `kasir@`, `produksi@`, `kurir@`
+     *    di `lessworry.id`. Orangnya tetap, alamatnya pindah ke
+     *    `getnada.com`, jadi baris lamanya adalah akun kedua yang tidak
+     *    dipakai siapa-siapa — dan masih menerima password lamanya.
+     *
+     * Dinonaktifkan dan passwordnya dibuang, bukan dihapus: complaint
+     * menyimpan siapa yang mencatat dan menutupnya, dan jejak itu harus utuh.
      */
-    private const DEMO_LAMA = ['cc@lessworry.id', 'kasirbaru@lessworry.id'];
+    private const DEMO_LAMA = [
+        'cc@lessworry.id',
+        'kasirbaru@lessworry.id',
+        'samsuri@lessworry.id',
+        'arifin@lessworry.id',
+        'adhyasta@lessworry.id',
+        'audry@lessworry.id',
+        'kasir@lessworry.id',
+        'produksi@lessworry.id',
+        'kurir@lessworry.id',
+    ];
 
     /**
      * Password harfiah yang dibagikan seeder-seeder lama, dan yang karena itu
@@ -88,22 +109,29 @@ class DatabaseSeeder extends Seeder
     {
         $tebet = Outlet::where('nevira_outlet_id', '118')->first();
 
+        // Daftar yang ditetapkan satrio (API-36): tujuh akun, bukan sebelas.
+        //
+        // Tiga akun bersama — Kasir, Produksi, Kurir — dipakai bergantian oleh
+        // beberapa orang, jadi alamatnya bukan alamat pribadi siapa pun.
+        // Alamatnya `getnada.com` supaya password sementara bisa diterima
+        // saat uji coba. Kotak surat itu bisa dibaca siapa saja yang tahu
+        // alamatnya, jadi ia CUKUP untuk mengantar password sekali pakai dan
+        // TIDAK CUKUP sebagai bukti kepemilikan akun — verifikasi email
+        // (API-35) tidak boleh bersandar padanya.
+        //
+        // Tidak ada akun Customer Care di sini, dan itu memang isi daftarnya.
+        // Akibatnya complaint Sedang dan Berat tidak punya penutup selain
+        // supervisor dan admin; sudah diangkat ke satrio di API-36.
         $daftar = [
             ['Satrio Wibowo', 'satrio@lessworry.id', 'admin', null, null],
             ['Ainul Ghozi', 'ghozi@lessworry.id', 'admin', null, null],
             ['Eric', 'eric@lessworry.id', 'admin', null, null],
 
             ['Tsulasa', 'tsulasa@lessworry.id', 'supervisor', null, null],
-            ['Samsuri', 'samsuri@lessworry.id', 'supervisor', null, null],
 
-            ['Audry', 'audry@lessworry.id', 'customer_care', null, null],
-            ['Adhyasta Dwi Yudistira', 'adhyasta@lessworry.id', 'customer_care', null, null],
-
-            ['Arifin', 'arifin@lessworry.id', 'divisi', 'produksi', null],
-
-            ['Kasir', 'kasir@lessworry.id', 'kasir', null, $tebet?->id],
-            ['Produksi', 'produksi@lessworry.id', 'divisi', 'produksi', null],
-            ['Kurir', 'kurir@lessworry.id', 'divisi', 'kurir', null],
+            ['Kasir', 'kasir@getnada.com', 'kasir', null, $tebet?->id],
+            ['Produksi', 'produksi@getnada.com', 'divisi', 'produksi', null],
+            ['Kurir', 'kurir@getnada.com', 'divisi', 'kurir', null],
         ];
 
         $dicetak = [];
@@ -179,9 +207,13 @@ class DatabaseSeeder extends Seeder
     }
 
     /**
-     * Akun demo yang tidak dipakai lagi dinonaktifkan dan passwordnya diganti
+     * Alamat yang tidak dipakai lagi dinonaktifkan dan passwordnya diganti
      * acak — bukan dihapus, supaya jejak audit complaint yang pernah
      * disentuhnya tetap utuh.
+     *
+     * Passwordnya diganti tanpa syarat, bukan hanya kalau masih bocor:
+     * akun ini tidak boleh bisa dimasuki lagi apa pun password terakhirnya,
+     * dan `is_active = false` saja bisa terbalik oleh satu perbaikan manual.
      */
     private function matikanDemoLama(): void
     {
@@ -205,7 +237,7 @@ class DatabaseSeeder extends Seeder
 
         if ($dimatikan) {
             $this->command->warn(
-                'Akun demo lama dinonaktifkan dan passwordnya dibuang: '.implode(', ', $dimatikan)
+                'Akun lama dinonaktifkan dan passwordnya dibuang: '.implode(', ', $dimatikan)
             );
         }
     }
