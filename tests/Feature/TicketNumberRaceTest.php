@@ -30,11 +30,11 @@ class TicketNumberRaceTest extends TestCase
     private function complaint(?string $ticket = null): Complaint
     {
         $complaint = new Complaint([
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
         ]);
         $complaint->ticket_number = $ticket ?? Complaint::nextTicketNumber();
-        $complaint->status = 'baru';
+        $complaint->status = 'open';
         $complaint->applySla();
         $complaint->save();
 
@@ -44,8 +44,8 @@ class TicketNumberRaceTest extends TestCase
     private function catatComplaint(User $user)
     {
         return $this->actingAs($user)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor Baru', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'Keluhan', 'nota_exemption' => 'belum_terbit',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor Baru', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'Keluhan', 'nota_exemption' => 'belum_terbit',
         ]);
     }
 

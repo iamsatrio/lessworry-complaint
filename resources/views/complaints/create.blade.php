@@ -57,10 +57,22 @@
       </select>
     </div>
     <div><label for="sub">Rincian</label><select id="sub" name="sub_category"></select></div>
-    <div><label for="pri">Prioritas <span class="req">*</span></label>
-      <select id="pri" name="priority" required>
-        @foreach(config('complaint.priorities') as $k=>$v)
-          <option value="{{ $k }}" @selected(($nilai('priority') ?? 'medium')===$k)>{{ $v }}</option>
+    {{-- Bobot memakai kosakata tim: Ringan / Sedang / Berat. Tidak ada yang
+         terpilih lebih dulu — bobot menentukan tenggat DAN siapa yang boleh
+         menutup, jadi ia harus dipilih, bukan kebetulan. --}}
+    <div><label for="bob">Bobot <span class="req">*</span></label>
+      <select id="bob" name="bobot" required>
+        <option value="" disabled @selected(blank($nilai('bobot')))>— pilih bobot —</option>
+        @foreach(config('complaint.bobot') as $k=>$v)
+          <option value="{{ $k }}" @selected($nilai('bobot')===$k)>{{ $v }}</option>
+        @endforeach
+      </select>
+    </div>
+    <div><label for="lay">Layanan <span class="req">*</span></label>
+      <select id="lay" name="layanan" required>
+        <option value="" disabled @selected(blank($nilai('layanan')))>— pilih layanan —</option>
+        @foreach(config('complaint.layanan') as $k=>$v)
+          <option value="{{ $k }}" @selected($nilai('layanan')===$k)>{{ $v }}</option>
         @endforeach
       </select>
     </div>

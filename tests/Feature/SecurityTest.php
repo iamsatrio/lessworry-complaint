@@ -53,8 +53,8 @@ class SecurityTest extends TestCase
     public function test_halaman_complaint_tidak_pernah_menampilkan_id_internal(): void
     {
         $complaint = new Complaint([
-            'channel' => 'wa_cc', 'reporter_name' => 'P', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'P', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
             'nevira_transaction_number' => self::NOTA,
         ]);
         $complaint->ticket_number = Complaint::nextTicketNumber();
@@ -79,18 +79,18 @@ class SecurityTest extends TestCase
         $this->fakeNevira();
 
         $this->actingAs($this->userAs('customer_care'))->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'P', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'P', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
             'nota_exemption' => 'lebih_sebulan',
             'nevira_transaction_id' => '999999',
-            'status' => 'selesai',
+            'status' => 'close', 'close_reason' => 'selesai',
             'compensation_amount' => 999999,
         ]);
 
         $complaint = Complaint::latest('id')->first();
 
         $this->assertNull($complaint->nevira_transaction_id);
-        $this->assertSame('baru', $complaint->status);
+        $this->assertSame('open', $complaint->status);
         $this->assertSame(0, (int) $complaint->compensation_amount);
     }
 
@@ -168,8 +168,8 @@ class SecurityTest extends TestCase
         $cc = $this->userAs('customer_care');
 
         $this->actingAs($cc)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'P', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x', 'outlet_id' => $outletA->id,
+            'channel' => 'wa_cc', 'reporter_name' => 'P', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x', 'outlet_id' => $outletA->id,
             'nota_exemption' => 'lebih_sebulan',
             'attachments' => [UploadedFile::fake()->image('bukti.jpg')],
         ]);
@@ -202,8 +202,8 @@ class SecurityTest extends TestCase
         $cc = $this->userAs('customer_care');
 
         $this->actingAs($cc)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'P', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x', 'nota_exemption' => 'lebih_sebulan',
+            'channel' => 'wa_cc', 'reporter_name' => 'P', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x', 'nota_exemption' => 'lebih_sebulan',
             'attachments' => [UploadedFile::fake()->image('bukti.jpg')],
         ]);
 
@@ -211,8 +211,8 @@ class SecurityTest extends TestCase
         $lampiran = $berlampiran->attachments()->first();
 
         $this->actingAs($cc)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Q', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'y', 'nota_exemption' => 'lebih_sebulan',
+            'channel' => 'wa_cc', 'reporter_name' => 'Q', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'y', 'nota_exemption' => 'lebih_sebulan',
         ]);
 
         $lain = Complaint::latest('id')->first();

@@ -54,8 +54,8 @@ class NeviraErrorMessageTest extends TestCase
         $cc = $this->cc();
 
         $this->actingAs($cc)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
             'nevira_transaction_number' => self::NOTA,
         ])->assertRedirect();
 
@@ -73,8 +73,8 @@ class NeviraErrorMessageTest extends TestCase
         $cc = $this->cc();
 
         $this->actingAs($cc)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
             'nevira_transaction_number' => self::NOTA,
         ]);
 

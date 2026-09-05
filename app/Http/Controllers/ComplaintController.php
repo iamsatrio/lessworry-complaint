@@ -46,7 +46,7 @@ class ComplaintController extends Controller
                 ->orderBy('due_resolution_at');
         }
 
-        foreach (['category', 'priority', 'channel', 'outlet_id'] as $filter) {
+        foreach (['category', 'bobot', 'channel', 'outlet_id', 'layanan'] as $filter) {
             if ($request->filled($filter)) {
                 $query->where($filter, $request->input($filter));
             }
@@ -144,7 +144,7 @@ class ComplaintController extends Controller
         return DB::transaction(function () use ($data, $user, $berkas) {
             $complaint = new Complaint($data);
             $complaint->ticket_number = Complaint::nextTicketNumber();
-            $complaint->status = 'baru';
+            $complaint->status = 'open';
             $complaint->created_by = $user->id;
             $complaint->created_at = now();
             $complaint->applySla();

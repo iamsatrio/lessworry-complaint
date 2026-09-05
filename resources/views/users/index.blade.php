@@ -36,7 +36,7 @@
       <td>{{ $u->roleLabel() }}</td>
       <td class="muted small">{{ $u->outlet?->name ?? ($u->division ? config('complaint.divisions.'.$u->division) : '—') }}</td>
       <td>
-        <span class="badge {{ $u->is_active ? 'b-selesai' : 'b-ditolak' }}">{{ $u->is_active ? 'Aktif' : 'Nonaktif' }}</span>
+        <span class="badge {{ $u->is_active ? "b-close" : "w-ringan" }}">{{ $u->is_active ? 'Aktif' : 'Nonaktif' }}</span>
       </td>
       <td style="text-align:right;white-space:nowrap">
         <a href="{{ route('users.edit',$u) }}" class="small">Ubah</a>
@@ -56,7 +56,7 @@
   <div class="ccard" @if(!$u->is_active) style="opacity:.55" @endif>
     <div class="hd">
       <span class="nm">{{ $u->name }}</span>
-      <span class="badge {{ $u->is_active ? 'b-selesai' : 'b-ditolak' }}">{{ $u->is_active ? 'Aktif' : 'Nonaktif' }}</span>
+      <span class="badge {{ $u->is_active ? "b-close" : "w-ringan" }}">{{ $u->is_active ? 'Aktif' : 'Nonaktif' }}</span>
     </div>
     <div class="meta">{{ $u->roleLabel() }} · {{ $u->email }}</div>
     <a href="{{ route('users.edit',$u) }}" class="btn ghost" style="padding:8px 16px;min-height:38px">Ubah</a>

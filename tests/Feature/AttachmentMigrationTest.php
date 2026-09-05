@@ -22,11 +22,11 @@ class AttachmentMigrationTest extends TestCase
     private function complaint(): Complaint
     {
         $complaint = new Complaint([
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
         ]);
         $complaint->ticket_number = Complaint::nextTicketNumber();
-        $complaint->status = 'baru';
+        $complaint->status = 'open';
         $complaint->applySla();
         $complaint->save();
 

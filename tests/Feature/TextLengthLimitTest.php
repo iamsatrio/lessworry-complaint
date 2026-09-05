@@ -28,11 +28,11 @@ class TextLengthLimitTest extends TestCase
     private function complaint(): Complaint
     {
         $complaint = new Complaint([
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
         ]);
         $complaint->ticket_number = Complaint::nextTicketNumber();
-        $complaint->status = 'ditangani';
+        $complaint->status = 'handling';
         $complaint->applySla();
         $complaint->save();
 
@@ -42,8 +42,8 @@ class TextLengthLimitTest extends TestCase
     public function test_deskripsi_sangat_panjang_ditolak(): void
     {
         $this->actingAs($this->cc())->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'nota_exemption' => 'belum_terbit',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'nota_exemption' => 'belum_terbit',
             'description' => str_repeat('a', 2_000_000),
         ])->assertSessionHasErrors('description');
 
@@ -53,8 +53,8 @@ class TextLengthLimitTest extends TestCase
     public function test_deskripsi_sepanjang_wajar_tetap_diterima(): void
     {
         $this->actingAs($this->cc())->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'nota_exemption' => 'belum_terbit',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'nota_exemption' => 'belum_terbit',
             'description' => str_repeat('a', 4_000),
         ])->assertSessionHasNoErrors();
 
@@ -66,7 +66,7 @@ class TextLengthLimitTest extends TestCase
         $complaint = $this->complaint();
 
         $this->actingAs($this->cc())->post('/complaints/'.$complaint->id.'/status', [
-            'status' => 'ditangani', 'lock_version' => $complaint->lock_version,
+            'status' => 'handling', 'lock_version' => $complaint->lock_version,
             'resolution' => str_repeat('a', 2_000_000),
             'root_cause' => str_repeat('b', 2_000_000),
             'note' => str_repeat('c', 2_000_000),

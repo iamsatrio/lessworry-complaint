@@ -54,7 +54,7 @@ class ResponsibleMigrationTest extends TestCase
         $complaintId = DB::table('complaints')->insertGetId([
             'ticket_number' => 'LW-20260101-001',
             'channel' => 'wa_cc', 'reporter_name' => 'Pelapor',
-            'category' => 'hasil_cuci', 'priority' => 'medium', 'status' => 'baru',
+            'category' => 'kurang_bersih', 'bobot' => 'sedang', 'layanan' => 'kiloan', 'status' => 'open',
             'description' => 'Keluhan lama',
             'responsible_staff_id' => 244,
             'responsible_staff_name' => 'Budi Santoso',
@@ -89,7 +89,7 @@ class ResponsibleMigrationTest extends TestCase
         DB::table('complaints')->insert([
             'ticket_number' => 'LW-20260101-002',
             'channel' => 'wa_cc', 'reporter_name' => 'Pelapor',
-            'category' => 'hasil_cuci', 'priority' => 'medium', 'status' => 'baru',
+            'category' => 'kurang_bersih', 'bobot' => 'sedang', 'layanan' => 'kiloan', 'status' => 'open',
             'description' => 'Keluhan tanpa penetapan',
             'created_at' => now(), 'updated_at' => now(),
         ]);

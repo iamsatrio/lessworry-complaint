@@ -82,11 +82,11 @@ class NeviraChokePointTest extends TestCase
     private function complaint(array $attrs = []): Complaint
     {
         $complaint = new Complaint(array_merge([
-            'channel' => 'kasir', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'kasir', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
         ], $attrs));
         $complaint->ticket_number = Complaint::nextTicketNumber();
-        $complaint->status = 'baru';
+        $complaint->status = 'open';
         $complaint->applySla();
         $complaint->save();
 
@@ -122,8 +122,8 @@ class NeviraChokePointTest extends TestCase
         $kasir = $this->userAs('kasir', $outlet);
 
         $this->actingAs($kasir)->post('/complaints', [
-            'channel' => 'kasir', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'kasir', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
             'nevira_transaction_number' => self::NOTA_ASING,
         ])->assertRedirect();
 
@@ -260,8 +260,8 @@ class NeviraChokePointTest extends TestCase
         }
 
         $this->actingAs($cc)->post('/complaints', [
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
             'nevira_transaction_number' => self::NOTA_ASING,
         ])->assertRedirect();
 

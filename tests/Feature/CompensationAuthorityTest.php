@@ -27,14 +27,14 @@ class CompensationAuthorityTest extends TestCase
         ]);
     }
 
-    private function complaint(int $kompensasi = 0, ?Outlet $outlet = null): Complaint
+    private function complaint(int $kompensasi = 0, ?Outlet $outlet = null, string $bobot = 'sedang'): Complaint
     {
         $complaint = new Complaint([
-            'channel' => 'kasir', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x', 'outlet_id' => $outlet?->id,
+            'channel' => 'kasir', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => $bobot, 'layanan' => 'kiloan', 'description' => 'x', 'outlet_id' => $outlet?->id,
         ]);
         $complaint->ticket_number = Complaint::nextTicketNumber();
-        $complaint->status = 'ditangani';
+        $complaint->status = 'handling';
         $complaint->applySla();
         $complaint->save();
         $complaint->forceFill(['compensation_amount' => $kompensasi])->save();
@@ -49,7 +49,7 @@ class CompensationAuthorityTest extends TestCase
 
         $this->actingAs($this->userAs('kasir', $outlet))
             ->post('/complaints/'.$complaint->id.'/status', [
-                'lock_version' => $complaint->fresh()->lock_version, 'status' => 'ditangani', 'compensation_amount' => 1,
+                'lock_version' => $complaint->fresh()->lock_version, 'status' => 'handling', 'compensation_amount' => 1,
             ])->assertSessionHasErrors('compensation_amount');
 
         $this->assertSame(1_000_000, (int) $complaint->fresh()->compensation_amount);
@@ -58,17 +58,20 @@ class CompensationAuthorityTest extends TestCase
     public function test_kasir_tetap_bisa_memperbarui_status_tanpa_menyentuh_kompensasi(): void
     {
         $outlet = Outlet::create(['name' => 'Pusat']);
-        $complaint = $this->complaint(1_000_000, $outlet);
+        // Ringan: menjeda sekarang mengikuti sumbu bobot yang sama dengan
+        // menutup, dan yang diuji di sini kompensasinya — bukan wewenang jeda.
+        $complaint = $this->complaint(1_000_000, $outlet, 'ringan');
 
         // Form mengirim nilai yang sekarang apa adanya — itu bukan perubahan.
         $this->actingAs($this->userAs('kasir', $outlet))
             ->post('/complaints/'.$complaint->id.'/status', [
-                'lock_version' => $complaint->fresh()->lock_version, 'status' => 'menunggu_pelanggan', 'compensation_amount' => 1_000_000,
+                'lock_version' => $complaint->fresh()->lock_version, 'status' => 'handling', 'pause_reason' => 'menunggu_pelanggan', 'compensation_amount' => 1_000_000,
             ])->assertSessionHasNoErrors();
 
         $complaint->refresh();
 
-        $this->assertSame('menunggu_pelanggan', $complaint->status);
+        $this->assertSame('handling', $complaint->status);
+        $this->assertSame('menunggu_pelanggan', $complaint->pause_reason);
         $this->assertSame(1_000_000, (int) $complaint->compensation_amount);
     }
 
@@ -78,7 +81,7 @@ class CompensationAuthorityTest extends TestCase
 
         $this->actingAs($this->userAs('supervisor'))
             ->post('/complaints/'.$complaint->id.'/status', [
-                'lock_version' => $complaint->fresh()->lock_version, 'status' => 'ditangani', 'compensation_amount' => 250_000,
+                'lock_version' => $complaint->fresh()->lock_version, 'status' => 'handling', 'compensation_amount' => 250_000,
             ])->assertSessionHasNoErrors();
 
         $this->assertSame(250_000, (int) $complaint->fresh()->compensation_amount);
@@ -90,7 +93,7 @@ class CompensationAuthorityTest extends TestCase
 
         $this->actingAs($this->userAs('customer_care'))
             ->post('/complaints/'.$complaint->id.'/status', [
-                'lock_version' => $complaint->fresh()->lock_version, 'status' => 'ditangani', 'compensation_amount' => 0,
+                'lock_version' => $complaint->fresh()->lock_version, 'status' => 'handling', 'compensation_amount' => 0,
             ])->assertSessionHasNoErrors();
 
         $this->assertSame(0, (int) $complaint->fresh()->compensation_amount);
@@ -102,7 +105,7 @@ class CompensationAuthorityTest extends TestCase
 
         $this->actingAs($this->userAs('supervisor'))
             ->post('/complaints/'.$complaint->id.'/status', [
-                'lock_version' => $complaint->fresh()->lock_version, 'status' => 'ditangani', 'compensation_amount' => 150_000,
+                'lock_version' => $complaint->fresh()->lock_version, 'status' => 'handling', 'compensation_amount' => 150_000,
             ]);
 
         $catatan = $complaint->activities()->pluck('note')->implode(' | ');
@@ -118,7 +121,7 @@ class CompensationAuthorityTest extends TestCase
 
         $this->actingAs($this->userAs('kasir', $outlet))
             ->post('/complaints/'.$complaint->id.'/status', [
-                'lock_version' => $complaint->fresh()->lock_version, 'status' => 'ditangani', 'compensation_amount' => 999_999,
+                'lock_version' => $complaint->fresh()->lock_version, 'status' => 'handling', 'compensation_amount' => 999_999,
             ])->assertSessionHasErrors('compensation_amount');
 
         $this->assertSame(0, (int) $complaint->fresh()->compensation_amount);
@@ -130,7 +133,7 @@ class CompensationAuthorityTest extends TestCase
 
         $this->actingAs($this->userAs('supervisor'))
             ->post('/complaints/'.$complaint->id.'/status', [
-                'lock_version' => $complaint->fresh()->lock_version, 'status' => 'ditangani', 'compensation_amount' => -5000,
+                'lock_version' => $complaint->fresh()->lock_version, 'status' => 'handling', 'compensation_amount' => -5000,
             ])->assertSessionHasErrors('compensation_amount');
 
         $this->assertSame(0, (int) $complaint->fresh()->compensation_amount);

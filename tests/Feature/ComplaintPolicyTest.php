@@ -41,11 +41,11 @@ class ComplaintPolicyTest extends TestCase
     private function complaint(array $attrs = []): Complaint
     {
         $complaint = new Complaint(array_merge([
-            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'hasil_cuci',
-            'priority' => 'medium', 'description' => 'x',
+            'channel' => 'wa_cc', 'reporter_name' => 'Pelapor', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'kiloan', 'description' => 'x',
         ], $attrs));
         $complaint->ticket_number = Complaint::nextTicketNumber();
-        $complaint->status = 'baru';
+        $complaint->status = 'open';
         $complaint->applySla();
         $complaint->save();
 
@@ -206,7 +206,7 @@ class ComplaintPolicyTest extends TestCase
 
         // Status tanpa lock_version: kalau validasi jalan duluan, ini 422.
         $this->actingAs($kasir)
-            ->post('/complaints/'.$lain->id.'/status', ['status' => 'selesai'])
+            ->post('/complaints/'.$lain->id.'/status', ['status' => 'close'])
             ->assertForbidden();
 
         $this->actingAs($kasir)
