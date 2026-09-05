@@ -36,8 +36,19 @@ class ComplaintController extends Controller
             ->visibleTo($user)
             ->with(['outlet', 'assignee']);
 
+        // Pencarian eksplisit mencari di SELURUH data, termasuk tiket Close.
+        // Sebelumnya scope open() tetap berlaku saat status tidak dipilih,
+        // jadi mencari nomor tiket yang sudah ditutup selalu berbalas "tidak
+        // ada complaint yang cocok" — halaman menyatakan tiketnya tidak ada
+        // padahal ada. Mayoritas dari 545 baris impor berstatus Close, jadi
+        // supervisor yang mencari kasus lama nyaris selalu mendapat nol.
+        // (API-38 #1)
+        $mencari = $request->filled('q');
+
         if ($request->filled('status')) {
             $query->where('status', $request->string('status'))->latest();
+        } elseif ($mencari) {
+            $query->latest();
         } else {
             // Papan kerja diurut menurut tenggat: yang paling mepet tampil dulu.
             // Complaint tanpa tenggat jatuh ke bawah, bukan ke atas.

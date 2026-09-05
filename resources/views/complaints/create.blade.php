@@ -89,12 +89,29 @@
 <div class="card">
     <div class="eyebrow">Siapa yang melapor</div>
     <div class="row">
+      @php $kanal = $nilai('channel', auth()->user()->defaultChannel()); @endphp
       <div><label for="ch">Masuk lewat <span class="req">*</span></label>
         <select id="ch" name="channel" required>
+          {{-- Kanal ada tiga, peran hanya dua: WA Outlet diterima kasir juga.
+               Jadi yang disimpulkan dari peran adalah NILAI BAWAANNYA, bukan
+               kanalnya — kolomnya tetap tampil, ketiga opsinya tetap bisa
+               dipilih, dan pilihan manual menimpa bawaan.
+
+               Untuk peran yang bawaannya memang tidak ada (supervisor, admin)
+               opsi kosong tetap dipasang. Tanpa itu opsi pertama — Direct
+               Kasir — terpilih diam-diam, persis kesalahan yang sedang
+               diperbaiki. Yang tidak dilakukan adalah memaksa memilih pada
+               peran yang bawaannya sudah benar. (API-38 #4) --}}
+          @if(blank(auth()->user()->defaultChannel()))
+            <option value="" disabled @selected(blank($kanal))>— pilih kanal —</option>
+          @endif
           @foreach(config('complaint.channels') as $k=>$v)
-            <option value="{{ $k }}" @selected($nilai('channel')===$k)>{{ $v }}</option>
+            <option value="{{ $k }}" @selected($kanal===$k)>{{ $v }}</option>
           @endforeach
         </select>
+        @if(filled(auth()->user()->defaultChannel()) && blank($nilai('channel')))
+          <p class="hint">Terisi dari peranmu. Ganti kalau keluhan ini sebenarnya masuk lewat kanal lain.</p>
+        @endif
       </div>
       @if(!auth()->user()->isKasir())
       <div><label for="out">Outlet</label>
