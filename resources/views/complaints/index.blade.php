@@ -2,19 +2,39 @@
 @section('title','Papan Kerja')
 @section('content')
 <div class="eyebrow">Papan Kerja</div>
-<h1>{{ $complaints->total() }} complaint{{ request('status') ? '' : ' terbuka' }}</h1>
+@php
+  // Judul harus menyebut apa yang benar-benar ditampilkan. Pencarian tidak
+  // lagi dibatasi tiket terbuka, jadi kata "terbuka" hanya berlaku saat
+  // papan kerja ditampilkan apa adanya. (API-38 #1)
+  $mencari = filled(request('q'));
+@endphp
+<h1>{{ $complaints->total() }} complaint{{ request('status') || $mencari ? '' : ' terbuka' }}</h1>
 <p class="lede">
   @if(request('status')) Berstatus "{{ config('complaint.statuses.'.request('status')) }}".
+  @elseif($mencari) Hasil pencarian "{{ request('q') }}" — mencakup complaint yang sudah ditutup.
   @else Yang paling dekat tenggat tampil paling atas. @endif
   @if(auth()->user()->isKasir()) Dibatasi outlet {{ auth()->user()->outlet?->name }}. @endif
 </p>
 
-<details class="filters" @if(request()->hasAny(['q','status','category','bobot','layanan','outlet_id'])) open @endif>
-  <summary>Saring &amp; cari</summary>
+{{-- Cari adalah tindakan utama supervisor di halaman ini, bukan tindakan
+     lanjutan: kotaknya berdiri sendiri di atas, tidak di balik panel yang
+     tertutup. Saringan sisanya tetap boleh terlipat. (API-38 #13) --}}
+<form method="GET" class="card searchbar">
+  @foreach(['status','category','bobot','layanan','outlet_id'] as $bawa)
+    @if(request()->filled($bawa))<input type="hidden" name="{{ $bawa }}" value="{{ request($bawa) }}">@endif
+  @endforeach
+  <label for="q" class="sr-only">Cari complaint</label>
+  <input id="q" name="q" value="{{ request('q') }}" placeholder="Cari nomor tiket, nama, telepon, atau nomor nota">
+  <button class="shrink">Cari</button>
+  @if($mencari)
+    <a class="btn ghost shrink" href="{{ route('complaints.index', request()->except(['q','page'])) }}">Hapus</a>
+  @endif
+</form>
+
+<details class="filters" @if(request()->hasAny(['status','category','bobot','layanan','outlet_id'])) open @endif>
+  <summary>Saringan lain</summary>
   <form method="GET" class="row body">
-    <div style="flex:2.4"><label for="q">Cari</label>
-      <input id="q" name="q" value="{{ request('q') }}" placeholder="Nomor tiket, nama, telepon, atau ID transaksi">
-    </div>
+    @if($mencari)<input type="hidden" name="q" value="{{ request('q') }}">@endif
     <div><label for="fs">Status</label>
       <select id="fs" name="status"><option value="">Semua yang terbuka</option>
         @foreach(config('complaint.statuses') as $k=>$v)
@@ -59,9 +79,15 @@
     <div class="empty">
       <div class="mark">🧺</div>
       <h3>Tidak ada complaint yang cocok</h3>
-      <p>Ubah saringan di atas, atau catat complaint baru kalau ada keluhan yang masuk.</p>
-      @if(auth()->user()->canCreateComplaint())
-        <a class="btn" href="{{ route('complaints.create') }}">Catat Complaint</a>
+      @if($mencari)
+        <p>Tidak ada complaint dengan "{{ request('q') }}" — pencarian ini sudah mencakup tiket yang
+          sudah ditutup. Periksa lagi ejaan nomor tiket atau nomor notanya.</p>
+        <a class="btn ghost" href="{{ route('complaints.index') }}">Kembali ke papan kerja</a>
+      @else
+        <p>Ubah saringan di atas, atau catat complaint baru kalau ada keluhan yang masuk.</p>
+        @if(auth()->user()->canCreateComplaint())
+          <a class="btn" href="{{ route('complaints.create') }}">Catat Complaint</a>
+        @endif
       @endif
     </div>
   </div>

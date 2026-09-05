@@ -46,7 +46,24 @@
       @endif
       <dl class="kv" style="margin-top:20px;padding-top:18px;border-top:1px solid var(--line)">
         <dt>Pelapor</dt><dd>{{ $complaint->reporter_name }}</dd>
-        <dt>Telepon</dt><dd>{{ $complaint->reporter_phone ?: '—' }}</dd>
+        {{-- Dua dari tiga kanal masuk adalah WhatsApp, dan mengabari pelanggan
+             adalah langkah terakhir yang wajib pada setiap penutupan. Nomor
+             yang dicetak sebagai teks biasa berarti: blok dengan jari, salin,
+             pindah aplikasi, tempel, ketik. (API-38 #10) --}}
+        <dt>Telepon</dt>
+        <dd>
+          @if($complaint->reporter_phone)
+            @php $wa = $complaint->waLink('Halo, complaint '.$complaint->ticket_number.' sudah kami tindak lanjuti.'); @endphp
+            @if($wa)
+              <a href="{{ $wa }}" target="_blank" rel="noopener">{{ $complaint->reporter_phone }}</a>
+              <span class="muted small"> · buka WhatsApp</span>
+            @else
+              <a href="tel:{{ $complaint->reporter_phone }}">{{ $complaint->reporter_phone }}</a>
+            @endif
+          @else
+            —
+          @endif
+        </dd>
         <dt>Outlet</dt><dd>{{ $complaint->outlet?->name ?? '—' }}</dd>
         <dt>Kategori</dt><dd>{{ $complaint->categoryLabel() }}@if($complaint->sub_category) · {{ $complaint->sub_category }}@endif</dd>
         @if($complaint->resolution)<dt>Penyelesaian</dt><dd>{{ $complaint->resolution }}</dd>@endif
@@ -55,6 +72,135 @@
           <dt>Kompensasi</dt><dd>Rp {{ number_format($complaint->compensation_amount,0,',','.') }}</dd>
         @endif
       </dl>
+    </div>
+
+    {{-- Menutup complaint adalah tindakan paling sering di halaman ini.
+         Sebelumnya kartunya berada di y=4128 pada halaman setinggi 5076px di
+         390px — hampir lima layar gulir. Yang ditindak diletakkan di atas
+         yang dibaca; riwayat penanganan bersifat bacaan. (API-38 #6) --}}
+    <div class="card">
+      <div class="eyebrow">Perbarui status</div>
+      <form method="POST" action="{{ route('complaints.status',$complaint) }}">
+        @csrf
+        {{-- Versi yang sedang ditampilkan. Kalau ada yang menyimpan duluan,
+             penyimpanan dari halaman ini ditolak, bukan menimpanya. --}}
+        <input type="hidden" name="lock_version" value="{{ $complaint->lock_version }}">
+        {{-- old() lebih dulu, sama seperti close_reason dan tindak_lanjut di
+             bawah. Tanpa itu, penyimpanan yang ditolak validasi mengembalikan
+             select ke status LAMA: petugas yang memilih Close tanpa alasan
+             harus memilih Close lagi sebelum bisa mengisi alasannya. --}}
+        <label for="st">Status</label>
+        <select id="st" name="status" required>
+          @foreach(config('complaint.statuses') as $k=>$v)
+            <option value="{{ $k }}" @selected(old('status', $complaint->status)===$k)>{{ $v }}</option>
+          @endforeach
+        </select>
+
+        {{-- Jeda: penanda pada tiket Handling, bukan status keenam. Selama
+             dijeda, hitungan SLA berhenti dan tenggatnya mundur sebanyak lama
+             jeda begitu dilanjutkan.
+
+             Kolomnya hanya muncul untuk yang berwenang MEMULAI jeda. Yang
+             tidak berwenang tetap bisa memperbarui tiket yang sudah dijeda
+             orang lain — form-nya tidak mengirim kolom ini, dan jedanya
+             dibiarkan apa adanya. Penjaganya tetap server. --}}
+        @if(auth()->user()->canPause($complaint))
+          <label for="pz">Jeda SLA</label>
+          <select id="pz" name="pause_reason">
+            <option value="">Tidak dijeda — hitungan SLA berjalan</option>
+            @foreach(config('complaint.pause_reasons') as $k=>$v)
+              <option value="{{ $k }}" @selected(old('pause_reason', $complaint->pause_reason)===$k)>{{ $v }}</option>
+            @endforeach
+          </select>
+        @elseif($complaint->isPaused())
+          {{-- Tetap bisa melanjutkan: arahnya aman, ia mengembalikan tiket ke
+               hitungan SLA alih-alih menyembunyikannya. --}}
+          <label for="pz">Jeda SLA</label>
+          <select id="pz" name="pause_reason">
+            <option value="menunggu_pelanggan" selected>Tetap dijeda — {{ $complaint->pauseReasonLabel() }}</option>
+            <option value="">Lanjutkan, jalankan lagi hitungan SLA</option>
+          </select>
+        @endif
+        @if($complaint->isPaused())
+          <p class="hint">Dijeda sejak {{ $complaint->paused_at->translatedFormat('d M Y, H:i') }}
+            ({{ \App\Models\Complaint::humanMinutes($complaint->pauseMinutes()) }}).
+            Tenggat akan mundur sebanyak itu saat dilanjutkan.</p>
+        @elseif(! auth()->user()->canPause($complaint))
+          <p class="hint">Complaint {{ $complaint->bobotLabel() }} hanya bisa dijeda Customer Care —
+            jeda menghentikan hitungan SLA.</p>
+        @endif
+
+        {{-- Alasan penutupan menggantikan status "Ditolak". Tiketnya tetap
+             Close; laporan tetap bisa memisahkan yang selesai dari yang tidak
+             berdasar. --}}
+        <label for="cr" id="cr-label">Alasan penutupan <span class="req" id="cr-req" style="display:none">*</span></label>
+        <select id="cr" name="close_reason">
+          <option value="" id="cr-kosong">— hanya diisi kalau statusnya Close —</option>
+          @foreach(config('complaint.close_reasons') as $k=>$v)
+            <option value="{{ $k }}" @selected(old('close_reason', $complaint->close_reason)===$k)>{{ $v }}</option>
+          @endforeach
+        </select>
+
+        <label for="tl">Tindak lanjut</label>
+        <select id="tl" name="tindak_lanjut">
+          <option value="">— belum ditentukan —</option>
+          @foreach(config('complaint.tindak_lanjut') as $k=>$v)
+            <option value="{{ $k }}" @selected(old('tindak_lanjut', $complaint->tindak_lanjut)===$k)>{{ $v }}</option>
+          @endforeach
+        </select>
+
+        <label for="res">Tindakan penyelesaian</label>
+        <textarea id="res" name="resolution" style="min-height:76px"
+          placeholder="Apa yang dilakukan untuk menyelesaikan keluhan ini?">{{ $complaint->resolution }}</textarea>
+        <label for="rc">Penyebab akar</label>
+        <input id="rc" name="root_cause" value="{{ $complaint->root_cause }}"
+          placeholder="Kenapa ini bisa terjadi?">
+        <label for="komp">Kompensasi (Rp)</label>
+        <input id="komp" type="number" name="compensation_amount" min="0" inputmode="numeric" value="{{ $complaint->compensation_amount }}">
+        <p class="hint">
+          Batas wewenangmu:
+          {{ auth()->user()->compensationLimit() === PHP_INT_MAX ? 'tanpa batas' : 'Rp '.number_format(auth()->user()->compensationLimit(),0,',','.') }}.
+          Lebih dari itu, naikkan ke supervisor.
+        </p>
+        <label for="cn">Catatan perubahan</label>
+        <input id="cn" name="note" placeholder="Opsional">
+        @unless(auth()->user()->canResolve($complaint))
+          <div class="panel" style="margin-top:14px">
+            @if(auth()->user()->isKasir())
+              Complaint ini berbobot {{ $complaint->bobotLabel() }}. Kasir hanya boleh menutup complaint
+              berbobot Ringan — untuk yang ini, teruskan ke Customer Care.
+            @else
+              Peranmu bisa memperbarui penanganan, tapi penutupan complaint dilakukan Customer Care atau supervisor.
+            @endif
+          </div>
+        @elseif(auth()->user()->isKasir())
+          <div class="panel" style="margin-top:14px">
+            Complaint Ringan boleh kamu tutup sendiri, selama kompensasinya tidak melebihi batas wewenangmu.
+          </div>
+        @endunless
+        <div style="margin-top:16px"><button>Simpan Status</button></div>
+      </form>
+      {{-- Aturan servernya sudah Rule::requiredIf(status === 'close'). Yang
+           kurang hanya tandanya di layar: labelnya terbaca opsional, jadi
+           petugas menekan Simpan, ditolak, dan harus mengulang pilihan
+           statusnya. Ditandai di sini, ditegakkan tetap di server. (API-38 #7) --}}
+      <script>
+      (function(){
+        const st = document.getElementById('st');
+        const cr = document.getElementById('cr');
+        const req = document.getElementById('cr-req');
+        const kosong = document.getElementById('cr-kosong');
+        if (!st || !cr || !kosong) return;
+        function ikutiStatus(){
+          const tutup = st.value === 'close';
+          cr.required = tutup;
+          if (req) req.style.display = tutup ? '' : 'none';
+          kosong.textContent = tutup ? '— pilih alasan —' : '— hanya diisi kalau statusnya Close —';
+        }
+        st.addEventListener('change', ikutiStatus);
+        ikutiStatus();
+      })();
+      </script>
     </div>
 
     <div class="card">
@@ -252,105 +398,6 @@
       </div>
     @endif
 
-    <div class="card">
-      <div class="eyebrow">Perbarui status</div>
-      <form method="POST" action="{{ route('complaints.status',$complaint) }}">
-        @csrf
-        {{-- Versi yang sedang ditampilkan. Kalau ada yang menyimpan duluan,
-             penyimpanan dari halaman ini ditolak, bukan menimpanya. --}}
-        <input type="hidden" name="lock_version" value="{{ $complaint->lock_version }}">
-        <label for="st">Status</label>
-        <select id="st" name="status" required>
-          @foreach(config('complaint.statuses') as $k=>$v)
-            <option value="{{ $k }}" @selected($complaint->status===$k)>{{ $v }}</option>
-          @endforeach
-        </select>
-
-        {{-- Jeda: penanda pada tiket Handling, bukan status keenam. Selama
-             dijeda, hitungan SLA berhenti dan tenggatnya mundur sebanyak lama
-             jeda begitu dilanjutkan.
-
-             Kolomnya hanya muncul untuk yang berwenang MEMULAI jeda. Yang
-             tidak berwenang tetap bisa memperbarui tiket yang sudah dijeda
-             orang lain — form-nya tidak mengirim kolom ini, dan jedanya
-             dibiarkan apa adanya. Penjaganya tetap server. --}}
-        @if(auth()->user()->canPause($complaint))
-          <label for="pz">Jeda SLA</label>
-          <select id="pz" name="pause_reason">
-            <option value="">Tidak dijeda — hitungan SLA berjalan</option>
-            @foreach(config('complaint.pause_reasons') as $k=>$v)
-              <option value="{{ $k }}" @selected(old('pause_reason', $complaint->pause_reason)===$k)>{{ $v }}</option>
-            @endforeach
-          </select>
-        @elseif($complaint->isPaused())
-          {{-- Tetap bisa melanjutkan: arahnya aman, ia mengembalikan tiket ke
-               hitungan SLA alih-alih menyembunyikannya. --}}
-          <label for="pz">Jeda SLA</label>
-          <select id="pz" name="pause_reason">
-            <option value="menunggu_pelanggan" selected>Tetap dijeda — {{ $complaint->pauseReasonLabel() }}</option>
-            <option value="">Lanjutkan, jalankan lagi hitungan SLA</option>
-          </select>
-        @endif
-        @if($complaint->isPaused())
-          <p class="hint">Dijeda sejak {{ $complaint->paused_at->translatedFormat('d M Y, H:i') }}
-            ({{ \App\Models\Complaint::humanMinutes($complaint->pauseMinutes()) }}).
-            Tenggat akan mundur sebanyak itu saat dilanjutkan.</p>
-        @elseif(! auth()->user()->canPause($complaint))
-          <p class="hint">Complaint {{ $complaint->bobotLabel() }} hanya bisa dijeda Customer Care —
-            jeda menghentikan hitungan SLA.</p>
-        @endif
-
-        {{-- Alasan penutupan menggantikan status "Ditolak". Tiketnya tetap
-             Close; laporan tetap bisa memisahkan yang selesai dari yang tidak
-             berdasar. --}}
-        <label for="cr">Alasan penutupan</label>
-        <select id="cr" name="close_reason">
-          <option value="">— hanya diisi kalau statusnya Close —</option>
-          @foreach(config('complaint.close_reasons') as $k=>$v)
-            <option value="{{ $k }}" @selected(old('close_reason', $complaint->close_reason)===$k)>{{ $v }}</option>
-          @endforeach
-        </select>
-
-        <label for="tl">Tindak lanjut</label>
-        <select id="tl" name="tindak_lanjut">
-          <option value="">— belum ditentukan —</option>
-          @foreach(config('complaint.tindak_lanjut') as $k=>$v)
-            <option value="{{ $k }}" @selected(old('tindak_lanjut', $complaint->tindak_lanjut)===$k)>{{ $v }}</option>
-          @endforeach
-        </select>
-
-        <label for="res">Tindakan penyelesaian</label>
-        <textarea id="res" name="resolution" style="min-height:76px"
-          placeholder="Apa yang dilakukan untuk menyelesaikan keluhan ini?">{{ $complaint->resolution }}</textarea>
-        <label for="rc">Penyebab akar</label>
-        <input id="rc" name="root_cause" value="{{ $complaint->root_cause }}"
-          placeholder="Kenapa ini bisa terjadi?">
-        <label for="komp">Kompensasi (Rp)</label>
-        <input id="komp" type="number" name="compensation_amount" min="0" inputmode="numeric" value="{{ $complaint->compensation_amount }}">
-        <p class="hint">
-          Batas wewenangmu:
-          {{ auth()->user()->compensationLimit() === PHP_INT_MAX ? 'tanpa batas' : 'Rp '.number_format(auth()->user()->compensationLimit(),0,',','.') }}.
-          Lebih dari itu, naikkan ke supervisor.
-        </p>
-        <label for="cn">Catatan perubahan</label>
-        <input id="cn" name="note" placeholder="Opsional">
-        @unless(auth()->user()->canResolve($complaint))
-          <div class="panel" style="margin-top:14px">
-            @if(auth()->user()->isKasir())
-              Complaint ini berbobot {{ $complaint->bobotLabel() }}. Kasir hanya boleh menutup complaint
-              berbobot Ringan — untuk yang ini, teruskan ke Customer Care.
-            @else
-              Peranmu bisa memperbarui penanganan, tapi penutupan complaint dilakukan Customer Care atau supervisor.
-            @endif
-          </div>
-        @elseif(auth()->user()->isKasir())
-          <div class="panel" style="margin-top:14px">
-            Complaint Ringan boleh kamu tutup sendiri, selama kompensasinya tidak melebihi batas wewenangmu.
-          </div>
-        @endunless
-        <div style="margin-top:16px"><button>Simpan Status</button></div>
-      </form>
-    </div>
   </div>
 </div>
 @endsection

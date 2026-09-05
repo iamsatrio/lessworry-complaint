@@ -94,6 +94,29 @@ class User extends Authenticatable
         return $this->role === 'divisi';
     }
 
+    /**
+     * Kanal masuk yang bisa disimpulkan dari peran pembuka form intake.
+     *
+     * Kasir mencatat keluhan yang diceritakan pelanggan di depannya — kanalnya
+     * Direct Kasir. Customer Care menerima lewat WA Customer Care. Untuk peran
+     * lain kanalnya tidak bisa disimpulkan, jadi tidak ada yang terpilih dan
+     * form menuntutnya dipilih.
+     *
+     * Sebelum ini select kanal tidak punya opsi kosong, jadi opsi pertama —
+     * Direct Kasir — selalu terpilih untuk siapa pun. Akibatnya bukan kolom
+     * kosong, tapi kolom terisi salah tanpa siapa pun tahu: setiap complaint
+     * WhatsApp yang dicatat Customer Care tersimpan sebagai Direct Kasir, dan
+     * blok "Kanal masuk" di laporan jadi tidak berarti. (API-38 #4)
+     */
+    public function defaultChannel(): ?string
+    {
+        return match ($this->role) {
+            'kasir' => 'kasir',
+            'customer_care' => 'wa_cc',
+            default => null,
+        };
+    }
+
     /** Boleh melihat seluruh outlet. */
     public function seesAllOutlets(): bool
     {
