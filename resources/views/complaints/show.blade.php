@@ -46,7 +46,24 @@
       @endif
       <dl class="kv" style="margin-top:20px;padding-top:18px;border-top:1px solid var(--line)">
         <dt>Pelapor</dt><dd>{{ $complaint->reporter_name }}</dd>
-        <dt>Telepon</dt><dd>{{ $complaint->reporter_phone ?: '—' }}</dd>
+        {{-- Dua dari tiga kanal masuk adalah WhatsApp, dan mengabari pelanggan
+             adalah langkah terakhir yang wajib pada setiap penutupan. Nomor
+             yang dicetak sebagai teks biasa berarti: blok dengan jari, salin,
+             pindah aplikasi, tempel, ketik. (API-38 #10) --}}
+        <dt>Telepon</dt>
+        <dd>
+          @if($complaint->reporter_phone)
+            @php $wa = $complaint->waLink('Halo, complaint '.$complaint->ticket_number.' sudah kami tindak lanjuti.'); @endphp
+            @if($wa)
+              <a href="{{ $wa }}" target="_blank" rel="noopener">{{ $complaint->reporter_phone }}</a>
+              <span class="muted small"> · buka WhatsApp</span>
+            @else
+              <a href="tel:{{ $complaint->reporter_phone }}">{{ $complaint->reporter_phone }}</a>
+            @endif
+          @else
+            —
+          @endif
+        </dd>
         <dt>Outlet</dt><dd>{{ $complaint->outlet?->name ?? '—' }}</dd>
         <dt>Kategori</dt><dd>{{ $complaint->categoryLabel() }}@if($complaint->sub_category) · {{ $complaint->sub_category }}@endif</dd>
         @if($complaint->resolution)<dt>Penyelesaian</dt><dd>{{ $complaint->resolution }}</dd>@endif
@@ -70,10 +87,14 @@
         {{-- Versi yang sedang ditampilkan. Kalau ada yang menyimpan duluan,
              penyimpanan dari halaman ini ditolak, bukan menimpanya. --}}
         <input type="hidden" name="lock_version" value="{{ $complaint->lock_version }}">
+        {{-- old() lebih dulu, sama seperti close_reason dan tindak_lanjut di
+             bawah. Tanpa itu, penyimpanan yang ditolak validasi mengembalikan
+             select ke status LAMA: petugas yang memilih Close tanpa alasan
+             harus memilih Close lagi sebelum bisa mengisi alasannya. --}}
         <label for="st">Status</label>
         <select id="st" name="status" required>
           @foreach(config('complaint.statuses') as $k=>$v)
-            <option value="{{ $k }}" @selected($complaint->status===$k)>{{ $v }}</option>
+            <option value="{{ $k }}" @selected(old('status', $complaint->status)===$k)>{{ $v }}</option>
           @endforeach
         </select>
 
@@ -114,9 +135,9 @@
         {{-- Alasan penutupan menggantikan status "Ditolak". Tiketnya tetap
              Close; laporan tetap bisa memisahkan yang selesai dari yang tidak
              berdasar. --}}
-        <label for="cr">Alasan penutupan</label>
+        <label for="cr" id="cr-label">Alasan penutupan <span class="req" id="cr-req" style="display:none">*</span></label>
         <select id="cr" name="close_reason">
-          <option value="">— hanya diisi kalau statusnya Close —</option>
+          <option value="" id="cr-kosong">— hanya diisi kalau statusnya Close —</option>
           @foreach(config('complaint.close_reasons') as $k=>$v)
             <option value="{{ $k }}" @selected(old('close_reason', $complaint->close_reason)===$k)>{{ $v }}</option>
           @endforeach
@@ -161,6 +182,27 @@
         @endunless
         <div style="margin-top:16px"><button>Simpan Status</button></div>
       </form>
+      {{-- Aturan servernya sudah Rule::requiredIf(status === 'close'). Yang
+           kurang hanya tandanya di layar: labelnya terbaca opsional, jadi
+           petugas menekan Simpan, ditolak, dan harus mengulang pilihan
+           statusnya. Ditandai di sini, ditegakkan tetap di server. (API-38 #7) --}}
+      <script>
+      (function(){
+        const st = document.getElementById('st');
+        const cr = document.getElementById('cr');
+        const req = document.getElementById('cr-req');
+        const kosong = document.getElementById('cr-kosong');
+        if (!st || !cr || !kosong) return;
+        function ikutiStatus(){
+          const tutup = st.value === 'close';
+          cr.required = tutup;
+          if (req) req.style.display = tutup ? '' : 'none';
+          kosong.textContent = tutup ? '— pilih alasan —' : '— hanya diisi kalau statusnya Close —';
+        }
+        st.addEventListener('change', ikutiStatus);
+        ikutiStatus();
+      })();
+      </script>
     </div>
 
     <div class="card">

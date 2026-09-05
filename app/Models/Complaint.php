@@ -669,4 +669,36 @@ class Complaint extends Model
     {
         return filled($this->import_source);
     }
+
+    /**
+     * Tautan WhatsApp ke pelapor, lengkap dengan pembuka pesan.
+     *
+     * Mengabari pelanggan adalah langkah terakhir yang wajib pada setiap
+     * penutupan, dan dua dari tiga kanal masuk memang WhatsApp. (API-38 #10)
+     *
+     * Nomor Indonesia ditulis tim dalam beberapa bentuk: 08xx, 62xx, +62xx,
+     * dengan spasi atau tanda hubung. wa.me hanya menerima angka berformat
+     * internasional tanpa tanda apa pun. Yang tidak bisa dinormalkan dengan
+     * yakin — nomor terlalu pendek, atau bukan angka sama sekali — dibalas
+     * null, dan halaman jatuh ke tautan `tel:` alih-alih menebak.
+     */
+    public function waLink(?string $pesan = null): ?string
+    {
+        $angka = preg_replace('/\D+/', '', (string) $this->reporter_phone) ?? '';
+
+        if (str_starts_with($angka, '0')) {
+            $angka = '62'.substr($angka, 1);
+        } elseif (str_starts_with($angka, '8')) {
+            // Ditulis tanpa nol depan, mis. 81234567890.
+            $angka = '62'.$angka;
+        }
+
+        // 62 + 9 digit adalah nomor seluler Indonesia terpendek yang masuk akal.
+        if (! str_starts_with($angka, '62') || strlen($angka) < 11 || strlen($angka) > 15) {
+            return null;
+        }
+
+        return 'https://wa.me/'.$angka
+            .(filled($pesan) ? '?text='.rawurlencode($pesan) : '');
+    }
 }
