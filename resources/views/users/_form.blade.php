@@ -9,7 +9,7 @@
 
 <label for="role">Peran <span class="req">*</span></label>
 <select id="role" name="role" required>
-  @foreach(['kasir'=>'Kasir','customer_care'=>'Customer Care','divisi'=>'Divisi','supervisor'=>'Supervisor'] as $k=>$v)
+  @foreach(['kasir'=>'Kasir','customer_care'=>'Customer Care','divisi'=>'Produksi / Kurir','supervisor'=>'Supervisor','admin'=>'Admin'] as $k=>$v)
     <option value="{{ $k }}" @selected(old('role', $user->role ?? '')===$k)>{{ $v }}</option>
   @endforeach
 </select>

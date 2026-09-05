@@ -186,8 +186,8 @@ return [
     ],
 
     'divisions' => [
-        'produksi' => 'Operasional Cuci / Produksi',
-        'kurir' => 'Kurir / Antar Jemput',
+        'produksi' => 'Produksi',
+        'kurir' => 'Kurir',
         'keuangan' => 'Keuangan',
     ],
 
@@ -196,6 +196,7 @@ return [
     | angkanya, DAN saat menutup complaint yang memegang angka itu. (API-25)
     */
     'compensation_limit' => [
+        'admin' => PHP_INT_MAX,
         'kasir' => 50000,
         'customer_care' => 200000,
         'divisi' => 0,

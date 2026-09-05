@@ -21,19 +21,19 @@ class UserManagementTest extends TestCase
 
     /* ---------- Siapa boleh mengelola ---------- */
 
-    public function test_hanya_supervisor_yang_bisa_membuka_pengelolaan_pengguna(): void
+    public function test_hanya_admin_yang_bisa_membuka_pengelolaan_pengguna(): void
     {
         foreach (['kasir', 'customer_care', 'divisi'] as $role) {
             $this->actingAs($this->userAs($role))->get('/users')->assertForbidden();
         }
 
-        $this->actingAs($this->userAs('supervisor'))->get('/users')->assertOk();
+        $this->actingAs($this->userAs('admin'))->get('/users')->assertOk();
     }
 
-    public function test_bukan_supervisor_tidak_bisa_membuat_pengguna(): void
+    public function test_bukan_admin_tidak_bisa_membuat_pengguna(): void
     {
         $this->actingAs($this->userAs('customer_care'))->post('/users', [
-            'name' => 'Penyusup', 'email' => 'x@lessworry.id', 'role' => 'supervisor',
+            'name' => 'Penyusup', 'email' => 'x@lessworry.id', 'role' => 'admin',
         ])->assertForbidden();
 
         $this->assertDatabaseMissing('users', ['email' => 'x@lessworry.id']);
@@ -43,10 +43,10 @@ class UserManagementTest extends TestCase
 
     public function test_pengguna_baru_dibuat_dengan_password_sementara_yang_wajib_diganti(): void
     {
-        $supervisor = $this->userAs('supervisor');
+        $admin = $this->userAs('admin');
         $outlet = Outlet::create(['name' => 'Outlet A']);
 
-        $response = $this->actingAs($supervisor)->post('/users', [
+        $response = $this->actingAs($admin)->post('/users', [
             'name' => 'Kasir Baru', 'email' => 'kasirbaru@lessworry.id',
             'role' => 'kasir', 'outlet_id' => $outlet->id,
         ]);
@@ -68,10 +68,10 @@ class UserManagementTest extends TestCase
 
     public function test_email_tidak_boleh_kembar(): void
     {
-        $supervisor = $this->userAs('supervisor');
+        $admin = $this->userAs('admin');
         $existing = $this->userAs('kasir');
 
-        $this->actingAs($supervisor)->post('/users', [
+        $this->actingAs($admin)->post('/users', [
             'name' => 'Duplikat', 'email' => $existing->email, 'role' => 'kasir',
         ])->assertSessionHasErrors('email');
     }
@@ -144,35 +144,35 @@ class UserManagementTest extends TestCase
 
     /* ---------- Menonaktifkan akun ---------- */
 
-    public function test_supervisor_tidak_bisa_menonaktifkan_akunnya_sendiri(): void
+    public function test_admin_tidak_bisa_menonaktifkan_akunnya_sendiri(): void
     {
-        $supervisor = $this->userAs('supervisor');
+        $admin = $this->userAs('admin');
 
-        $this->actingAs($supervisor)->put('/users/'.$supervisor->id, [
-            'name' => $supervisor->name, 'role' => 'supervisor', 'is_active' => 0,
+        $this->actingAs($admin)->put('/users/'.$admin->id, [
+            'name' => $admin->name, 'role' => 'admin', 'is_active' => 0,
         ])->assertSessionHasErrors('is_active');
 
-        $this->assertTrue($supervisor->fresh()->is_active);
+        $this->assertTrue($admin->fresh()->is_active);
     }
 
-    public function test_supervisor_aktif_terakhir_tidak_bisa_dinonaktifkan(): void
+    public function test_admin_aktif_terakhir_tidak_bisa_dinonaktifkan(): void
     {
-        $satu = $this->userAs('supervisor');
-        $dua = $this->userAs('supervisor');
+        $satu = $this->userAs('admin');
+        $dua = $this->userAs('admin');
 
         // Masih ada dua supervisor: menonaktifkan salah satunya boleh.
         $this->actingAs($satu)->put('/users/'.$dua->id, [
-            'name' => $dua->name, 'role' => 'supervisor', 'is_active' => 0,
+            'name' => $dua->name, 'role' => 'admin', 'is_active' => 0,
         ])->assertRedirect('/users');
 
         $this->assertFalse($dua->fresh()->is_active);
 
         // Tersisa satu: sistem menolak, supaya tidak ada yang terkunci di luar.
-        $tiga = $this->userAs('supervisor');
+        $tiga = $this->userAs('admin');
         $tiga->update(['is_active' => false]);
 
         $this->actingAs($satu)->put('/users/'.$satu->id, [
-            'name' => $satu->name, 'role' => 'supervisor', 'is_active' => 0,
+            'name' => $satu->name, 'role' => 'admin', 'is_active' => 0,
         ])->assertSessionHasErrors('is_active');
 
         $this->assertTrue($satu->fresh()->is_active);
@@ -180,10 +180,10 @@ class UserManagementTest extends TestCase
 
     public function test_reset_password_membuat_password_lama_tidak_berlaku(): void
     {
-        $supervisor = $this->userAs('supervisor');
+        $admin = $this->userAs('admin');
         $kasir = $this->userAs('kasir');
 
-        $this->actingAs($supervisor)
+        $this->actingAs($admin)
             ->post('/users/'.$kasir->id.'/reset-password')
             ->assertSessionHas('temporary_password');
 
@@ -195,10 +195,10 @@ class UserManagementTest extends TestCase
 
     public function test_akun_tidak_pernah_bisa_dihapus(): void
     {
-        $supervisor = $this->userAs('supervisor');
+        $admin = $this->userAs('admin');
         $kasir = $this->userAs('kasir');
 
-        $this->actingAs($supervisor)->delete('/users/'.$kasir->id)->assertStatus(405);
+        $this->actingAs($admin)->delete('/users/'.$kasir->id)->assertStatus(405);
         $this->assertDatabaseHas('users', ['id' => $kasir->id]);
     }
 
@@ -206,9 +206,9 @@ class UserManagementTest extends TestCase
 
     public function test_request_tanpa_is_active_tidak_menonaktifkan_akun(): void
     {
-        $supervisor = User::create([
+        $admin = User::create([
             'name' => 'SV', 'email' => 'sv'.uniqid().'@lessworry.id',
-            'password' => 'secret123', 'role' => 'supervisor',
+            'password' => 'secret123', 'role' => 'admin',
         ]);
 
         $kasir = User::create([
@@ -220,7 +220,7 @@ class UserManagementTest extends TestCase
 
         // Kolom is_active sengaja tidak dikirim — nilai yang tidak dikirim
         // berarti "jangan diubah", bukan "matikan".
-        $this->actingAs($supervisor)->put('/users/'.$kasir->id, [
+        $this->actingAs($admin)->put('/users/'.$kasir->id, [
             'name' => 'Kasir', 'role' => 'kasir',
         ])->assertSessionHasNoErrors();
 
@@ -229,9 +229,9 @@ class UserManagementTest extends TestCase
 
     public function test_request_tanpa_is_active_tidak_menghidupkan_akun_nonaktif(): void
     {
-        $supervisor = User::create([
+        $admin = User::create([
             'name' => 'SV', 'email' => 'sv'.uniqid().'@lessworry.id',
-            'password' => 'secret123', 'role' => 'supervisor',
+            'password' => 'secret123', 'role' => 'admin',
         ]);
 
         $kasir = User::create([
@@ -240,7 +240,7 @@ class UserManagementTest extends TestCase
         ]);
         $kasir->forceFill(['is_active' => false])->save();
 
-        $this->actingAs($supervisor)->put('/users/'.$kasir->id, [
+        $this->actingAs($admin)->put('/users/'.$kasir->id, [
             'name' => 'Kasir', 'role' => 'kasir',
         ])->assertSessionHasNoErrors();
 
@@ -249,9 +249,9 @@ class UserManagementTest extends TestCase
 
     public function test_is_active_yang_dikirim_tetap_berlaku(): void
     {
-        $supervisor = User::create([
+        $admin = User::create([
             'name' => 'SV', 'email' => 'sv'.uniqid().'@lessworry.id',
-            'password' => 'secret123', 'role' => 'supervisor',
+            'password' => 'secret123', 'role' => 'admin',
         ]);
 
         $kasir = User::create([
@@ -259,7 +259,7 @@ class UserManagementTest extends TestCase
             'password' => 'secret123', 'role' => 'kasir',
         ]);
 
-        $this->actingAs($supervisor)->put('/users/'.$kasir->id, [
+        $this->actingAs($admin)->put('/users/'.$kasir->id, [
             'name' => 'Kasir', 'role' => 'kasir', 'is_active' => 0,
         ])->assertSessionHasNoErrors();
 

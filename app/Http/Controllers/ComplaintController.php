@@ -270,7 +270,7 @@ class ComplaintController extends Controller
             // dropdown — dan complaint itu tidak pernah tersentuh siapa pun.
             'assigned_to' => ['nullable', Rule::exists('users', 'id')
                 ->where('is_active', true)
-                ->whereIn('role', ['kasir', 'customer_care', 'supervisor'])],
+                ->whereIn('role', User::peranBisaDitugasi())],
             'forwarded_division' => ['nullable', Rule::in(array_keys(config('complaint.divisions')))],
         ], [], ['assigned_to' => 'penanggung jawab']);
 

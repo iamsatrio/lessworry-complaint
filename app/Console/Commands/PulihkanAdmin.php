@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 /**
  * Jalan pulang saat pengelolaan pengguna terkunci. (API-14 #1)
  *
- * Pengaman di UserController mencegah supervisor aktif terakhir hilang, tapi
+ * Pengaman di UserController mencegah admin aktif terakhir hilang, tapi
  * pengaman saja tidak cukup: basis data bisa terlanjur sampai ke keadaan itu
  * lewat seeder, migrasi data, atau perbaikan manual yang meleset. Tanpa
  * perintah ini satu-satunya jalan keluar adalah menulis langsung ke basis
@@ -18,13 +18,13 @@ use Illuminate\Support\Str;
  * Dijalankan dari shell server, jadi tidak melewati pemeriksaan peran HTTP —
  * yang memegang shell memang sudah memegang basis datanya.
  */
-class PulihkanSupervisor extends Command
+class PulihkanAdmin extends Command
 {
-    protected $signature = 'lessworry:pulihkan-supervisor
+    protected $signature = 'lessworry:pulihkan-admin
                             {email : email akun yang mau diangkat}
                             {--reset-password : setel ulang password jadi sementara}';
 
-    protected $description = 'Angkat satu akun jadi supervisor aktif — jalan pulih saat semua supervisor terkunci.';
+    protected $description = 'Angkat satu akun jadi admin aktif — jalan pulih saat semua admin terkunci.';
 
     public function handle(): int
     {
@@ -36,7 +36,7 @@ class PulihkanSupervisor extends Command
             return self::FAILURE;
         }
 
-        $user->forceFill(['role' => 'supervisor', 'is_active' => true]);
+        $user->forceFill(['role' => 'admin', 'is_active' => true]);
 
         if ($this->option('reset-password')) {
             $temporary = Str::password(12, symbols: false);
@@ -45,7 +45,7 @@ class PulihkanSupervisor extends Command
 
         $user->save();
 
-        $this->info($user->name.' ('.$user->email.') sekarang supervisor aktif.');
+        $this->info($user->name.' ('.$user->email.') sekarang admin aktif.');
 
         if (isset($temporary)) {
             // Hanya ke layar orang yang menjalankan perintah. Tidak ke log,
@@ -54,7 +54,7 @@ class PulihkanSupervisor extends Command
             $this->line('Wajib diganti saat login pertama. Sampaikan lewat jalur pribadi, jangan grup.');
         }
 
-        $this->line('Supervisor aktif sekarang: '.User::where('role', 'supervisor')->where('is_active', true)->count());
+        $this->line('Admin aktif sekarang: '.User::where('role', 'admin')->where('is_active', true)->count());
 
         return self::SUCCESS;
     }
