@@ -64,6 +64,35 @@ return [
             ]) : [],
         ],
 
+        /*
+        | Koneksi khusus `backup:verify`. Bedanya dengan `mysql` HANYA pada
+        | penggunanya — dan justru di situ letak pengamannya: pengguna ini
+        | hanya diberi hak di database `<db>_verify_%`, jadi dump yang mencoba
+        | menulis ke database produksi ditolak oleh MySQL sendiri, bukan oleh
+        | pembacaan isi dumpnya. Lihat docs/deploy-care-lessworry.md.
+        |
+        | `database` sengaja kosong: perintahnya membuat dan memilih database
+        | sementaranya sendiri.
+        */
+        'mysql_verify' => [
+            'driver' => 'mysql',
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '3306'),
+            'database' => env('DB_VERIFY_DATABASE', ''),
+            'username' => env('DB_VERIFY_USERNAME', ''),
+            'password' => env('DB_VERIFY_PASSWORD', ''),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

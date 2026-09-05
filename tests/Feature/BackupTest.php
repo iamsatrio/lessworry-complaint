@@ -426,4 +426,89 @@ class BackupTest extends TestCase
         $this->artisan('backup:database')->assertSuccessful();
         $this->artisan('backup:verify')->assertSuccessful();
     }
+
+    public function test_verify_menolak_attach_yang_disorong_lewat_batas_baca_dengan_spasi(): void
+    {
+        // Batas baca pemindai dulu bisa dipenuhi lebih dulu oleh 300 spasi,
+        // sampai kata perintahnya tidak pernah ikut terbaca. Diuji lewat
+        // perintah sungguhan, bukan cuma di unit test pemindainya.
+        $korban = storage_path('app/korban-'.uniqid().'.sqlite');
+        file_put_contents($korban, '');
+
+        $this->tulisBackup('db-2030-01-06-020000.sql.gz',
+            "CREATE TABLE complaints (id INTEGER);\n"
+            .'INSERT INTO complaints VALUES (1);'.str_repeat(' ', 300)
+            ."ATTACH DATABASE '{$korban}' AS korban;"
+            .'CREATE TABLE korban.bukti (x TEXT);'
+        );
+
+        try {
+            $this->artisan('backup:verify')
+                ->expectsOutputToContain('ATTACH DATABASE')
+                ->assertFailed();
+
+            $this->assertSame('', (string) file_get_contents($korban));
+        } finally {
+            @unlink($korban);
+        }
+    }
+
+    public function test_verify_menolak_attach_yang_disorong_dengan_baris_baru(): void
+    {
+        $korban = storage_path('app/korban-'.uniqid().'.sqlite');
+        file_put_contents($korban, '');
+
+        $this->tulisBackup('db-2030-01-07-020000.sql.gz',
+            "CREATE TABLE complaints (id INTEGER);\n"
+            .'INSERT INTO complaints VALUES (1);'.str_repeat("\n", 300)
+            ."ATTACH DATABASE '{$korban}' AS korban;"
+        );
+
+        try {
+            $this->artisan('backup:verify')->assertFailed();
+            $this->assertSame('', (string) file_get_contents($korban));
+        } finally {
+            @unlink($korban);
+        }
+    }
+
+    public function test_verify_di_mysql_menolak_jalan_tanpa_koneksi_pemulihan_terpisah(): void
+    {
+        $this->tulisBackup('db-2030-01-08-020000.sql.gz', 'CREATE TABLE complaints (id INTEGER);');
+
+        config(['backup.verify_connection' => null, 'database.default' => 'mysql']);
+
+        try {
+            // Gagal ke arah aman: memulihkan dengan pengguna aplikasi berarti
+            // dump yang menulis ke `produksi.complaints` dengan nama lengkap
+            // tidak ditahan oleh apa pun — --one-database hanya mengikuti USE.
+            $this->artisan('backup:verify')
+                ->expectsOutputToContain('BACKUP_VERIFY_CONNECTION')
+                ->assertFailed();
+        } finally {
+            config(['database.default' => 'sqlite']);
+        }
+    }
+
+    public function test_verify_di_mysql_menolak_koneksi_yang_penggunanya_sama_dengan_aplikasi(): void
+    {
+        $this->tulisBackup('db-2030-01-09-020000.sql.gz', 'CREATE TABLE complaints (id INTEGER);');
+
+        config([
+            'database.default' => 'mysql',
+            'database.connections.mysql.username' => 'care',
+            'database.connections.mysql_verify.username' => 'care',
+            'backup.verify_connection' => 'mysql_verify',
+        ]);
+
+        try {
+            // Nama koneksi yang berbeda tapi pengguna yang sama = hak akses
+            // yang sama = tidak ada pemisahan sama sekali.
+            $this->artisan('backup:verify')
+                ->expectsOutputToContain('pengguna database yang sama')
+                ->assertFailed();
+        } finally {
+            config(['database.default' => 'sqlite']);
+        }
+    }
 }

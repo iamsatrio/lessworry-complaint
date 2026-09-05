@@ -23,6 +23,21 @@ return [
     'mysqldump' => env('BACKUP_MYSQLDUMP', 'mysqldump'),
     'mysql' => env('BACKUP_MYSQL', 'mysql'),
 
+    /*
+    | Koneksi database yang dipakai `backup:verify` MEMULIHKAN dump — wajib
+    | memakai pengguna database yang berbeda dari aplikasi, dan pengguna itu
+    | tidak boleh punya hak tulis di database produksi.
+    |
+    | Itu pengaman utamanya, bukan pembacaan isi dump: `--one-database` hanya
+    | mengikuti pernyataan `USE`, sementara dump yang menulis dengan nama
+    | database lengkap (`INSERT INTO lessworry_care.complaints ...`) lewat
+    | begitu saja. Yang menahannya cuma hak akses.
+    |
+    | Kosong = `backup:verify` menolak berjalan di MySQL. Itu disengaja.
+    | Jalur SQLite tidak memakainya: di sana restore dikurung open_basedir.
+    */
+    'verify_connection' => env('BACKUP_VERIFY_CONNECTION'),
+
     // Detik. Dump besar butuh lebih lama daripada batas bawaan Symfony (60s).
     'timeout' => (int) env('BACKUP_TIMEOUT', 900),
 

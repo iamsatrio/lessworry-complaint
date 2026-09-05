@@ -78,11 +78,14 @@ Yang perlu ditambahkan di server hanyalah satu baris crontab:
       sama akan ikut hilang bersama mesinnya.
 - [ ] **Jalankan `backup:verify` satu kali setelah pasang**, dan catat
       tanggalnya. Ulangi tiap kuartal.
-- [ ] `backup:verify` dijalankan di mesin salinan, atau dengan pengguna
-      database terpisah — **bukan** dengan pengguna yang dipakai proses web.
-      Perintah itu butuh `CREATE`/`DROP DATABASE`; memberikannya kepada
-      pengguna web berarti setiap celah di aplikasi berujung pada kemampuan
-      menghapus database. Caranya di `deploy-care-lessworry.md`.
+- [ ] `BACKUP_VERIFY_CONNECTION` diisi, dengan pengguna database tersendiri
+      yang **tidak punya hak apa pun di database produksi**. Tanpa itu
+      `backup:verify` menolak berjalan di MySQL — disengaja. Perintah itu
+      memulihkan berkas yang isinya tidak dipercaya, dan yang menahannya
+      menulis ke produksi adalah hak akses, bukan pembacaan isi dumpnya
+      (`--one-database` hanya mengikuti `USE`; `INSERT INTO produksi.tabel`
+      lewat begitu saja). Caranya di `deploy-care-lessworry.md`.
+- [ ] Pengguna yang dipakai proses web **tidak** punya `CREATE`/`DROP DATABASE`.
 
 ## Optimasi
 

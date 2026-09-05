@@ -29,10 +29,31 @@ use RuntimeException;
  * ";ATTACH ..." di dalam tanda kutip tidak jadi alarm palsu, dan penyerang
  * tidak bisa bersembunyi di baliknya.
  *
- * Ini lapis PERTAMA. Lapis kedua tidak bergantung pada pemindai ini sama
- * sekali: klien mysql dipanggil dengan `--one-database`. Penyaring teks
- * dipakai untuk menolak lebih awal dengan pesan yang jelas, bukan sebagai
- * satu-satunya pengaman.
+ * Pemindai ini adalah lapis KEDUA, dan sengaja diturunkan ke sana.
+ *
+ * Ia sudah ditembus dua kali: dengan memindahkan `ATTACH` ke baris yang sama
+ * sesudah titik koma, lalu dengan menyorongnya lewat batas baca memakai 300
+ * spasi. Dua bentuk berbeda dari satu hal yang sama — selama keamanannya
+ * diputuskan oleh seberapa pintar pembaca teksnya, akan selalu ada bentuk
+ * berikutnya. Gunanya di sini adalah MENOLAK LEBIH AWAL DENGAN PESAN YANG
+ * JELAS, bukan menentukan aman atau tidak.
+ *
+ * Yang menentukan aman atau tidak ada di lapis pertama, dan tidak membaca
+ * dumpnya sama sekali:
+ *   SQLite — restore dijalankan di proses terkurung `open_basedir`
+ *            (PemulihSqliteTerkurung); ATTACH ke luar kurungan gagal karena
+ *            berkasnya memang tidak bisa dibuka.
+ *   MySQL  — restore dijalankan dengan koneksi database TERPISAH yang tidak
+ *            punya hak tulis di database produksi, dan `--one-database`.
+ *
+ * Dua perubahan yang membuat lapis kedua ini gagal ke arah aman:
+ *
+ *   1. Spasi di depan pernyataan tidak lagi ikut memakan jatah baca, jadi
+ *      kata perintahnya selalu sampai.
+ *   2. Yang dipakai memutuskan adalah DAFTAR IZIN, bukan daftar larangan.
+ *      Pernyataan yang tidak dikenali ditolak. Dump buatan `backup:database`
+ *      hanya memakai belasan bentuk pernyataan; apa pun di luar itu — DELIMITER,
+ *      GRANT, LOAD DATA, bentuk yang belum terpikir — berhenti di sini.
  */
 class PemindaiDumpSql
 {
@@ -45,7 +66,7 @@ class PemindaiDumpSql
      * @var array<string,string>
      */
     private const TERLARANG = [
-        '/^USE\s/i' => 'USE',
+        '/^USE\b/i' => 'USE',
         '/^CREATE\s+(DATABASE|SCHEMA)\b/i' => 'CREATE DATABASE',
         '/^DROP\s+(DATABASE|SCHEMA)\b/i' => 'DROP DATABASE',
         '/^ALTER\s+(DATABASE|SCHEMA)\b/i' => 'ALTER DATABASE',
@@ -54,8 +75,40 @@ class PemindaiDumpSql
     ];
 
     /**
+     * Bentuk pernyataan yang memang dihasilkan `backup:database` dan mysqldump.
+     * Apa pun di luar daftar ini ditolak — itu yang membuat batas baca di bawah
+     * gagal ke arah aman, bukan meloloskan.
+     *
+     * @var array<int,string>
+     */
+    private const DIIZINKAN = [
+        '/^BEGIN\b/i',
+        '/^COMMIT\b/i',
+        // Penutup transaksi, dan penutup badan trigger di dump SQLite.
+        '/^END\b/i',
+        '/^ROLLBACK\b/i',
+        '/^PRAGMA\s+[A-Za-z_]+\s*=/i',
+        '/^SET\b/i',
+        '/^SELECT\b/i',
+        '/^CREATE\s+(TEMPORARY\s+)?TABLE\b/i',
+        '/^CREATE\s+(UNIQUE\s+)?INDEX\b/i',
+        '/^CREATE\s+TRIGGER\b/i',
+        '/^CREATE\s+(ALGORITHM|DEFINER|SQL\s+SECURITY|OR\s+REPLACE)?[^;]*\bVIEW\b/i',
+        '/^INSERT\s+(IGNORE\s+|LOW_PRIORITY\s+|DELAYED\s+)?INTO\b/i',
+        '/^REPLACE\s+INTO\b/i',
+        '/^DROP\s+(TEMPORARY\s+)?TABLE\b/i',
+        '/^DROP\s+(VIEW|INDEX|TRIGGER)\b/i',
+        '/^ALTER\s+TABLE\b/i',
+        '/^(UN)?LOCK\s+TABLES?\b/i',
+    ];
+
+    /**
      * Yang dicocokkan hanya awal pernyataan, jadi tidak ada gunanya menyimpan
      * seluruh isi INSERT yang panjang.
+     *
+     * Spasi di depan TIDAK ikut disimpan (lihat diKode), jadi batas ini tidak
+     * bisa dipenuhi lebih dulu oleh 300 spasi sampai kata perintahnya tidak
+     * kebagian tempat — itu cara pemindai ini ditembus sebelumnya.
      */
     private const BATAS_AWAL = 256;
 
@@ -185,6 +238,14 @@ class PemindaiDumpSql
             return 1;
         }
 
+        // Spasi, tab, dan baris baru di DEPAN pernyataan tidak disimpan.
+        // Menyimpannya berarti 256 spasi bisa memenuhi jatah baca sampai kata
+        // perintahnya tidak pernah ikut terbaca — dan itu jalan lolos yang
+        // sudah dibuktikan sampai menulis ke berkas di luar direktori backup.
+        if ($this->awal === '' && ctype_space($c)) {
+            return 1;
+        }
+
         // Isi string tidak pernah sampai ke sini — itu yang membuat data
         // pelanggan tidak bisa memicu alarm palsu, dan tidak bisa dipakai
         // bersembunyi.
@@ -251,12 +312,12 @@ class PemindaiDumpSql
 
     private function uji(string $pernyataan): void
     {
-        $pernyataan = ltrim($pernyataan);
-
         if ($pernyataan === '') {
             return;
         }
 
+        // Diperiksa lebih dulu supaya pesannya menyebut perintahnya, bukan
+        // sekadar "tidak dikenali".
         foreach (self::TERLARANG as $pola => $nama) {
             if (preg_match($pola, $pernyataan)) {
                 throw new RuntimeException(
@@ -266,5 +327,27 @@ class PemindaiDumpSql
                 );
             }
         }
+
+        foreach (self::DIIZINKAN as $pola) {
+            if (preg_match($pola, $pernyataan)) {
+                return;
+            }
+        }
+
+        // Tidak dikenali berarti ditolak. Daftar larangan hanya bisa menutup
+        // bentuk yang sudah terpikir; daftar izin menutup yang belum.
+        throw new RuntimeException(
+            'Dump ini memuat pernyataan yang tidak dikenali: "'.$this->cuplik($pernyataan).'". '
+            .'Yang dipulihkan hanya dump buatan backup:database, dan dump itu tidak pernah '
+            .'memuat bentuk pernyataan lain.'
+        );
+    }
+
+    /** Cuplikan pendek untuk pesan galat; isinya dari berkas yang tidak dipercaya. */
+    private function cuplik(string $pernyataan): string
+    {
+        $bersih = (string) preg_replace('/[^\x20-\x7E]+/', ' ', $pernyataan);
+
+        return mb_substr(trim($bersih), 0, 60);
     }
 }

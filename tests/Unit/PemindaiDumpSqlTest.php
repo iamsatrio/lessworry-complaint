@@ -95,7 +95,7 @@ class PemindaiDumpSqlTest extends TestCase
 
     public function test_kutip_ganda_di_dalam_string_tidak_membuat_pemindai_salah_langkah(): void
     {
-        $this->terima("INSERT INTO t VALUES ('bu ''Sari'' komplain');ATTACH_LOG_OK;");
+        $this->terima("INSERT INTO t VALUES ('bu ''Sari'' komplain');SELECT 1;");
     }
 
     public function test_backslash_escape_mysql_tidak_membuat_pemindai_salah_langkah(): void
@@ -139,5 +139,100 @@ class PemindaiDumpSqlTest extends TestCase
         $pemindai->periksa(['SELECT 1; /', "* ATTACH DATABASE 'x' AS y; */", 'SELECT 2;']);
 
         $this->assertTrue(true);
+    }
+
+    /* ---------- Batas baca diisi spasi (temuan ketiga di PR #2) ---------- */
+
+    /**
+     * Ambang batasnya persis di BATAS_AWAL = 256: pad=255 ke atas lolos, di
+     * bawahnya ditolak. Semua nilai di sekitarnya diuji, bukan cuma satu.
+     */
+    public function test_spasi_sebanyak_apa_pun_tidak_menggeser_perintah_keluar_jangkauan(): void
+    {
+        foreach ([10, 100, 250, 255, 256, 257, 300, 4096] as $pad) {
+            $this->tolak(
+                'INSERT INTO complaints VALUES (1);'.str_repeat(' ', $pad)
+                ."ATTACH DATABASE '/tmp/korban.sqlite' AS korban;",
+                'ATTACH DATABASE'
+            );
+        }
+    }
+
+    public function test_baris_baru_sebagai_isian_juga_tidak_menggeser_perintah(): void
+    {
+        // Bentuk paling wajar dilihat manusia: 300 baris kosong di berkas teks
+        // tidak menarik perhatian siapa pun.
+        $this->tolak(
+            'INSERT INTO complaints VALUES (1);'.str_repeat("\n", 300)
+            ."ATTACH DATABASE '/tmp/korban.sqlite' AS korban;",
+            'ATTACH DATABASE'
+        );
+    }
+
+    public function test_tab_sebagai_isian_juga_tidak_menggeser_perintah(): void
+    {
+        $this->tolak(
+            'INSERT INTO complaints VALUES (1);'.str_repeat("\t", 260)
+            ."ATTACH DATABASE '/tmp/korban.sqlite' AS korban;",
+            'ATTACH DATABASE'
+        );
+    }
+
+    public function test_use_dengan_kutip_ganda_ikut_ditolak(): void
+    {
+        // Dulu polanya menuntut spasi sesudah USE, jadi use"prod"; lolos.
+        $this->tolak('use"lessworry_care";', 'USE', mysql: true);
+    }
+
+    /* ---------- Daftar izin: yang tidak dikenali ditolak ---------- */
+
+    public function test_pernyataan_yang_tidak_dikenali_ditolak(): void
+    {
+        // Daftar larangan hanya menutup bentuk yang sudah terpikir. Ini
+        // bentuk-bentuk yang TIDAK ada di daftar larangan mana pun, dan tetap
+        // harus berhenti.
+        foreach ([
+            'GRANT ALL PRIVILEGES ON *.* TO \'penyusup\'@\'%\';',
+            "LOAD DATA INFILE '/etc/passwd' INTO TABLE complaints;",
+            'DELIMITER ;;',
+            "COPY complaints FROM '/tmp/x.csv';",
+            'CALL sesuatu();',
+            'DELETE FROM complaints;',
+        ] as $pernyataan) {
+            $this->tolak($pernyataan, 'tidak dikenali', mysql: true);
+        }
+    }
+
+    public function test_bentuk_pernyataan_dump_asli_tetap_diterima(): void
+    {
+        // Kalau daftar izinnya kesempitan, verify menolak dump yang sah — dan
+        // penyaring yang begitu akan dimatikan orang.
+        $this->terima(
+            "PRAGMA foreign_keys=OFF;\nBEGIN TRANSACTION;\n"
+            ."CREATE TABLE complaints (id integer);\n"
+            ."CREATE UNIQUE INDEX complaints_ticket ON complaints (id);\n"
+            .'CREATE TRIGGER t AFTER INSERT ON complaints BEGIN SELECT 1; END;'
+            ."\nINSERT INTO complaints (id) VALUES (1);\nCOMMIT;\n"
+        );
+
+        $this->terima(
+            "/*!40101 SET @saved_cs_client = @@character_set_client */;\n"
+            ."DROP TABLE IF EXISTS `complaints`;\n"
+            ."CREATE TABLE `complaints` (`id` int NOT NULL);\n"
+            ."LOCK TABLES `complaints` WRITE;\n"
+            ."/*!40000 ALTER TABLE `complaints` DISABLE KEYS */;\n"
+            ."INSERT INTO `complaints` VALUES (1),(2);\n"
+            ."UNLOCK TABLES;\n",
+            mysql: true
+        );
+    }
+
+    public function test_insert_yang_lebih_panjang_dari_batas_baca_tetap_diterima(): void
+    {
+        // Batas bacanya menjaga memori, bukan keamanan — INSERT panjang tetap
+        // harus lolos karena kata perintahnya sudah terbaca di awal.
+        $nilai = implode(',', array_fill(0, 500, '(1)'));
+
+        $this->terima('INSERT INTO complaints (id) VALUES '.$nilai.';');
     }
 }

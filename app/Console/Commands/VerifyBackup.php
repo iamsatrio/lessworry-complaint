@@ -4,10 +4,10 @@ namespace App\Console\Commands;
 
 use App\Services\BerkasBackup;
 use App\Services\PemindaiDumpSql;
+use App\Services\PemulihSqliteTerkurung;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use PDO;
 use Symfony\Component\Process\Process;
 use Throwable;
 
@@ -91,46 +91,19 @@ class VerifyBackup extends Command
     }
 
     /**
-     * SQLite: dump dijalankan ke berkas database baru yang kosong, bukan ke
-     * berkas yang sedang dipakai aplikasi.
+     * SQLite: restore dijalankan di proses terkurung, bukan di proses ini.
      *
-     * Dumpnya dibaca utuh — jalur SQLite dipakai untuk pengembangan lokal,
-     * bukan untuk basis data produksi yang besar. Jalur MySQL tetap dialirkan
-     * sedikit-sedikit.
+     * Yang menahan `ATTACH DATABASE '/var/www/care/database/produksi.sqlite'`
+     * bukan pemindai teksnya, melainkan `open_basedir` di subproses: berkas
+     * itu memang tidak bisa dibuka dari dalam sana. Lihat
+     * PemulihSqliteTerkurung.
      */
     private function pulihkanSqlite(string $path): int
     {
-        $temp = tempnam(sys_get_temp_dir(), 'lwvf');
-
-        if ($temp === false) {
-            throw new \RuntimeException('Berkas sementara tidak bisa dibuat.');
-        }
-
-        try {
-            $sql = '';
-
-            foreach ($this->potongan($path) as $potongan) {
-                $sql .= $potongan;
-            }
-
-            $pdo = new PDO('sqlite:'.$temp, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-            $pdo->exec($sql);
-
-            $ada = $pdo->query("select count(*) from sqlite_master where type='table' and name='complaints'")
-                ->fetchColumn();
-
-            if ((int) $ada === 0) {
-                throw new \RuntimeException('Backup dipulihkan, tapi tabel complaints tidak ada di dalamnya.');
-            }
-
-            return (int) $pdo->query('select count(*) from complaints')->fetchColumn();
-        } finally {
-            if ($this->option('keep-temp')) {
-                $this->comment('Database sementara dibiarkan: '.$temp);
-            } else {
-                @unlink($temp);
-            }
-        }
+        return (new PemulihSqliteTerkurung)->pulihkan(
+            $this->potongan($path),
+            simpan: (bool) $this->option('keep-temp'),
+        );
     }
 
     /**
@@ -139,8 +112,9 @@ class VerifyBackup extends Command
      */
     private function pulihkanMysql(string $path, BerkasBackup $berkas): int
     {
-        $c = DB::connection()->getConfig();
-        $asli = (string) $c['database'];
+        $koneksi = $this->koneksiPemulihan();
+        $c = DB::connection($koneksi)->getConfig();
+        $asli = (string) DB::connection()->getConfig()['database'];
 
         $temp = mb_substr($asli, 0, 40).'_verify_'.bin2hex(random_bytes(4));
 
@@ -148,7 +122,9 @@ class VerifyBackup extends Command
             throw new \RuntimeException('Nama database sementara tidak layak dipakai.');
         }
 
-        DB::statement('CREATE DATABASE `'.$temp.'` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+        DB::connection($koneksi)->statement(
+            'CREATE DATABASE `'.$temp.'` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
+        );
 
         $defaults = null;
 
@@ -178,7 +154,7 @@ class VerifyBackup extends Command
                 );
             }
 
-            $ada = DB::selectOne(
+            $ada = DB::connection($koneksi)->selectOne(
                 'select count(*) as n from information_schema.tables where table_schema = ? and table_name = ?',
                 [$temp, 'complaints']
             );
@@ -187,7 +163,7 @@ class VerifyBackup extends Command
                 throw new \RuntimeException('Backup dipulihkan, tapi tabel complaints tidak ada di dalamnya.');
             }
 
-            $hitung = DB::selectOne('select count(*) as n from `'.$temp.'`.`complaints`');
+            $hitung = DB::connection($koneksi)->selectOne('select count(*) as n from `'.$temp.'`.`complaints`');
 
             return (int) ($hitung->n ?? 0);
         } finally {
@@ -200,9 +176,61 @@ class VerifyBackup extends Command
             } else {
                 // Hanya database yang dibuat perintah ini beberapa baris di
                 // atas. Namanya tidak pernah datang dari luar.
-                DB::statement('DROP DATABASE IF EXISTS `'.$temp.'`');
+                DB::connection($koneksi)->statement('DROP DATABASE IF EXISTS `'.$temp.'`');
             }
         }
+    }
+
+    /**
+     * Koneksi yang dipakai MEMULIHKAN — wajib berbeda dari koneksi aplikasi.
+     *
+     * Ini pengaman utama jalur MySQL, dan sengaja tidak bertumpu pada
+     * pembacaan isi dump sama sekali. Alasannya: `--one-database` hanya
+     * mengikuti pernyataan `USE`. Dump yang menulis dengan nama database
+     * lengkap —
+     *
+     *     INSERT INTO lessworry_care.complaints VALUES (...);
+     *
+     * — tidak disentuh olehnya. Yang benar-benar menahan tulisan seperti itu
+     * cuma satu hal: pengguna database yang menjalankan restore tidak punya
+     * hak tulis di database produksi.
+     *
+     * Karena itu perintah ini MENOLAK BERJALAN kalau koneksi terpisahnya belum
+     * disiapkan, alih-alih diam-diam memakai pengguna aplikasi. Gagal ke arah
+     * aman: verify yang menolak jalan bisa diperbaiki dalam lima menit;
+     * complaint produksi yang tertimpa tidak bisa dikembalikan.
+     */
+    private function koneksiPemulihan(): string
+    {
+        $nama = (string) config('backup.verify_connection');
+
+        if ($nama === '') {
+            throw new \RuntimeException(
+                'backup:verify di MySQL butuh koneksi database terpisah yang TIDAK punya hak tulis '
+                .'di database produksi. Set BACKUP_VERIFY_CONNECTION (mis. mysql_verify) beserta '
+                .'DB_VERIFY_USERNAME dan DB_VERIFY_PASSWORD. Langkah lengkapnya di '
+                .'docs/deploy-care-lessworry.md.'
+            );
+        }
+
+        if (! is_array(config('database.connections.'.$nama))) {
+            throw new \RuntimeException('Koneksi database "'.$nama.'" tidak ada di config/database.php.');
+        }
+
+        $pemulih = DB::connection($nama)->getConfig();
+        $aplikasi = DB::connection()->getConfig();
+
+        // Pengguna yang sama berarti hak akses yang sama, dan itu berarti tidak
+        // ada pemisahan sama sekali — hanya nama koneksi yang berbeda.
+        if (($pemulih['username'] ?? null) === ($aplikasi['username'] ?? null)) {
+            throw new \RuntimeException(
+                'Koneksi "'.$nama.'" memakai pengguna database yang sama dengan aplikasi. '
+                .'Pemisahannya harus pada penggunanya, bukan pada nama koneksinya: buat pengguna '
+                .'tersendiri yang hanya punya hak di database <db>_verify_%.'
+            );
+        }
+
+        return $nama;
     }
 
     /**

@@ -294,46 +294,83 @@ php artisan config:cache          # .env baru berubah
 sudo -u www-data php artisan backup:database
 ```
 
-### Menguji pemulihan — jangan dengan pengguna `care`
+### Menguji pemulihan — dengan pengguna database tersendiri
 
 `backup:verify` mengambil dump terakhir, memulihkannya ke database sementara
 `lessworry_care_verify_xxxx`, menghitung baris `complaints`, lalu membuang
 database sementaranya. Itu yang membedakan backup dari berkas yang diasumsikan
 benar.
 
-Perintah itu perlu `CREATE`/`DROP DATABASE`. **Jangan memberikannya kepada
-`care`** — `care` adalah pengguna yang dipakai proses web, dan menambah
-privilege itu berarti setiap celah di aplikasi web berujung pada kemampuan
-menghapus database. Pilih salah satu dari dua jalur ini:
+**Perintah ini memulihkan berkas yang isinya tidak dipercaya.** Siapa pun yang
+bisa menaruh berkas di direktori backup menentukan SQL apa yang dijalankan.
+Karena itu yang menahannya bukan pembacaan isi dumpnya, melainkan hak akses:
 
-**Jalur utama — di mesin tempat backup disalin.** Salin `/var/backups/care` ke
-mesin lain, pasang kode yang sama di sana, arahkan `.env`-nya ke database MySQL
-lokal mesin itu, lalu jalankan `backup:verify`. Ini sekaligus menguji salinan
-luarnya — bukan hanya berkas yang duduk di mesin yang sama dengan aplikasinya.
+> `mysql --one-database` hanya mengikuti pernyataan `USE`. Dump yang menulis
+> dengan nama database lengkap — `INSERT INTO lessworry_care.complaints ...` —
+> lewat begitu saja. Satu-satunya yang benar-benar menahan tulisan seperti itu
+> adalah pengguna database yang tidak punya hak tulis di sana.
 
-**Jalur kedua — pengguna database terpisah di mesin yang sama.** Buat pengguna
-khusus yang hanya dipakai cron pemeriksaan, bukan oleh proses web:
+Maka **`backup:verify` menolak berjalan di MySQL sampai koneksi pemulihan
+terpisah disiapkan.** Itu disengaja: verify yang menolak jalan bisa diperbaiki
+dalam lima menit; complaint produksi yang tertimpa tidak bisa dikembalikan.
+
+Buat penggunanya — dipakai HANYA oleh cron pemeriksaan, tidak pernah oleh
+proses web:
 
 ```bash
 sudo mysql -e "CREATE USER 'care_verify'@'localhost' IDENTIFIED BY 'PASSWORD_LAIN';"
 sudo mysql -e "GRANT ALL PRIVILEGES ON \`lessworry\_care\_verify\_%\`.* TO 'care_verify'@'localhost';"
-sudo mysql -e "GRANT SELECT ON lessworry_care.* TO 'care_verify'@'localhost'; FLUSH PRIVILEGES;"
+sudo mysql -e "FLUSH PRIVILEGES;"
 ```
 
-Jalankan verify dengan `.env` terpisah yang memakai pengguna itu:
+Perhatikan apa yang TIDAK diberikan: tidak ada hak apa pun di
+`lessworry_care`. Pengguna ini bahkan tidak bisa membacanya. Kalau dump jahat
+mencoba menulis ke sana, MySQL sendiri yang menolak.
+
+Lalu di `.env`:
+
+```ini
+BACKUP_VERIFY_CONNECTION=mysql_verify
+DB_VERIFY_USERNAME=care_verify
+DB_VERIFY_PASSWORD=PASSWORD_LAIN
+```
 
 ```bash
-DB_USERNAME=care_verify DB_PASSWORD='PASSWORD_LAIN' php artisan backup:verify
+php artisan config:cache
+sudo -u www-data php artisan backup:verify
 ```
 
-Berkas `.env` proses web tetap memakai `care` tanpa privilege tambahan apa pun.
+Pengguna `care` yang dipakai proses web tetap tanpa privilege tambahan apa pun
+— tidak `CREATE DATABASE`, tidak `DROP DATABASE`.
 
-> `backup:verify` menolak dump yang memuat `USE`, `CREATE DATABASE`, atau
-> `ATTACH DATABASE` sebelum menjalankannya, dan memanggil klien mysql dengan
-> `--one-database`. Dump yang dibuat orang lain dengan `mysqldump --databases`
-> **akan ditolak** — itu disengaja: perintah itu memulihkan berkas yang isinya
-> tidak dipercaya, dan dump semacam itu bisa memindahkan restore ke database
-> produksi.
+**Lebih baik lagi: jalankan di mesin tempat backup disalin.** Salin
+`/var/backups/care` ke mesin lain, pasang kode yang sama di sana, dan jalankan
+`backup:verify` dari situ. Sekaligus menguji salinan luarnya — bukan hanya
+berkas yang duduk di mesin yang sama dengan aplikasinya.
+
+#### Yang menahan, berlapis
+
+| lapis | menahan apa | bergantung pada |
+|---|---|---|
+| pengguna database terpisah | tulisan ke database produksi, termasuk yang bernama lengkap | hak akses MySQL |
+| `--one-database` | `USE` yang memindahkan restore | klien mysql |
+| pemindai isi dump | menolak lebih awal dengan pesan yang jelas | pembacaan teks |
+
+Lapis ketiga sengaja ditaruh paling akhir. Ia sudah ditembus dua kali selama
+peninjauan — sekali dengan `;ATTACH ...` sebaris, sekali dengan 300 spasi di
+depan perintahnya. Selama keamanannya diputuskan oleh seberapa pintar
+pembacanya, akan selalu ada bentuk berikutnya. Gunanya memberi pesan, bukan
+menentukan aman.
+
+Pemindai itu memakai **daftar izin**: hanya bentuk pernyataan yang memang
+dihasilkan `backup:database` dan `mysqldump` yang dilewatkan. Dump buatan orang
+lain dengan `mysqldump --databases`, atau yang memuat `DELIMITER`, akan
+ditolak. Itu disengaja.
+
+Di pengembangan lokal dengan SQLite tidak ada koneksi terpisah yang perlu
+disiapkan: restore-nya dijalankan di proses PHP terpisah dengan `open_basedir`
+dikunci ke satu direktori sementara, jadi `ATTACH DATABASE` ke berkas mana pun
+di luar direktori itu gagal karena memang tidak bisa dibuka.
 
 ### Jadwalkan
 
