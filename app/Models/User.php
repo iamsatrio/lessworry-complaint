@@ -236,6 +236,24 @@ class User extends Authenticatable
     }
 
     /**
+     * Mengelola divisi berdiri di sisi yang sama dengan mengelola pengguna:
+     * ia menentukan kotak-kotak yang orang bisa ditaruh di dalamnya, dan
+     * menghapus satu divisi memutus jalur penerusan complaint yang berjalan.
+     * Wewenang Admin, bukan Supervisor. (API-36)
+     *
+     * BELUM ADA halaman pengelolaan divisi, dan ini bukan langkah pertama
+     * membuatnya. `config/complaint.php` → `divisions` masih daftar tetap di
+     * berkas, dan menambah divisi keempat berarti satu baris di berkas itu —
+     * jarang terjadi, tidak sepadan dengan sebuah halaman. Gerbangnya
+     * ditulis sekarang supaya kalau halaman itu kelak dibuat, ia sudah punya
+     * satu tempat untuk bertanya, bukan pemeriksaan baru yang ditebak ulang.
+     */
+    public function canManageDivisions(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    /**
      * Penanda draft form intake di penyimpanan perangkat.
      *
      * Perangkat outlet dipakai bergantian, jadi draft harus terikat pengguna:

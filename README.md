@@ -17,16 +17,34 @@ php artisan migrate --seed
 php artisan serve
 ```
 
-Akun contoh (hanya untuk pengembangan, password `password`):
+Seeder membuat tujuh akun tim — akun sungguhan, bukan akun contoh (API-36):
 
 | Peran | Email |
 |---|---|
-| Supervisor | `satrio@lessworry.id` |
-| Customer Care | `cc@lessworry.id` |
-| Kasir | `kasir@lessworry.id` |
-| Divisi Produksi | `produksi@lessworry.id` |
+| Admin | `satrio@lessworry.id` |
+| Admin | `ghozi@lessworry.id` |
+| Admin | `eric@lessworry.id` |
+| Supervisor | `tsulasa@lessworry.id` |
+| Kasir (outlet Tebet) | `kasir@getnada.com` |
+| Divisi Produksi | `produksi@getnada.com` |
+| Divisi Kurir | `kurir@getnada.com` |
 
-`kasirbaru@lessworry.id` sengaja masih memegang password sementara, untuk melihat alur wajib-ganti-password.
+Tidak ada password di berkas ini dan tidak ada password bawaan. Seeder
+mencetak password sementara acak ke layar orang yang menjalankannya, sekali,
+lalu tidak menyimpannya di mana pun; semuanya wajib diganti saat login
+pertama. Menjalankan seeder ulang tidak menyetel ulang password yang sudah
+diganti sendiri.
+
+Tiga akun terakhir dipakai bergantian beberapa orang, jadi alamatnya bukan
+alamat pribadi siapa pun. `getnada.com` adalah kotak surat sekali pakai yang
+bisa dibaca siapa saja yang tahu alamatnya — cukup untuk mengantar password
+sementara saat uji coba, dan **tidak boleh** dipakai sebagai bukti kepemilikan
+akun kalau verifikasi email dibangun nanti (API-35).
+
+Akun seeder versi lama (`cc@`, `kasirbaru@`, `samsuri@`, `arifin@`,
+`adhyasta@`, `audry@`, dan alamat `kasir@`/`produksi@`/`kurir@` di
+`lessworry.id`) dinonaktifkan dan passwordnya dibuang saat seeder dijalankan —
+tidak dihapus, supaya jejak audit complaint yang pernah disentuhnya utuh.
 
 ## Dokumentasi
 
