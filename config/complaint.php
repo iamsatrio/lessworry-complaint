@@ -12,6 +12,20 @@ return [
     ],
 
     /*
+    | Tanggal potong impor data lama. (API-28)
+    |
+    | satrio baru memakai NEVIRA sejak 16 Mei 2026. Complaint yang lebih tua
+    | dari tanggal ini tidak punya order NEVIRA yang bisa dirujuk sama sekali,
+    | jadi ia bukan riwayat yang berguna — ia riwayat yang menggantung.
+    |
+    | INKLUSIF: baris tertanggal 16 Mei 2026 ikut masuk.
+    |
+    | Di sini, bukan di dalam perintahnya, supaya satrio yang berubah pikiran
+    | tidak berarti menyunting kode. Bisa ditimpa per jalan dengan `--sejak`.
+    */
+    'impor_sejak' => '2026-05-16',
+
+    /*
     | Kanal untuk data yang kanalnya TIDAK PERNAH DICATAT — spreadsheet lama
     | tidak punya kolomnya. (API-28)
     |

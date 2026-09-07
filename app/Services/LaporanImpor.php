@@ -26,6 +26,17 @@ class LaporanImpor
 
     public int $dilewati = 0;
 
+    /**
+     * Dilewati karena lebih tua dari tanggal potong.
+     *
+     * Punya barisnya sendiri di laporan, terpisah dari `dilewati`: keduanya
+     * sama-sama "tidak masuk", tapi yang satu berarti sudah ada dan yang lain
+     * berarti sengaja tidak diambil. Tanpa angka ini, orang yang membaca
+     * "88 masuk" dari berkas 545 baris akan mengira berkasnya memang hanya
+     * berisi 88.
+     */
+    public int $dilewatiTua = 0;
+
     /** @var list<array{baris:int,alasan:string}> */
     public array $gagal = [];
 
@@ -37,13 +48,14 @@ class LaporanImpor
 
     public int $pelakuTotal = 0;
 
-    public int $pelaku2026 = 0;
+    /** Baris yang lolos tanggal potong — denominator setiap angka keputusan. */
+    public int $barisDiimpor = 0;
 
-    public int $baris2026 = 0;
+    public int $pelakuDiimpor = 0;
 
     public int $qiTotal = 0;
 
-    public int $qi2026 = 0;
+    public int $qiDiimpor = 0;
 
     /** @var array<string,int> */
     public array $sebaranCsv = [];
@@ -58,6 +70,8 @@ class LaporanImpor
         public readonly string $sumber,
         public readonly string $berkas,
         public readonly bool $kering,
+        /** Tanggal potong yang berlaku, `YYYY-MM-DD`. Null berarti tanpa batas. */
+        public readonly ?string $sejak = null,
     ) {}
 
     public function catatAnomali(string $kolom, string $alasan): void
@@ -87,16 +101,21 @@ class LaporanImpor
         $this->nota[$bentuk]++;
     }
 
+    /**
+     * Dihitung atas baris yang DIIMPOR, bukan atas seluruh berkas: yang
+     * ditanyakan adalah berapa banyak complaint di dalam sistem yang tidak
+     * punya nomor nota terpakai.
+     */
     public function persenNotaTakTerpakai(): float
     {
-        return $this->totalBaris === 0
+        return $this->barisDiimpor === 0
             ? 0.0
-            : ($this->nota['kosong'] + $this->nota['tidak_terbaca']) / $this->totalBaris * 100;
+            : ($this->nota['kosong'] + $this->nota['tidak_terbaca']) / $this->barisDiimpor * 100;
     }
 
-    public function persenPelaku2026(): float
+    public function persenPelaku(): float
     {
-        return $this->baris2026 === 0 ? 0.0 : $this->pelaku2026 / $this->baris2026 * 100;
+        return $this->barisDiimpor === 0 ? 0.0 : $this->pelakuDiimpor / $this->barisDiimpor * 100;
     }
 
     public function render(string $waktu): string
@@ -108,6 +127,9 @@ class LaporanImpor
             '- Berkas: `'.basename($this->berkas).'`',
             '- Dijalankan: '.$waktu,
             '- Mode: '.($this->kering ? '**dry-run** — tidak ada satu baris pun ditulis' : 'tulis'),
+            '- Tanggal potong: '.($this->sejak === null
+                ? 'tidak ada — seluruh berkas diimpor'
+                : '`'.$this->sejak.'` (inklusif; baris lebih tua dilewati)'),
             '',
             ...$this->bagianBaris(),
             ...$this->bagianEnum(),
@@ -129,9 +151,14 @@ class LaporanImpor
             '| | Jumlah |',
             '|---|---|',
             '| Dibaca dari berkas | '.$this->totalBaris.' |',
+            '| Dilewati (lebih tua dari tanggal potong) | '.$this->dilewatiTua.' |',
+            '| Lolos tanggal potong | '.$this->barisDiimpor.' |',
             '| '.($this->kering ? 'Akan masuk' : 'Masuk').' | '.$this->masuk.' |',
             '| Dilewati (sudah ada dari impor sebelumnya) | '.$this->dilewati.' |',
             '| Gagal | '.count($this->gagal).' |',
+            '',
+            'Angka di bagian 2–6 dihitung atas baris yang **lolos tanggal potong**, '
+                .'bukan atas seluruh berkas.',
             '',
         ];
 
@@ -196,7 +223,8 @@ class LaporanImpor
             '| Tidak terbaca | '.$this->nota['tidak_terbaca'].' |',
             '',
             'Tanpa nomor nota yang terpakai: **'.$this->angka($this->persenNotaTakTerpakai()).'%** '
-                .'('.$this->nota['kosong'].' kosong + '.$this->nota['tidak_terbaca'].' tidak terbaca).',
+                .'('.$this->nota['kosong'].' kosong + '.$this->nota['tidak_terbaca'].' tidak terbaca '
+                .'dari '.$this->barisDiimpor.' baris yang diimpor).',
             '',
             'Semuanya disimpan di `legacy_nota_number`. Tidak ada satu baris pun yang mengisi '
                 .'`nevira_transaction_id`, dan NEVIRA tidak dipanggil sekali pun selama impor.',
@@ -207,21 +235,27 @@ class LaporanImpor
     /** @return list<string> */
     private function bagianPelaku(): array
     {
-        $persen = $this->persenPelaku2026();
+        $persen = $this->persenPelaku();
 
         return [
             '## 4. Pengisian kolom `Pelaku`',
             '',
             '| Rentang | Terisi | Baris | Porsi |',
             '|---|---|---|---|',
-            '| 2026 saja | '.$this->pelaku2026.' | '.$this->baris2026.' | '.$this->angka($persen).'% |',
-            '| Seluruh data | '.$this->pelakuTotal.' | '.$this->totalBaris.' | '
+            '| **Diimpor** (lolos tanggal potong) | '.$this->pelakuDiimpor.' | '.$this->barisDiimpor.' | '
+                .$this->angka($persen).'% |',
+            '| Seluruh berkas | '.$this->pelakuTotal.' | '.$this->totalBaris.' | '
                 .$this->angka($this->totalBaris === 0 ? 0 : $this->pelakuTotal / $this->totalBaris * 100).'% |',
             '',
+            // Yang dipakai memutuskan adalah baris yang diimpor: itulah satu-
+            // satunya riwayat yang akan dimiliki sistem. Angka seluruh berkas
+            // ada sebagai pembanding, bukan sebagai dasar keputusan.
             'Ambang KB Landasan Produk (API-24): **'.$this->angka(self::AMBANG_PELAKU).'%**. '
-                .'Angka 2026 '.($persen < self::AMBANG_PELAKU ? '**di bawah** ambang' : 'di atas ambang').'.',
+                .'Angka baris yang diimpor '
+                .($persen < self::AMBANG_PELAKU ? '**di bawah** ambang' : 'di atas ambang').'.',
             '',
-            'Nilai `-` dihitung sebagai tidak terisi.',
+            'Nilai `-` dihitung sebagai tidak terisi. Keputusan mencabut atau mempertahankan '
+                .'fitur pelacakan pelaku ada di luar perintah ini.',
             '',
         ];
     }
