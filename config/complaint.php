@@ -12,18 +12,35 @@ return [
     ],
 
     /*
-    | Tanggal potong impor data lama. (API-28)
+    | Tanggal NEVIRA mulai dipakai. FAKTA SEJARAH, bukan setelan. (API-28)
     |
-    | satrio baru memakai NEVIRA sejak 16 Mei 2026. Complaint yang lebih tua
-    | dari tanggal ini tidak punya order NEVIRA yang bisa dirujuk sama sekali,
-    | jadi ia bukan riwayat yang berguna — ia riwayat yang menggantung.
+    | Complaint yang lebih tua dari tanggal ini tidak punya order NEVIRA yang
+    | bisa dirujuk — bukan karena datanya kurang, tapi karena sistemnya belum
+    | ada. Dipakai untuk MENANDAI, bukan untuk menyaring: siapa pun yang
+    | membuka complaint lama jadi tahu kenapa tidak ada detail ordernya, tanpa
+    | harus bertanya, dan laporan bisa memisahkan dua era saat perbandingannya
+    | memang tidak sepadan.
     |
-    | INKLUSIF: baris tertanggal 16 Mei 2026 ikut masuk.
-    |
-    | Di sini, bukan di dalam perintahnya, supaya satrio yang berubah pikiran
-    | tidak berarti menyunting kode. Bisa ditimpa per jalan dengan `--sejak`.
+    | Terpisah dari `impor_sejak` dengan sengaja. Yang satu fakta tentang
+    | kapan sistem lain mulai hidup; yang satu lagi pilihan tentang baris mana
+    | yang mau diimpor. Menyatukannya berarti mengubah saringan ikut mengubah
+    | arti data yang sudah tersimpan.
     */
-    'impor_sejak' => '2026-05-16',
+    'nevira_mulai' => '2026-05-16',
+
+    /*
+    | Tanggal potong impor data lama — SARINGAN, bawaannya tidak ada. (API-28)
+    |
+    | Null berarti seluruh berkas diimpor. Cutoff 16 Mei sempat dipasang lalu
+    | dicabut: satrio ingin melihat besaran kerugian complaint SEJAK AWAL, dan
+    | laporan kerugian tidak butuh tautan ke order sama sekali — angkanya dari
+    | kolom biaya pada complaint itu sendiri. Memotong di 16 Mei membuang 91%
+    | biaya yang pernah dicatat tim (Rp 28,1 juta dari Rp 30,9 juta).
+    |
+    | Opsinya TIDAK dihapus: kalau satrio berubah pikiran lagi, itu satu
+    | argumen `--sejak=YYYY-MM-DD`, bukan satu commit.
+    */
+    'impor_sejak' => null,
 
     /*
     | Kanal untuk data yang kanalnya TIDAK PERNAH DICATAT — spreadsheet lama

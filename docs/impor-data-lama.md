@@ -31,35 +31,61 @@ apa pun.
 |---|---|
 | `--tulis` | Benar-benar menyimpan. Tanpa ini hanya menghitung. |
 | `--dry-run` | Paksa hanya menghitung, walau `--tulis` diberikan. |
-| `--sejak=` | Impor hanya baris dengan `Date` ≥ tanggal ini (`YYYY-MM-DD`, **inklusif**). Bawaannya `config('complaint.impor_sejak')`. `--sejak=` kosong mematikan batasnya. |
+| `--sejak=` | Impor hanya baris dengan `Date` ≥ tanggal ini (`YYYY-MM-DD`, **inklusif**). Bawaannya `config('complaint.impor_sejak')`, yang kini `null` — tanpa opsi ini seluruh berkas diimpor. |
 | `--sumber=` | Penanda asal. Bawaannya nama berkas. Dipakai juga untuk menghapus. |
 | `--laporan=` | Tujuan berkas laporan. Bawaannya `storage/app/impor/`. |
 
-## Tanggal potong
+## Dua tanggal yang berbeda, jangan tertukar
 
-satrio baru memakai NEVIRA sejak **16 Mei 2026**. Complaint yang lebih tua dari
-itu tidak punya order NEVIRA yang bisa dirujuk sama sekali, jadi ia bukan
-riwayat yang berguna — ia riwayat yang menggantung. Dari berkas 545 baris,
-yang diimpor **88**.
+`config('complaint.nevira_mulai')` = **2026-05-16** — fakta sejarah: kapan
+NEVIRA mulai dipakai. Dipakai untuk **menandai**, bukan menyaring, dan tidak
+berubah.
 
-Tanggalnya ada di `config/complaint.php` (`impor_sejak`), bukan ditanam di
-dalam perintah: satrio yang berubah pikiran tidak berarti menyunting kode.
-Bisa ditimpa per jalan dengan `--sejak=YYYY-MM-DD`.
+`config('complaint.impor_sejak')` = **null** — saringan: baris mana yang mau
+diimpor. Bawaannya tidak ada, jadi seluruh berkas masuk.
+
+Menyatukan keduanya berarti mengubah saringan ikut mengubah arti data yang
+sudah tersimpan.
+
+## Saringan tanggal (`--sejak`)
+
+Bawaannya **tidak ada** — seluruh 545 baris diimpor. Cutoff 16 Mei sempat
+dipasang lalu dicabut: satrio ingin melihat besaran kerugian complaint sejak
+awal, dan laporan kerugian **tidak membutuhkan tautan ke order sama sekali** —
+angkanya dari kolom biaya pada complaint itu sendiri. Memotong di 16 Mei
+membuang 91% biaya yang pernah dicatat tim.
+
+Opsinya tetap ada. Kalau tanggal potong dibutuhkan lagi, itu satu argumen:
+
+```bash
+php artisan complaint:import "DATA COMPLAINT.csv" --sejak=2026-05-16 --tulis
+```
 
 Batasnya **inklusif** — baris tertanggal 16 Mei 2026 ikut masuk — dan tanggal
 dibaca dari kolom `Date`, bukan `Cucian Input Nota`.
 
 Baris yang lebih tua **dilewati, bukan digagalkan**, dan punya angkanya
-sendiri di laporan. Tanpa angka itu, "88 masuk" dari berkas 545 baris terbaca
-seolah berkasnya memang hanya berisi 88.
+sendiri di laporan. Baris yang tanggalnya **tidak terbaca** tetap dihitung
+gagal: kalau tanggalnya tidak diketahui, tidak ada yang tahu baris itu di sisi
+mana dari tanggal potong.
 
-Baris yang tanggalnya **tidak terbaca** tetap dihitung gagal, bukan dilewati
-sebagai baris tua: kalau tanggalnya tidak diketahui, tidak ada yang tahu baris
-itu di sisi mana dari tanggal potong.
+## Penanda pra-NEVIRA
 
-Seluruh angka di bagian 2–6 laporan dihitung atas baris yang lolos tanggal
-potong, bukan atas seluruh berkas. Bagian `Pelaku` tetap menampilkan angka
-seluruh berkas sebagai pembanding.
+Complaint yang lebih tua dari `nevira_mulai` ditandai pra-NEVIRA. Penandanya
+**diturunkan dari `created_at`**, bukan disimpan sebagai kolom boolean:
+"sebelum NEVIRA" sepenuhnya ditentukan oleh tanggal complaint dibanding satu
+tanggal yang sudah lewat dan tidak akan berubah. Kolom boolean menambah sumber
+kebenaran kedua untuk fakta yang sama — dan begitu keduanya bisa berbeda, suatu
+hari mereka akan berbeda, tanpa ada yang tahu mana yang benar.
+
+```php
+$complaint->isPraNevira();        // satu baris
+Complaint::praNevira()->sum(...); // laporan per era
+Complaint::sejakNevira()->get();
+```
+
+Halaman complaint menampilkan keterangannya di tempat detail order biasanya
+muncul, jadi orang tidak mencari tautan yang tidak pernah bisa ada.
 
 ## Jalan mundur
 
@@ -83,9 +109,9 @@ menempelkan keluhan ini ke order pelanggan lain.
 
 **Outlet dicocokkan lewat peta padanan yang ditulis eksplisit** di
 `PemetaBarisImpor::PADANAN_OUTLET` — `Hampton GS`, `Park Sepong` (salah ketik
-di sumbernya), `Jatipadang`. (`Duren Tiga`, yang dulu tidak punya padanan,
-tidak muncul sekali pun setelah tanggal potong — penanganannya tetap ada untuk
-nama lain yang mungkin muncul nanti.) Bukan pencocokan samar: pencocokan samar akan
+di sumbernya), `Jatipadang`. `Duren Tiga` (29 baris) sengaja TIDAK punya
+padanan: outlet itu sudah tidak beroperasi, jadi barisnya masuk tanpa outlet
+dengan nama aslinya tersimpan. Bukan pencocokan samar: pencocokan samar akan
 menempelkan complaint ke outlet yang salah suatu hari nanti, dan tidak ada yang
 akan tahu kapan. Nama yang tidak punya padanan **tidak ditebak**: barisnya
 tetap masuk dengan `outlet_id` kosong dan nama aslinya di `legacy_outlet_name`.
@@ -105,12 +131,12 @@ sistem — itulah gunanya impor ini dikerjakan sebelum kasir memakai sistemnya.
 
 ## Laporan hasil impor
 
-Keluaran perintah ini bukan kata "berhasil", melainkan berkas laporannya. Enam
-bagian: jumlah baris (termasuk berapa yang dilewati karena lebih tua dari
+Keluaran perintah ini bukan kata "berhasil", melainkan berkas laporannya.
+Tujuh bagian: jumlah baris (termasuk berapa yang dilewati karena lebih tua dari
 tanggal potong) beserta alasan tiap kegagalan, nilai tanpa padanan enum per
-kolom, bentuk nomor nota, tingkat pengisian kolom `Pelaku` (baris yang
-diimpor, untuk ambang API-24), sebaran per bulan CSV vs basis data, dan daftar
-keanehan.
+kolom, bentuk nomor nota, tingkat pengisian kolom `Pelaku` (untuk ambang
+API-24), sebaran per bulan CSV vs basis data, biaya tercatat dipecah menurut
+era NEVIRA, dan daftar keanehan.
 
 Baris yang gagal dilaporkan dengan **nomor baris dan jenis galatnya saja** —
 mis. `baris 7: gagal disimpan (QueryException 23000)`. Pesan galat aslinya

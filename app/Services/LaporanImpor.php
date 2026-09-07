@@ -66,6 +66,22 @@ class LaporanImpor
     /** @var array<string,int> */
     public array $keanehan = [];
 
+    /**
+     * Biaya tercatat dan jumlah baris, dipecah menurut era NEVIRA.
+     *
+     * satrio ingin melihat besaran kerugian complaint SEJAK AWAL. Angka itu
+     * berasal dari kolom biaya pada complaint-nya sendiri, bukan dari
+     * transaksinya — jadi era pra-NEVIRA tetap terhitung penuh meski ordernya
+     * tidak bisa ditautkan. Dipecah supaya dua era yang tidak sepadan tidak
+     * diam-diam dijumlahkan jadi satu angka tanpa keterangan. (API-28)
+     *
+     * @var array<string,array{baris:int,biaya:int}>
+     */
+    public array $era = [
+        'pra' => ['baris' => 0, 'biaya' => 0],
+        'sejak' => ['baris' => 0, 'biaya' => 0],
+    ];
+
     public function __construct(
         public readonly string $sumber,
         public readonly string $berkas,
@@ -82,6 +98,14 @@ class LaporanImpor
     public function catatKeanehan(string $label): void
     {
         $this->keanehan[$label] = ($this->keanehan[$label] ?? 0) + 1;
+    }
+
+    public function catatEra(bool $praNevira, int $biaya): void
+    {
+        $kunci = $praNevira ? 'pra' : 'sejak';
+
+        $this->era[$kunci]['baris']++;
+        $this->era[$kunci]['biaya'] += $biaya;
     }
 
     /**
@@ -136,6 +160,7 @@ class LaporanImpor
             ...$this->bagianNota(),
             ...$this->bagianPelaku(),
             ...$this->bagianSebaran(),
+            ...$this->bagianEra(),
             ...$this->bagianKeanehan(),
         ])."\n";
     }
@@ -157,7 +182,7 @@ class LaporanImpor
             '| Dilewati (sudah ada dari impor sebelumnya) | '.$this->dilewati.' |',
             '| Gagal | '.count($this->gagal).' |',
             '',
-            'Angka di bagian 2–6 dihitung atas baris yang **lolos tanggal potong**, '
+            'Angka di bagian 2–7 dihitung atas baris yang **lolos tanggal potong**, '
                 .'bukan atas seluruh berkas.',
             '',
         ];
@@ -307,10 +332,38 @@ class LaporanImpor
     }
 
     /** @return list<string> */
+    private function bagianEra(): array
+    {
+        $pra = $this->era['pra'];
+        $sejak = $this->era['sejak'];
+        $totalBiaya = $pra['biaya'] + $sejak['biaya'];
+        $totalBaris = $pra['baris'] + $sejak['baris'];
+
+        return [
+            '## 6. Biaya tercatat, dipecah menurut era NEVIRA',
+            '',
+            'Angka ini dari kolom biaya pada complaint-nya sendiri, **bukan** dari transaksi '
+                .'NEVIRA — jadi era pra-NEVIRA terhitung penuh meski ordernya tidak bisa ditautkan.',
+            '',
+            '| Era | Baris | Biaya tercatat | Porsi biaya |',
+            '|---|---|---|---|',
+            '| Sebelum NEVIRA | '.$pra['baris'].' | Rp '.$this->rupiah($pra['biaya']).' | '
+                .$this->angka($totalBiaya === 0 ? 0 : $pra['biaya'] / $totalBiaya * 100).'% |',
+            '| Sejak NEVIRA | '.$sejak['baris'].' | Rp '.$this->rupiah($sejak['biaya']).' | '
+                .$this->angka($totalBiaya === 0 ? 0 : $sejak['biaya'] / $totalBiaya * 100).'% |',
+            '| **Total** | **'.$totalBaris.'** | **Rp '.$this->rupiah($totalBiaya).'** | **100,0%** |',
+            '',
+            'Dua era ini tidak sepadan — yang satu punya order untuk dirujuk, yang satu tidak. '
+                .'Dipecah supaya keduanya tidak diam-diam dijumlahkan jadi satu angka tanpa keterangan.',
+            '',
+        ];
+    }
+
+    /** @return list<string> */
     private function bagianKeanehan(): array
     {
         $baris = [
-            '## 6. Keanehan yang perlu keputusan orang',
+            '## 7. Keanehan yang perlu keputusan orang',
             '',
             'Diimpor apa adanya. Tidak ada satu pun yang dirapikan diam-diam — merapikannya '
                 .'di sini akan menyembunyikan bahwa datanya memang begitu.',
@@ -336,5 +389,10 @@ class LaporanImpor
     private function angka(float $nilai): string
     {
         return number_format($nilai, 1, ',', '.');
+    }
+
+    private function rupiah(int $nilai): string
+    {
+        return number_format($nilai, 0, ',', '.');
     }
 }

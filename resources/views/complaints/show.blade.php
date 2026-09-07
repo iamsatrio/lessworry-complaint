@@ -182,6 +182,25 @@
         <form method="POST" action="{{ route('complaints.resync',$complaint) }}" style="margin-top:14px">
           @csrf<button class="ghost">Tarik Ulang dari NEVIRA</button>
         </form>
+      @elseif($complaint->isPraNevira())
+        {{-- Complaint dari era sebelum NEVIRA: tidak tertaut BUKAN karena ada
+             yang terlewat, tapi karena sistem ordernya belum ada saat itu.
+             Tanpa kalimat ini orang akan mencari tautan yang tidak pernah bisa
+             ada, atau mengira datanya rusak. (API-28) --}}
+        <div class="panel" style="margin:0 0 14px">
+          <b>Complaint sebelum NEVIRA dipakai</b>
+          <div style="margin-top:5px">
+            Tercatat {{ $complaint->created_at->translatedFormat('d M Y') }}, sebelum
+            {{ \App\Models\Complaint::awalNevira()->translatedFormat('d M Y') }} —
+            saat itu order belum dicatat di NEVIRA, jadi tidak ada detail order untuk ditampilkan.
+          </div>
+          @if($complaint->legacy_nota_number)
+            <div class="small" style="margin-top:8px">
+              Nomor nota di catatan lama: <span class="tix">{{ $complaint->legacy_nota_number }}</span>
+              — dari penomoran sebelum NEVIRA, tidak bisa dipakai menautkan ke order.
+            </div>
+          @endif
+        </div>
       @else
         @if($complaint->nota_exemption)
           <div class="panel" style="margin:0 0 14px">

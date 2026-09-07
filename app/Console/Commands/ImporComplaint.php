@@ -28,10 +28,15 @@ use Throwable;
  * NEVIRA tidak dipanggil sekali pun. Nomor nota data lama tidak unik;
  * menautkannya akan menempelkan keluhan ke order pelanggan lain.
  *
- * Baris yang lebih tua dari tanggal potong (`--sejak`, bawaannya
- * `config('complaint.impor_sejak')`) dilewati dan DIHITUNG TERSENDIRI di
- * laporan. Tanpa angkanya, orang yang membaca "88 masuk" dari berkas 545
- * baris akan mengira berkasnya memang hanya berisi 88.
+ * Bawaannya SELURUH berkas diimpor. `--sejak=YYYY-MM-DD`
+ * (atau `config('complaint.impor_sejak')`) menyaringnya; baris yang lebih tua
+ * dilewati dan DIHITUNG TERSENDIRI di laporan, karena tanpa angkanya orang
+ * yang membaca "88 masuk" dari berkas 545 baris akan mengira berkasnya memang
+ * hanya berisi 88.
+ *
+ * Saringan itu terpisah dari penanda era: complaint yang lebih tua dari
+ * `config('complaint.nevira_mulai')` ditandai pra-NEVIRA apa pun saringannya,
+ * dan biayanya dihitung penuh — laporan kerugian tidak butuh tautan ke order.
  */
 class ImporComplaint extends Command
 {
@@ -225,6 +230,13 @@ class ImporComplaint extends Command
         }
 
         $this->hitungStatistikDiimpor($isi, $pemeta, $laporan);
+
+        // Biaya per era. Dihitung dari nilai yang SUDAH diterjemahkan, bukan
+        // dari teks kolomnya, supaya angkanya sama persis dengan yang tersimpan.
+        $laporan->catatEra(
+            $tanggalMasuk->lt(Complaint::awalNevira()),
+            (int) $hasil['data']['compensation_amount'],
+        );
 
         foreach ($hasil['anomali'] as $a) {
             $laporan->catatAnomali($a['kolom'], $a['alasan']);
