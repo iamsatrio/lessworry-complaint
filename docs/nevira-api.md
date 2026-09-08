@@ -110,6 +110,46 @@ data.media    []  { media_type, media_path, media_purpose }
 data.promos   []  { promo_name, promo_type, value_type, value }
 ```
 
+### Satu nota bisa berisi banyak baris layanan
+
+`data.services` adalah DAFTAR, dan tiap barisnya punya `processes[]` sendiri. Nota 31033 berisi
+sepuluh `Bedding - Sprei (King)` — sepuluh baris, sepuluh rantai pengerjaan, bukan satu barang
+yang dikerjakan sepuluh kali.
+
+Karena itu `summarizeTransaction()` menyimpan penandanya, dan snapshot complaint membawanya:
+
+```
+services[].index            int          <- nomor urut baris pada nota, mulai 1
+services[].name             string|null  <- services[].service.service_name, BELUM TERVERIFIKASI
+services[].code             string|null  <- services[].service_number apa adanya
+processes[].service_index   int          <- baris layanan yang dikerjakan proses ini
+processes[].service_name    string|null  <- namanya, untuk judul kelompok di halaman complaint
+```
+
+**`services[].service.service_name` belum pernah diverifikasi terhadap respons sungguhan.**
+Tabel bentuk respons di atas hanya menyebut `service_number`, tanpa menyebut isinya. Karena itu
+`name` dan `code` disimpan TERPISAH dan `name` **tidak** jatuh ke `service_number`: cadangan diam-diam
+ke sana membuat kode seperti `4471` lewat sebagai nama layanan di layar kasir.
+
+Kalau namanya tidak ada, sebutan barisnya jatuh ke nomor urutnya — `Barang ke-3 dari 10`, di pemilih
+intake `Barang ke-3 · 1 pcs` — yang masih bisa dicocokkan orang dengan struk di tangannya. Kodenya
+tetap ditampilkan, tapi sebagai keterangan, bukan sebagai identitas barang.
+
+Complaint boleh menunjuk satu baris lewat kolom `nevira_service_index` (null = seluruh nota).
+Snapshot yang tersimpan sebelum API-51 tidak punya penanda ini; halaman complaint
+membacanya sebagai satu kelompok tanpa judul, persis seperti sebelumnya.
+
+Semua itu bisa diukur sendiri di lingkungan yang punya service account, tanpa menyentuh data:
+
+```
+php artisan nevira:hitung-layanan --jumlah=40
+```
+
+Perintah itu menjawab empat hal sekaligus, dari respons sungguhan: berapa nota yang berisi lebih dari
+satu baris, apakah `service.service_name` ada, apa isi `service_number` kalau tidak, dan berapa nilai
+unik yang bisa dipetakan ke enam nilai `config('complaint.layanan')`. Hanya membaca, dan yang dicetak
+hanya angka, nama layanan, dan kode layanan — bukan nomor nota, nama pelanggan, atau nama karyawan.
+
 `GET /api/transactions` dan `GET /api/customer` mengembalikan paginasi Laravel: `{ current_page, data: [...] }`.
 
 `GET /api/customer/{id}` mengembalikan objek langsung, **tanpa** pembungkus `data`.

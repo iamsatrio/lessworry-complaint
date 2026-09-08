@@ -171,6 +171,29 @@ return [
     ],
 
     /*
+    | Menebak kolom `layanan` dari nama baris layanan di NEVIRA. (API-51)
+    |
+    | Nama layanan NEVIRA berbentuk "Keluarga - Nama barang", mis.
+    | "Bedding - Sprei (King)". Yang dicocokkan potongan katanya, huruf besar
+    | kecil diabaikan, dan yang pertama cocok menang — karena itu "non cloth"
+    | berdiri SEBELUM "cloth", kalau tidak "Non Cloth" ikut tercocok sebagai
+    | "Cloth".
+    |
+    | Nama yang tidak cocok tidak mengisi apa pun: kasir tetap memilih
+    | sendiri. Isian yang salah diam-diam lebih buruk daripada isian kosong,
+    | karena laporan "layanan mana yang paling sering bermasalah" dibaca
+    | seolah datanya benar.
+    */
+    'layanan_dari_nevira' => [
+        'non cloth' => 'satuan_non_cloth',
+        'bedding' => 'satuan_bedding',
+        'cuci setrika' => 'kiloan_cuset',
+        'cuci lipat' => 'kiloan_culip',
+        'cloth' => 'satuan_cloth',
+        'kiloan' => 'kiloan',
+    ],
+
+    /*
     | Tindak lanjut penyelesaian — dropdown, bukan teks bebas. Teks bebas
     | membuat "mana yang paling lama" harus dihitung tangan. Diisi saat
     | penyelesaian, bukan saat intake.
