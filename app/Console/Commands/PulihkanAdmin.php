@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\User;
+use App\Services\JejakPengguna;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
@@ -17,6 +18,12 @@ use Illuminate\Support\Str;
  *
  * Dijalankan dari shell server, jadi tidak melewati pemeriksaan peran HTTP —
  * yang memegang shell memang sudah memegang basis datanya.
+ *
+ * Sejak verifikasi email dipasang (API-35), perintah ini juga menandai akunnya
+ * terverifikasi. Alasannya persis alasan perintah ini ada: kalau SMTP mati
+ * sementara belum ada satu pun admin yang terverifikasi, mengangkat admin
+ * lewat perintah ini tidak menolong — akunnya tetap terkurung di halaman
+ * verifikasi, menunggu surat yang tidak akan pernah datang.
  */
 class PulihkanAdmin extends Command
 {
@@ -26,7 +33,7 @@ class PulihkanAdmin extends Command
 
     protected $description = 'Angkat satu akun jadi admin aktif — jalan pulih saat semua admin terkunci.';
 
-    public function handle(): int
+    public function handle(JejakPengguna $jejak): int
     {
         $user = User::where('email', $this->argument('email'))->first();
 
@@ -38,12 +45,23 @@ class PulihkanAdmin extends Command
 
         $user->forceFill(['role' => 'admin', 'is_active' => true]);
 
+        $belumTerverifikasi = ! $user->hasVerifiedEmail();
+
+        if ($belumTerverifikasi) {
+            $user->forceFill(['email_verified_at' => now()]);
+        }
+
         if ($this->option('reset-password')) {
             $temporary = Str::password(12, symbols: false);
             $user->forceFill(['password' => $temporary, 'must_change_password' => true]);
         }
 
         $user->save();
+
+        if ($belumTerverifikasi) {
+            $jejak->emailDiverifikasiLewatKonsol($user);
+            $this->line('Email ditandai terverifikasi — tercatat di jejak audit akun ini.');
+        }
 
         $this->info($user->name.' ('.$user->email.') sekarang admin aktif.');
 

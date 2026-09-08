@@ -30,7 +30,8 @@
     @foreach($users as $u)
     <tr @if(!$u->is_active) style="opacity:.55" @endif>
       <td><b class="display">{{ $u->name }}</b>
-        @if($u->must_change_password)<div class="muted small">belum ganti password</div>@endif
+        @if(! $u->hasVerifiedEmail())<div class="muted small">belum verifikasi email</div>
+        @elseif($u->must_change_password)<div class="muted small">belum ganti password</div>@endif
       </td>
       <td class="muted small" style="font-family:var(--mono)">{{ $u->email }}</td>
       <td>{{ $u->roleLabel() }}</td>

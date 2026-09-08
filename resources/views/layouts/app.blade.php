@@ -234,11 +234,19 @@ details.filters .body{padding:0 22px 20px}
   .hide-sm{display:none !important}
   .cards{display:block}
   h1{font-size:25px}
-  /* Ruang bawah dilebihkan supaya tombol melayang "Catat Complaint"
+  /* Ruang bawah dilebihkan supaya tombol melayang .fab
      (fixed, bottom:16px, tinggi 49px) mengambang di atas ruang kosong,
      bukan di atas kartu complaint terakhir. Aturan ini datang SETELAH
      .fab di atas, jadi padding-bottom-nya tidak boleh mengecil lagi —
-     itu yang dulu menutupi satu kartu di setiap posisi gulir. (API-38 #3) */
+     itu yang dulu menutupi satu kartu di setiap posisi gulir. (API-38 #3)
+
+     Elemennya disebut lewat KELASNYA, tidak pernah lewat tulisan yang
+     tercetak di tombolnya. Blok <style> ini inline, jadi komentarnya ikut
+     terkirim ke peramban pada setiap halaman — termasuk /verifikasi-email,
+     yang navigasinya sengaja dikosongkan. Label tombol yang dikutip di sini
+     akan ditemukan assertDontSee() pada halaman itu, di dalam komentar CSS,
+     dan menjatuhkan test yang menjaga navigasi tetap kosong.
+     (Tinjauan PR #12) */
   main{padding:22px 16px 104px}
   /* Nav pindah ke baris sendiri supaya tidak tertimbun tombol Keluar */
   .topin{padding:0 16px;gap:12px;flex-wrap:wrap;min-height:0;padding-top:12px}
@@ -280,7 +288,12 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
 <header class="top">
   <div class="topin">
     <div class="brand">Less Worry<span>Complaint</span></div>
+    {{-- Akun yang emailnya belum terverifikasi tidak boleh ke mana-mana
+         (API-35). Menampilkan menu yang semuanya memantul balik hanya membuat
+         orang mengira sistemnya rusak. Elemen <nav> tetap ada supaya tata
+         letak headernya tidak berubah. --}}
     <nav>
+      @if(auth()->user()->hasVerifiedEmail())
       <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">Dashboard</a>
       <a href="{{ route('complaints.index') }}" class="{{ request()->routeIs('complaints.index') ? 'active' : '' }}">Papan Kerja</a>
       <a href="{{ route('reports.index') }}" class="{{ request()->routeIs('reports.*') ? 'active' : '' }}">Laporan</a>
@@ -289,6 +302,7 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
       @endif
       @if(auth()->user()->canCreateComplaint())
         <a href="{{ route('complaints.create') }}" class="cta">Catat Complaint</a>
+      @endif
       @endif
     </nav>
     <div class="who">
@@ -312,7 +326,7 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
 </main>
 
 @auth
-  @if(auth()->user()->canCreateComplaint() && ! request()->routeIs('complaints.create'))
+  @if(auth()->user()->hasVerifiedEmail() && auth()->user()->canCreateComplaint() && ! request()->routeIs('complaints.create'))
     <a href="{{ route('complaints.create') }}" class="btn fab">Catat Complaint</a>
   @endif
 @endauth
