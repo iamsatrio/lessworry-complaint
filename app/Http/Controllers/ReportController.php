@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Complaint;
 use App\Models\ComplaintResponsible;
+use App\Services\GrafikLaporan;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -30,6 +31,11 @@ class ReportController extends Controller
         return view('reports.index', [
             'from' => $from,
             'to' => $to,
+            // Grafik dihitung dari KOLEKSI YANG SAMA dengan tabel di bawahnya,
+            // bukan lewat kueri sendiri: satu jalur data berarti satu jalur
+            // wewenang. Kalau grafik mengambil datanya sendiri, kebocoran di
+            // sana tidak akan terlihat karena tabelnya tetap benar. (API-52)
+            'grafik' => new GrafikLaporan($user, $complaints),
             'total' => $complaints->count(),
             'resolved' => $resolved->count(),
             'overdue' => $complaints->filter->isOverdue()->count(),
