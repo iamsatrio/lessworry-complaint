@@ -210,7 +210,7 @@ class GrafikLaporanTest extends TestCase
         foreach ([
             'Complaint per outlet per bulan',
             'Biaya complaint per kategori',
-            'Barang Rusak per outlet per bulan',
+            'Barang Rusak per bulan — jumlah kasus',
             'Median waktu penyelesaian per bulan',
         ] as $judul) {
             $this->assertStringContainsString($judul, $html);
@@ -252,6 +252,42 @@ class GrafikLaporanTest extends TestCase
 
         $this->assertSame(1.0, $juli['median']);
         $this->assertSame(3, $juli['n']);
+    }
+
+    /* ---------- Grafik 3: kerugian dihitung mentah, bukan per outlet ---------- */
+
+    public function test_barang_rusak_digambar_sebagai_jumlah_kasus_bukan_per_outlet(): void
+    {
+        $outlets = [];
+
+        for ($i = 1; $i <= 11; $i++) {
+            $outlets[] = Outlet::create(['name' => 'Outlet '.$i]);
+        }
+
+        // Maret: 9 kasus di 5 outlet. Agustus: 12 kasus di 11 outlet.
+        for ($i = 0; $i < 9; $i++) {
+            $this->complaint('2026-03-0'.(($i % 9) + 1).' 09:00', $outlets[$i % 5], ['category' => 'barang_rusak']);
+        }
+
+        for ($i = 0; $i < 12; $i++) {
+            $this->complaint('2026-08-'.str_pad((string) ($i + 1), 2, '0', STR_PAD_LEFT).' 09:00',
+                $outlets[$i % 11], ['category' => 'barang_rusak']);
+        }
+
+        $grafik = $this->grafik($this->userAs('supervisor'), '2026-03-01', '2026-08-31 23:59');
+        $titik = collect($grafik->titikBarangRusak())->keyBy('label');
+
+        $this->assertSame(9.0, $titik['Mar 26']['nilai']);
+        $this->assertSame(12.0, $titik['Agu 26']['nilai']);
+        $this->assertGreaterThan($titik['Mar 26']['nilai'], $titik['Agu 26']['nilai'],
+            'Bulan dengan kasus lebih banyak harus tergambar lebih tinggi. Pembagi per outlet benar untuk '
+            .'mutu dan salah untuk kerugian: dibagi jumlah outlet, Agustus (12 kasus, 11 outlet) justru '
+            .'jatuh di bawah Maret (9 kasus, 5 outlet).');
+
+        // Pembalikan itu nyata, bukan kekhawatiran teoretis — grafik 1 memang
+        // membalik urutan kedua bulan ini, dan di sana pembagi itu benar.
+        $bulanan = collect($grafik->perBulan())->keyBy('bulan');
+        $this->assertGreaterThan($bulanan['2026-08']['per'], $bulanan['2026-03']['per']);
     }
 
     /* ---------- Kriteria 6: wewenang yang sama dengan tabelnya ---------- */

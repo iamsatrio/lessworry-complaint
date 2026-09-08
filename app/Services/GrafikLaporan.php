@@ -32,7 +32,7 @@ final class GrafikLaporan
     /** @var list<string>|null bulan complaint pertama tiap outlet, 'Y-m' */
     private ?array $mulaiOutlet = null;
 
-    /** @var list<array{bulan:string,label:string,complaint:int,rusak:int,outlet:int,per:float|null,perRusak:float|null}>|null */
+    /** @var list<array{bulan:string,label:string,complaint:int,rusak:int,outlet:int,per:float|null}>|null */
     private ?array $bulanan = null;
 
     /**
@@ -54,7 +54,7 @@ final class GrafikLaporan
      * mentah dan bertepatan dengan pembukaan Jagakarsa — padahal per outlet
      * angkanya di bawah rata-rata 2025.
      *
-     * @return list<array{bulan:string,label:string,complaint:int,rusak:int,outlet:int,per:float|null,perRusak:float|null}>
+     * @return list<array{bulan:string,label:string,complaint:int,rusak:int,outlet:int,per:float|null}>
      */
     public function perBulan(): array
     {
@@ -87,7 +87,6 @@ final class GrafikLaporan
                 // ADA. Membaginya dengan nol, atau menggambarnya sebagai 0,
                 // sama-sama mengarang.
                 'per' => $outlet > 0 ? round($total / $outlet, 2) : null,
-                'perRusak' => $outlet > 0 ? round($rusak / $outlet, 2) : null,
             ];
         }
 
@@ -309,8 +308,22 @@ final class GrafikLaporan
     }
 
     /**
-     * Titik grafik 3 — kategori yang menanggung sebagian besar biaya, dengan
-     * pembagi yang sama seperti grafik 1.
+     * Titik grafik 3 — JUMLAH KASUS MENTAH, sengaja TIDAK dibagi jumlah
+     * outlet. Pembagi yang berbeda dari grafik 1 itu disengaja, bukan lupa.
+     *
+     * Pembagi per outlet benar untuk mutu, salah untuk kerugian: sembilan
+     * belas barang rusak tetap sembilan belas yang harus dibayar, berapa pun
+     * outlet yang buka. Membaginya membuat pertumbuhan jaringan memaafkan
+     * kerugian yang naik — dan itu bukan kesalahan teoretis. Pada contoh
+     * acuan yang pertama, Maret 2025 (9 kasus, 5 outlet) tergambar di 1,8
+     * sementara Agustus 2026 (12 kasus, 11 outlet) tergambar di 1,09:
+     * puncaknya jatuh ke bulan yang kasusnya lebih sedikit. (API-52,
+     * keputusan Modrić 2026-09-08)
+     *
+     * Biayanya juga tidak dipakai sebagai gantinya, walau itu ukuran kerugian
+     * yang lebih langsung: kolom biaya terisi 96% pada 2025 dan 38% pada
+     * 2026, jadi garis biaya akan menukik pada 2026 karena lubang pencatatan.
+     * Jumlah kasus terisi 100%.
      *
      * @return list<array{label:string,nilai:float|null,teks:string}>
      */
@@ -318,10 +331,8 @@ final class GrafikLaporan
     {
         return array_map(fn (array $b) => [
             'label' => $b['label'],
-            'nilai' => $b['perRusak'],
-            'teks' => $b['perRusak'] === null
-                ? 'belum ada outlet aktif'
-                : $this->desimal($b['perRusak']).' per outlet ('.$b['rusak'].' kasus, '.$b['outlet'].' outlet)',
+            'nilai' => (float) $b['rusak'],
+            'teks' => $b['rusak'].' kasus',
         ], $this->perBulan());
     }
 

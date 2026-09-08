@@ -148,32 +148,33 @@
 </x-grafik.batang>
 
 @php
-  // Porsi kasus dibanding porsi biaya: itu isi pesan grafik ini, dan
-  // angkanya dihitung dari data periode yang sedang dilihat — bukan
-  // kalimat tetap yang perlahan jadi salah.
-  $catatanRusak = 'Kategori yang menanggung porsi biaya terbesar pantas punya grafiknya sendiri — ini yang memperlihatkan lonjakan pada bulan kejadiannya, bukan tiga minggu kemudian.';
+  // Kalimat kedua WAJIB ikut, bukan hiasan: grafik ini memakai pembagi yang
+  // berbeda dari grafik pertama, dan tanpa alasannya tertulis pembacanya
+  // akan menyimpulkan salah satu dari keduanya keliru.
+  //
+  // Porsi kasus dibanding porsi biaya dihitung dari data periode yang sedang
+  // dilihat — bukan kalimat tetap yang perlahan jadi salah.
+  $catatanRusak = 'Sengaja tidak dibagi jumlah outlet: ini ukuran kerugian, bukan mutu — satu barang rusak tetap harus dibayar berapa pun outlet yang buka.';
 
   if ($sorotan && $totalBiaya > 0 && $total > 0) {
-      $catatanRusak = 'Barang Rusak '.round(100 * $sorotan['kasus'] / $total).'% dari kasus tapi '
-          .round(100 * $sorotan['biaya'] / $totalBiaya).'% dari biaya tercatat. '.$catatanRusak;
+      $catatanRusak = 'Kategori yang menanggung '.round(100 * $sorotan['biaya'] / $totalBiaya)
+          .'% biaya tercatat dengan '.round(100 * $sorotan['kasus'] / $total).'% kasus. '.$catatanRusak;
   }
 @endphp
 
 <x-grafik.garis
-  judul="Barang Rusak per outlet per bulan"
+  judul="Barang Rusak per bulan — jumlah kasus"
   :catatan="$catatanRusak"
   :titik="$grafik->titikBarangRusak()"
   warna="var(--danger)">
   <x-slot:tabel>
     <table>
-      <thead><tr><th>Bulan</th><th class="num">Barang Rusak</th><th class="num">Outlet aktif</th><th class="num">Per outlet</th></tr></thead>
+      <thead><tr><th>Bulan</th><th class="num">Kasus Barang Rusak</th></tr></thead>
       <tbody>
         @foreach($perBulan as $bulan)
           <tr>
             <td>{{ $bulan['label'] }}</td>
             <td class="num">{{ $bulan['rusak'] }}</td>
-            <td class="num">{{ $bulan['outlet'] }}</td>
-            <td class="num">{{ $bulan['perRusak'] === null ? '—' : $grafik->desimal($bulan['perRusak']) }}</td>
           </tr>
         @endforeach
       </tbody>
