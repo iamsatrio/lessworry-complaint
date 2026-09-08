@@ -4,8 +4,14 @@
 <div class="eyebrow">{{ $from->translatedFormat('d M Y') }} — {{ $to->translatedFormat('d M Y') }}</div>
 <h1>Laporan complaint</h1>
 <p class="lede">
+  {{-- Dihitung dari yang TIDAK lagi terbuka, bukan dari resolved_at. Seluruh
+       541 baris impor data lama ditutup tanpa resolved_at, jadi judul lama
+       berbunyi "545 complaint masuk, 0 sudah selesai" pada halaman yang di
+       bawahnya sendiri memperlihatkan ratusan tiket Close. Rincian selesai /
+       ditolak / tanpa alasan menjelaskan mutunya di kotak-kotak di bawah.
+       (API-38 #11) --}}
   @if($total === 0) Tidak ada complaint pada periode ini.
-  @else {{ $total }} complaint masuk, {{ $resolved }} sudah selesai.
+  @else {{ $total }} complaint masuk, {{ $total - $stillOpen }} sudah ditutup.
   @endif
 </p>
 

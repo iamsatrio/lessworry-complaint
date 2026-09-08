@@ -101,10 +101,26 @@ class EmailVerificationTest extends TestCase
 
         $response = $this->actingAs($user)->get('/verifikasi-email');
 
-        $response->assertDontSee('Papan Kerja');
-        $response->assertDontSee('Catat Complaint');
+        // Diperiksa lewat TAUTANNYA, bukan lewat tulisan pada tombolnya.
+        //
+        // Sebelumnya test ini memakai assertDontSee() pada label menu, dan itu
+        // memeriksa seluruh badan respons — termasuk blok <style> inline di
+        // layout. Sebuah komentar CSS yang kebetulan mengutip label tombol
+        // menjatuhkan test ini tanpa ada satu pun menu yang benar-benar muncul
+        // (tinjauan PR #12). Yang sebenarnya dijaga adalah tidak adanya jalan
+        // menuju halaman yang toh akan memantulkan orangnya balik ke sini.
+        foreach ([
+            route('dashboard'),
+            route('complaints.index'),
+            route('complaints.create'),
+            route('reports.index'),
+        ] as $memantul) {
+            $response->assertDontSee('href="'.$memantul.'"', false);
+        }
+
         // Keluar harus tetap ada — itu satu-satunya jalan keluar dari halaman ini.
         $response->assertSee('Keluar');
+        $response->assertSee('action="'.route('logout').'"', false);
     }
 
     /* ---------- 2. Membuka tautan ---------- */
