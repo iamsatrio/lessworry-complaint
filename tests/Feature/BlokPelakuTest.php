@@ -75,6 +75,63 @@ class BlokPelakuTest extends TestCase
         );
     }
 
+    /**
+     * Jalur gagalnya tidak boleh ikut terlipat.
+     *
+     * `alasan` wajib. Petugas yang mencentang orang lalu lupa alasannya
+     * dikembalikan ke halaman ini: spanduk "Periksa lagi sebelum lanjut"
+     * muncul di atas, di luar lipatan — tapi kalau formnya sendiri tertutup
+     * kembali, ia membaca "alasan wajib diisi" tanpa ada kolom alasan di
+     * layar. (Tinjauan PR #13)
+     */
+    public function test_form_pelaku_terbuka_kembali_saat_alasannya_kosong(): void
+    {
+        $complaint = $this->complaint();
+        $user = $this->cc();
+
+        $this->actingAs($user)
+            ->from('/complaints/'.$complaint->id)
+            ->post('/complaints/'.$complaint->id.'/pelaku', [
+                '_form' => 'tambah-pelaku',
+                'pelaku' => ['manual:Uji'],
+                'alasan' => '',
+            ])
+            ->assertSessionHasErrors('alasan');
+
+        $html = $this->actingAs($user)
+            ->withSession(['_old_input' => ['_form' => 'tambah-pelaku']])
+            ->get('/complaints/'.$complaint->id)->assertOk()->getContent();
+
+        // Ditandai lewat id-nya: kelas .link-editor dipakai juga oleh panel
+        // "Tautkan ke order", yang memang terbuka bawaan saat notanya kosong.
+        $this->assertMatchesRegularExpression('/id="form-tambah-pelaku"\s+open/', $html);
+    }
+
+    /**
+     * Kesalahan dari form lain di halaman yang sama tidak boleh ikut
+     * membentangkannya — itu mengembalikan lima layar gulir yang baru saja
+     * dihapus. Form status tidak mengirim `_form`.
+     */
+    public function test_kesalahan_form_status_tidak_membuka_blok_pelaku(): void
+    {
+        $complaint = $this->complaint();
+        $user = $this->cc();
+
+        $this->actingAs($user)
+            ->from('/complaints/'.$complaint->id)
+            ->post('/complaints/'.$complaint->id.'/status', [
+                'lock_version' => $complaint->lock_version,
+                'status' => 'close',
+            ])
+            ->assertSessionHasErrors('close_reason');
+
+        $html = $this->actingAs($user)
+            ->withSession(['_old_input' => ['status' => 'close']])
+            ->get('/complaints/'.$complaint->id)->assertOk()->getContent();
+
+        $this->assertDoesNotMatchRegularExpression('/id="form-tambah-pelaku"\s+open/', $html);
+    }
+
     /** Dilipat, bukan dihapus: satu ketukan tetap membukanya. */
     public function test_form_penetapan_pelaku_tetap_ada_di_dalamnya(): void
     {

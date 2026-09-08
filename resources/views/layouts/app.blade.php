@@ -257,11 +257,19 @@ details.filters .body{padding:0 22px 20px}
   .hide-sm{display:none !important}
   .cards{display:block}
   h1{font-size:25px}
-  /* Ruang bawah dilebihkan supaya tombol melayang "Catat Complaint"
+  /* Ruang bawah dilebihkan supaya tombol melayang .fab
      (fixed, bottom:16px, tinggi 49px) mengambang di atas ruang kosong,
      bukan di atas kartu complaint terakhir. Aturan ini datang SETELAH
      .fab di atas, jadi padding-bottom-nya tidak boleh mengecil lagi —
-     itu yang dulu menutupi satu kartu di setiap posisi gulir. (API-38 #3) */
+     itu yang dulu menutupi satu kartu di setiap posisi gulir. (API-38 #3)
+
+     Elemennya disebut lewat KELASNYA, tidak pernah lewat tulisan yang
+     tercetak di tombolnya. Blok <style> ini inline, jadi komentarnya ikut
+     terkirim ke peramban pada setiap halaman — termasuk /verifikasi-email,
+     yang navigasinya sengaja dikosongkan. Label tombol yang dikutip di sini
+     akan ditemukan assertDontSee() pada halaman itu, di dalam komentar CSS,
+     dan menjatuhkan test yang menjaga navigasi tetap kosong.
+     (Tinjauan PR #12) */
   main{padding:22px 16px 104px}
   /* Nav pindah ke baris sendiri supaya tidak tertimbun tombol Keluar */
   .topin{padding:0 16px;gap:12px;flex-wrap:wrap;min-height:0;padding-top:12px}
@@ -303,25 +311,36 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
 <header class="top">
   <div class="topin">
     <div class="brand">Less Worry<span>Complaint</span></div>
-    {{-- Selama password sementara belum diganti, setiap tautan di bawah
-         memantul balik ke /password. Menawarkan tiga pintu yang semuanya
-         terkunci membuat orang mengira sistemnya rusak — pada login pertama,
-         kesan pertamanya. Yang tersisa hanya Keluar. (API-38 #12) --}}
-    @if(auth()->user()->must_change_password)
-      <nav><span class="wajib-ganti">Ganti password dulu sebelum memakai sistem</span></nav>
-    @else
+    {{-- Menu yang setiap tautannya memantul balik terbaca sebagai sistem yang
+         rusak. Dua gerbang menahan orang di tempat: verifikasi email (API-35)
+         dan ganti password sementara (API-38 #12).
+
+         Yang disebut adalah gerbang yang SEDANG menahan, bukan keduanya
+         ditumpuk. Urutannya ditentukan User::gerbangTertunda() — verifikasi
+         berdiri di depan. Akun yang emailnya belum terverifikasi dan
+         passwordnya juga wajib diganti tidak boleh dibaca "ganti password
+         dulu": /password sendiri memantulkannya balik ke /verifikasi-email,
+         jadi kalimat itu menyuruh mengerjakan hal yang belum bisa dikerjakan.
+
+         Elemen <nav> tetap ada supaya tata letak headernya tidak berubah. --}}
+    @php $gerbang = auth()->user()->gerbangTertunda(); @endphp
     <nav>
-      <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">Dashboard</a>
-      <a href="{{ route('complaints.index') }}" class="{{ request()->routeIs('complaints.index') ? 'active' : '' }}">Papan Kerja</a>
-      <a href="{{ route('reports.index') }}" class="{{ request()->routeIs('reports.*') ? 'active' : '' }}">Laporan</a>
-      @if(auth()->user()->canManageUsers())
-        <a href="{{ route('users.index') }}" class="{{ request()->routeIs('users.*') ? 'active' : '' }}">Pengguna</a>
-      @endif
-      @if(auth()->user()->canCreateComplaint())
-        <a href="{{ route('complaints.create') }}" class="cta">Catat Complaint</a>
+      @if($gerbang === 'verifikasi')
+        <span class="wajib-ganti">Verifikasi email dulu sebelum memakai sistem</span>
+      @elseif($gerbang === 'password')
+        <span class="wajib-ganti">Ganti password dulu sebelum memakai sistem</span>
+      @else
+        <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">Dashboard</a>
+        <a href="{{ route('complaints.index') }}" class="{{ request()->routeIs('complaints.index') ? 'active' : '' }}">Papan Kerja</a>
+        <a href="{{ route('reports.index') }}" class="{{ request()->routeIs('reports.*') ? 'active' : '' }}">Laporan</a>
+        @if(auth()->user()->canManageUsers())
+          <a href="{{ route('users.index') }}" class="{{ request()->routeIs('users.*') ? 'active' : '' }}">Pengguna</a>
+        @endif
+        @if(auth()->user()->canCreateComplaint())
+          <a href="{{ route('complaints.create') }}" class="cta">Catat Complaint</a>
+        @endif
       @endif
     </nav>
-    @endif
     <div class="who">
       <b>{{ auth()->user()->name }}</b>
       {{ auth()->user()->roleLabel() }}@if(auth()->user()->outlet) · {{ auth()->user()->outlet->name }}@endif
@@ -343,7 +362,9 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
 </main>
 
 @auth
-  @if(auth()->user()->canCreateComplaint() && ! auth()->user()->must_change_password && ! request()->routeIs('complaints.create'))
+  {{-- Tombol melayang memakai gerbang yang sama dengan navigasinya: selama
+       masih ada yang menahan, ia juga memantul balik. --}}
+  @if(auth()->user()->gerbangTertunda() === null && auth()->user()->canCreateComplaint() && ! request()->routeIs('complaints.create'))
     <a href="{{ route('complaints.create') }}" class="btn fab">Catat Complaint</a>
   @endif
 @endauth
