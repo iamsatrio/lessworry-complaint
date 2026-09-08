@@ -63,7 +63,7 @@ class ComplaintController extends Controller
             }
         }
 
-        if ($request->filled('q')) {
+        if ($mencari) {
             $q = $request->string('q');
             $query->where(function ($sub) use ($q) {
                 $sub->where('ticket_number', 'like', "%{$q}%")
@@ -79,6 +79,12 @@ class ComplaintController extends Controller
         return view('complaints.index', [
             'complaints' => $query->paginate(20)->withQueryString(),
             'outlets' => Outlet::orderBy('name')->get(),
+            // Dikirim dari sini, tidak dihitung ulang di view: yang memutuskan
+            // "ini pencarian" adalah query yang dibangun di atas. Dua tempat
+            // yang menghitungnya sendiri akan berpisah begitu aturannya
+            // berubah — judul halaman menyebut sesuatu yang tidak sesuai
+            // dengan baris yang benar-benar diambil. (Tinjauan PR #12)
+            'mencari' => $mencari,
         ]);
     }
 

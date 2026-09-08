@@ -2,12 +2,10 @@
 @section('title','Papan Kerja')
 @section('content')
 <div class="eyebrow">Papan Kerja</div>
-@php
-  // Judul harus menyebut apa yang benar-benar ditampilkan. Pencarian tidak
-  // lagi dibatasi tiket terbuka, jadi kata "terbuka" hanya berlaku saat
-  // papan kerja ditampilkan apa adanya. (API-38 #1)
-  $mencari = filled(request('q'));
-@endphp
+{{-- $mencari datang dari controller: yang memutuskan "ini pencarian" adalah
+     query yang dibangun di sana. Judul harus menyebut apa yang benar-benar
+     ditampilkan — kata "terbuka" hanya berlaku saat papan kerja ditampilkan
+     apa adanya. (API-38 #1) --}}
 <h1>{{ $complaints->total() }} complaint{{ request('status') || $mencari ? '' : ' terbuka' }}</h1>
 <p class="lede">
   @if(request('status')) Berstatus "{{ config('complaint.statuses.'.request('status')) }}".
