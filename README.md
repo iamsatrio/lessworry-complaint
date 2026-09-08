@@ -17,7 +17,8 @@ php artisan migrate --seed
 php artisan serve
 ```
 
-Seeder membuat tujuh akun tim — akun sungguhan, bukan akun contoh (API-36):
+Seeder membuat delapan akun tim — akun sungguhan, bukan akun contoh (API-36,
+API-45):
 
 | Peran | Email |
 |---|---|
@@ -25,6 +26,7 @@ Seeder membuat tujuh akun tim — akun sungguhan, bukan akun contoh (API-36):
 | Admin | `ghozi@lessworry.id` |
 | Admin | `eric@lessworry.id` |
 | Supervisor | `tsulasa@lessworry.id` |
+| Customer Care (seluruh outlet) | `care@lessworry.id` |
 | Kasir (outlet Tebet) | `kasir@getnada.com` |
 | Divisi Produksi | `produksi@getnada.com` |
 | Divisi Kurir | `kurir@getnada.com` |
@@ -40,6 +42,14 @@ alamat pribadi siapa pun. `getnada.com` adalah kotak surat sekali pakai yang
 bisa dibaca siapa saja yang tahu alamatnya — cukup untuk mengantar password
 sementara saat uji coba, dan **tidak boleh** dipakai sebagai bukti kepemilikan
 akun kalau verifikasi email dibangun nanti (API-35).
+
+`care@lessworry.id` juga akun peran, bukan akun perorangan, tapi kotak suratnya
+ada di Google Workspace Less Worry — jadi akun ini menempuh verifikasi email
+penuh seperti alamat `@lessworry.id` lainnya. Akibatnya riwayat complaint
+mencatat "Customer Care" yang menutup tiket, bukan siapa orangnya; begitu peran
+ini dipegang dua orang atau lebih, akun perorangan jadi perlu (dicatat di
+API-45). Alamat lama `cc@lessworry.id` tidak dipakai ulang dan tetap
+dinonaktifkan.
 
 Akun seeder versi lama (`cc@`, `kasirbaru@`, `samsuri@`, `arifin@`,
 `adhyasta@`, `audry@`, dan alamat `kasir@`/`produksi@`/`kurir@` di
