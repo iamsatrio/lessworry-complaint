@@ -114,13 +114,27 @@ class PeranAdminTest extends TestCase
         $this->seed(DatabaseSeeder::class);
 
         $this->assertSame(0, Complaint::count(), 'Seeder tidak boleh membuat complaint karangan.');
-        $this->assertSame(8, User::count());
+        $this->assertSame(5, User::count());
 
-        $this->assertSame(3, User::where('role', 'admin')->count());
-        $this->assertSame(1, User::where('role', 'supervisor')->count());
+        $this->assertSame(4, User::where('role', 'admin')->count());
         $this->assertSame(1, User::where('role', 'customer_care')->count());
-        $this->assertSame(1, User::where('role', 'kasir')->count());
-        $this->assertSame(2, User::where('role', 'divisi')->count());
+
+        // Akunnya yang dibuang di API-50, bukan perannya — akun sungguhan
+        // untuk ketiga peran ini dibuat Admin lewat halaman Pengguna.
+        $this->assertSame(0, User::where('role', 'supervisor')->count());
+        $this->assertSame(0, User::where('role', 'kasir')->count());
+        $this->assertSame(0, User::where('role', 'divisi')->count());
+    }
+
+    public function test_tsulasa_diseed_sebagai_admin(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $tsulasa = User::where('email', 'tsulasa@lessworry.id')->first();
+
+        $this->assertNotNull($tsulasa);
+        $this->assertSame('admin', $tsulasa->role);
+        $this->assertTrue((bool) $tsulasa->is_active);
     }
 
     /**
@@ -157,15 +171,33 @@ class PeranAdminTest extends TestCase
         $this->assertNull(User::where('email', 'cc@lessworry.id')->first());
     }
 
-    public function test_tiga_akun_bersama_memakai_domain_getnada(): void
+    /**
+     * Keputusan API-50: tidak ada lagi akun awal yang bersandar pada kotak
+     * surat publik. Penegasan ini yang menjaganya tidak luntur diam-diam —
+     * satu alamat di luar `lessworry.id` masuk ke seeder, satu test merah.
+     */
+    public function test_tidak_ada_akun_seeder_berdomain_selain_lessworry(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        foreach (User::pluck('email') as $email) {
+            $this->assertStringEndsWith(
+                '@lessworry.id',
+                (string) $email,
+                $email.' bersandar pada kotak surat di luar kendali Less Worry.'
+            );
+        }
+    }
+
+    public function test_ketiga_akun_getnada_tidak_lagi_diseed(): void
     {
         $this->seed(DatabaseSeeder::class);
 
         foreach (['kasir@getnada.com', 'produksi@getnada.com', 'kurir@getnada.com'] as $email) {
-            $this->assertDatabaseHas('users', ['email' => $email, 'is_active' => true]);
+            $this->assertDatabaseMissing('users', ['email' => $email]);
         }
 
-        // Alamat versi lamanya tidak boleh tertinggal sebagai akun kedua.
+        // Alamat versi `@lessworry.id`-nya juga tidak dihidupkan kembali.
         foreach (['kasir@lessworry.id', 'produksi@lessworry.id', 'kurir@lessworry.id'] as $email) {
             $this->assertDatabaseMissing('users', ['email' => $email]);
         }
@@ -191,18 +223,8 @@ class PeranAdminTest extends TestCase
 
         $this->seed(DatabaseSeeder::class);
 
-        $this->assertSame(8, User::count());
+        $this->assertSame(5, User::count());
         $this->assertSame($hashLama, $satrio->fresh()->password);
-    }
-
-    public function test_kasir_seeder_terikat_pada_satu_outlet(): void
-    {
-        $this->seed(DatabaseSeeder::class);
-
-        $kasir = User::where('email', 'kasir@getnada.com')->first();
-
-        $this->assertNotNull($kasir->outlet_id, 'Kasir tanpa outlet tidak bisa melihat complaint mana pun.');
-        $this->assertSame('Tebet', $kasir->outlet->name);
     }
 
     /* ---------- Mesin yang sudah pernah memakai seeder lama ---------- */
@@ -240,7 +262,7 @@ class PeranAdminTest extends TestCase
 
         $this->assertSame('admin', $satrio->role, 'Pemilik sistem tetap terkunci dari pengelolaan pengguna.');
         $this->assertTrue((bool) $satrio->must_change_password);
-        $this->assertSame(3, User::where('role', 'admin')->where('is_active', true)->count());
+        $this->assertSame(4, User::where('role', 'admin')->where('is_active', true)->count());
     }
 
     public function test_password_seeder_lama_tidak_lagi_tembus(): void
@@ -279,6 +301,72 @@ class PeranAdminTest extends TestCase
         $this->seed(DatabaseSeeder::class);
 
         $this->assertSame(0, User::where('must_change_password', false)->count());
+    }
+
+    /* ---------- Peran yang tidak diseed tetap ada di sistem ---------- */
+
+    /**
+     * API-50 membuang AKUN kasir, produksi, dan kurir dari seeder — bukan
+     * perannya. Kasir adalah pengguna utama sistem ini; akun sungguhannya
+     * dibuat Admin lewat halaman Pengguna. Kalau ada yang tergoda merapikan
+     * dengan membuang peran yang tidak lagi terpakai di seeder, ini yang
+     * merah lebih dulu.
+     */
+    public function test_semua_peran_masih_bisa_dipilih_di_halaman_pengguna(): void
+    {
+        $admin = $this->userAs('admin');
+
+        $halaman = $this->actingAs($admin)->get('/users/create');
+        $halaman->assertOk();
+
+        foreach (['kasir', 'customer_care', 'divisi', 'supervisor', 'admin'] as $peran) {
+            $halaman->assertSee('value="'.$peran.'"', false);
+        }
+    }
+
+    public function test_peran_yang_tidak_diseed_tetap_diterima_server(): void
+    {
+        $admin = $this->userAs('admin');
+
+        // Menampilkan pilihannya tidak cukup — validasi server harus menerima.
+        foreach (['supervisor', 'kasir', 'divisi'] as $peran) {
+            $email = $peran.'.baru@lessworry.id';
+
+            $this->actingAs($admin)
+                ->post('/users', ['name' => 'Akun '.$peran, 'email' => $email, 'role' => $peran])
+                ->assertSessionHasNoErrors();
+
+            $this->assertDatabaseHas('users', ['email' => $email, 'role' => $peran]);
+        }
+    }
+
+    /* ---------- Pengaman nol-admin dengan empat admin ---------- */
+
+    /**
+     * Daftar akun awal kini memuat empat admin, bukan tiga. Pengaman itu
+     * menghitung admin aktif yang tersisa, jadi menurunkan salah satu dari
+     * empat harus lolos — pengaman yang menahan terlalu banyak sama tidak
+     * berguna dengan pengaman yang tidak menahan apa pun.
+     */
+    public function test_pengaman_nol_admin_tidak_menahan_saat_masih_ada_empat_admin(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $satrio = User::where('email', 'satrio@lessworry.id')->first();
+        $satrio->forceFill(['must_change_password' => false])->save();
+        $satrio->markEmailAsVerified();
+
+        $eric = User::where('email', 'eric@lessworry.id')->first();
+
+        $this->actingAs($satrio->fresh())
+            ->put('/users/'.$eric->id, [
+                'name' => $eric->name, 'role' => 'supervisor',
+                'outlet_id' => null, 'division' => null, 'is_active' => 1,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('supervisor', $eric->fresh()->role);
+        $this->assertSame(3, User::where('role', 'admin')->where('is_active', true)->count());
     }
 
     /* ---------- Admin ikut terhitung sebagai petugas ---------- */
@@ -389,7 +477,11 @@ class PeranAdminTest extends TestCase
         'audry@lessworry.id',
     ];
 
-    /** Tiga alamat yang orangnya tetap tapi domainnya berganti. */
+    /**
+     * Tiga akun bersama yang sempat pindah ke `getnada.com` lalu dibuang
+     * sama sekali di API-50. Alamat `@lessworry.id`-nya tetap harus mati di
+     * mesin yang pernah membuatnya.
+     */
     private const BERGANTI_DOMAIN = [
         'kasir@lessworry.id',
         'produksi@lessworry.id',
@@ -434,7 +526,7 @@ class PeranAdminTest extends TestCase
         }
     }
 
-    public function test_tiga_alamat_lama_yang_berganti_domain_ikut_dimatikan(): void
+    public function test_tiga_akun_bersama_lama_ikut_dimatikan(): void
     {
         $this->seederSebelasAkun();
         $this->seed(DatabaseSeeder::class);
@@ -449,9 +541,9 @@ class PeranAdminTest extends TestCase
             );
         }
 
-        // Orangnya tetap ada, lewat alamat barunya.
+        // Penggantinya di `getnada.com` tidak dibuat lagi (API-50).
         foreach (['kasir@getnada.com', 'produksi@getnada.com', 'kurir@getnada.com'] as $email) {
-            $this->assertTrue((bool) User::where('email', $email)->first()?->is_active, $email.' tidak terbuat.');
+            $this->assertDatabaseMissing('users', ['email' => $email]);
         }
     }
 
@@ -500,18 +592,35 @@ class PeranAdminTest extends TestCase
             $this->assertFalse((bool) $user->must_change_password);
         }
 
-        // Empat lama yang bertahan + tiga alamat getnada + care@ yang baru.
-        $this->assertSame(8, User::where('is_active', true)->count());
+        // Empat lama yang bertahan + care@ yang baru. Tidak ada lagi akun
+        // bersama beralamat `getnada.com` (API-50).
+        $this->assertSame(5, User::where('is_active', true)->count());
     }
 
-    /* ---------- Mesin yang memuat 7 akun versi sebelumnya (API-45) ---------- */
+    /* ---------- Mesin yang memuat 8 akun versi sebelumnya (API-45) ---------- */
+
+    /** Ketiga akun bersama beralamat kotak surat publik, dibuang di API-50. */
+    private const AKUN_GETNADA = [
+        'kasir@getnada.com',
+        'produksi@getnada.com',
+        'kurir@getnada.com',
+    ];
+
+    /** Lima akun `@lessworry.id` yang bertahan. */
+    private const AKUN_BERTAHAN = [
+        'satrio@lessworry.id',
+        'ghozi@lessworry.id',
+        'eric@lessworry.id',
+        'tsulasa@lessworry.id',
+        'care@lessworry.id',
+    ];
 
     /**
-     * Susunan tujuh akun yang berjalan sebelum Customer Care ditambahkan.
-     * Semuanya sudah memilih passwordnya sendiri, jadi seeder tidak boleh
-     * menyentuh satu pun dari mereka saat menambahkan yang kedelapan.
+     * Susunan delapan akun yang berjalan sebelum API-50. Semuanya sudah
+     * memilih passwordnya sendiri, jadi seeder tidak boleh menyentuh password
+     * satu pun dari yang bertahan saat membuang ketiga akun `getnada.com`.
      */
-    private function seederTujuhAkun(): void
+    private function seederDelapanAkun(): void
     {
         $tebet = Outlet::firstOrCreate(['nevira_outlet_id' => '118'], ['name' => 'Tebet']);
 
@@ -520,6 +629,7 @@ class PeranAdminTest extends TestCase
             ['Ainul Ghozi', 'ghozi@lessworry.id', 'admin', null, null],
             ['Eric', 'eric@lessworry.id', 'admin', null, null],
             ['Tsulasa', 'tsulasa@lessworry.id', 'supervisor', null, null],
+            ['Customer Care', 'care@lessworry.id', 'customer_care', null, null],
             ['Kasir', 'kasir@getnada.com', 'kasir', null, $tebet->id],
             ['Produksi', 'produksi@getnada.com', 'divisi', 'produksi', null],
             ['Kurir', 'kurir@getnada.com', 'divisi', 'kurir', null],
@@ -532,18 +642,45 @@ class PeranAdminTest extends TestCase
         }
     }
 
-    public function test_customer_care_bertambah_tanpa_menyentuh_tujuh_akun_yang_sudah_ada(): void
+    public function test_akun_getnada_dimatikan_dan_passwordnya_dibuang(): void
     {
-        $this->seederTujuhAkun();
+        $this->seederDelapanAkun();
+        $this->seed(DatabaseSeeder::class);
 
-        $sebelum = User::pluck('password', 'email')->all();
+        foreach (self::AKUN_GETNADA as $email) {
+            $user = User::where('email', $email)->first();
+
+            $this->assertNotNull($user, $email.' dihapus — jejak audit complaint yang disentuhnya ikut hilang.');
+            $this->assertFalse((bool) $user->is_active, $email.' masih hidup padahal sudah dibuang dari daftar.');
+            $this->assertFalse(
+                Hash::check(self::PASSWORD_LAMA, $user->password),
+                $email.' masih memegang password lamanya — kotak suratnya bisa dibaca siapa saja.'
+            );
+        }
+    }
+
+    public function test_akun_getnada_tidak_bisa_masuk_lagi(): void
+    {
+        $this->seederDelapanAkun();
+        $this->seed(DatabaseSeeder::class);
+
+        foreach (self::AKUN_GETNADA as $email) {
+            $this->post('/login', ['email' => $email, 'password' => self::PASSWORD_LAMA]);
+            $this->assertFalse(auth()->check(), $email.' masih menerima password lamanya.');
+            $this->post('/logout');
+        }
+    }
+
+    public function test_lima_akun_yang_bertahan_tidak_tersentuh_passwordnya(): void
+    {
+        $this->seederDelapanAkun();
+
+        $sebelum = User::whereIn('email', self::AKUN_BERTAHAN)->pluck('password', 'email')->all();
 
         $this->seed(DatabaseSeeder::class);
 
-        $this->assertSame(8, User::count());
-        $this->assertDatabaseHas('users', [
-            'email' => 'care@lessworry.id', 'role' => 'customer_care', 'is_active' => true,
-        ]);
+        $this->assertSame(8, User::count(), 'Akun yang dibuang dihapus, bukan dimatikan.');
+        $this->assertSame(5, User::where('is_active', true)->count());
 
         foreach ($sebelum as $email => $hash) {
             $user = User::where('email', $email)->first();
@@ -552,6 +689,9 @@ class PeranAdminTest extends TestCase
             $this->assertFalse((bool) $user->must_change_password, $email.' dipaksa ganti password lagi.');
             $this->assertTrue((bool) $user->is_active, $email.' ikut dimatikan.');
         }
+
+        // Tsulasa naik jadi admin tanpa passwordnya ikut diterbitkan ulang.
+        $this->assertSame('admin', User::where('email', 'tsulasa@lessworry.id')->first()->role);
     }
 
     /* ---------- Gerbang pengelolaan, diperiksa di sisi server ---------- */

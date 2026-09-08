@@ -17,19 +17,16 @@ php artisan migrate --seed
 php artisan serve
 ```
 
-Seeder membuat delapan akun tim — akun sungguhan, bukan akun contoh (API-36,
-API-45):
+Seeder membuat lima akun tim — akun sungguhan, bukan akun contoh (API-36,
+API-45, API-50):
 
 | Peran | Email |
 |---|---|
 | Admin | `satrio@lessworry.id` |
 | Admin | `ghozi@lessworry.id` |
 | Admin | `eric@lessworry.id` |
-| Supervisor | `tsulasa@lessworry.id` |
+| Admin | `tsulasa@lessworry.id` |
 | Customer Care (seluruh outlet) | `care@lessworry.id` |
-| Kasir (outlet Tebet) | `kasir@getnada.com` |
-| Divisi Produksi | `produksi@getnada.com` |
-| Divisi Kurir | `kurir@getnada.com` |
 
 Tidak ada password di berkas ini dan tidak ada password bawaan. Seeder
 mencetak password sementara acak ke layar orang yang menjalankannya, sekali,
@@ -37,24 +34,29 @@ lalu tidak menyimpannya di mana pun; semuanya wajib diganti saat login
 pertama. Menjalankan seeder ulang tidak menyetel ulang password yang sudah
 diganti sendiri.
 
-Tiga akun terakhir dipakai bergantian beberapa orang, jadi alamatnya bukan
-alamat pribadi siapa pun. `getnada.com` adalah kotak surat sekali pakai yang
-bisa dibaca siapa saja yang tahu alamatnya — cukup untuk mengantar password
-sementara saat uji coba, dan **tidak boleh** dipakai sebagai bukti kepemilikan
-akun kalau verifikasi email dibangun nanti (API-35).
+Semua akun awal beralamat `@lessworry.id`, dan itu syarat: kotak suratnya ada
+di Google Workspace Less Worry, jadi tautan verifikasi email (API-35) yang
+sampai ke sana benar-benar membuktikan kepemilikan akun. Verifikasi berlaku
+penuh untuk kelimanya, tanpa pengecualian.
 
-`care@lessworry.id` juga akun peran, bukan akun perorangan, tapi kotak suratnya
-ada di Google Workspace Less Worry — jadi akun ini menempuh verifikasi email
-penuh seperti alamat `@lessworry.id` lainnya. Akibatnya riwayat complaint
-mencatat "Customer Care" yang menutup tiket, bukan siapa orangnya; begitu peran
+Akun bersama Kasir, Produksi, dan Kurir sempat diseed dengan alamat
+`getnada.com` — kotak surat publik yang bisa dibaca siapa saja yang tahu
+alamatnya. Ketiganya dibuang di API-50. Yang dibuang **akunnya, bukan
+perannya**: `kasir`, `divisi`, dan `supervisor` tetap bisa dipilih di halaman
+Pengguna, dan akun sungguhannya dibuat Admin dari sana dengan alamat kerja
+masing-masing.
+
+`care@lessworry.id` adalah akun peran, bukan akun perorangan: riwayat complaint
+mencatat "Customer Care" yang menutup tiket, bukan siapa orangnya. Begitu peran
 ini dipegang dua orang atau lebih, akun perorangan jadi perlu (dicatat di
 API-45). Alamat lama `cc@lessworry.id` tidak dipakai ulang dan tetap
 dinonaktifkan.
 
 Akun seeder versi lama (`cc@`, `kasirbaru@`, `samsuri@`, `arifin@`,
-`adhyasta@`, `audry@`, dan alamat `kasir@`/`produksi@`/`kurir@` di
-`lessworry.id`) dinonaktifkan dan passwordnya dibuang saat seeder dijalankan —
-tidak dihapus, supaya jejak audit complaint yang pernah disentuhnya utuh.
+`adhyasta@`, `audry@`, alamat `kasir@`/`produksi@`/`kurir@` di `lessworry.id`,
+dan ketiga alamat `getnada.com`) dinonaktifkan dan passwordnya dibuang saat
+seeder dijalankan — tidak dihapus, supaya jejak audit complaint yang pernah
+disentuhnya utuh.
 
 ## Dokumentasi
 

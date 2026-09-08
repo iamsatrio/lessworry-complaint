@@ -54,7 +54,7 @@ class DatabaseSeeder extends Seeder
     /**
      * Alamat yang TIDAK BOLEH lagi bisa dimasuki.
      *
-     * Tiga sumbernya, satu perlakuannya:
+     * Empat sumbernya, satu perlakuannya:
      *
      * 1. Akun demo seeder lama (`cc@`, `kasirbaru@`) — password harfiah
      *    `password` yang ada di riwayat commit publik.
@@ -63,10 +63,16 @@ class DatabaseSeeder extends Seeder
      *    kalau basis datanya baru; di mesin yang sudah memuat 11 akun versi
      *    lama, menghapus barisnya dari `$daftar` justru MENINGGALKANNYA
      *    HIDUP — seeder tidak menyentuh apa yang tidak disebutnya.
-     * 3. Tiga alamat yang berganti domain: `kasir@`, `produksi@`, `kurir@`
-     *    di `lessworry.id`. Orangnya tetap, alamatnya pindah ke
-     *    `getnada.com`, jadi baris lamanya adalah akun kedua yang tidak
-     *    dipakai siapa-siapa — dan masih menerima password lamanya.
+     * 3. Tiga alamat `@lessworry.id` yang sempat pindah ke `getnada.com`:
+     *    `kasir@`, `produksi@`, `kurir@`. Orangnya tetap, alamatnya pindah,
+     *    jadi baris lamanya adalah akun kedua yang tidak dipakai siapa-siapa
+     *    — dan masih menerima password lamanya.
+     * 4. Ketiga alamat `getnada.com` itu sendiri (API-50): `kasir@`,
+     *    `produksi@`, `kurir@`. `getnada.com` adalah kotak surat publik yang
+     *    bisa dibaca siapa saja yang tahu alamatnya, jadi akunnya bukan cuma
+     *    tidak diseed lagi — ia harus MATI di mesin yang pernah membuatnya.
+     *    Menghapus barisnya dari `$daftar` saja meninggalkannya hidup, dan
+     *    hidup berarti bisa direbut lewat lupa-password ke kotak surat itu.
      *
      * Dinonaktifkan dan passwordnya dibuang, bukan dihapus: complaint
      * menyimpan siapa yang mencatat dan menutupnya, dan jejak itu harus utuh.
@@ -81,6 +87,9 @@ class DatabaseSeeder extends Seeder
         'kasir@lessworry.id',
         'produksi@lessworry.id',
         'kurir@lessworry.id',
+        'kasir@getnada.com',
+        'produksi@getnada.com',
+        'kurir@getnada.com',
     ];
 
     /**
@@ -107,61 +116,61 @@ class DatabaseSeeder extends Seeder
      */
     private function pengguna(): void
     {
-        $tebet = Outlet::where('nevira_outlet_id', '118')->first();
-
-        // Daftar yang ditetapkan satrio (API-36, API-45): delapan akun.
+        // Daftar yang ditetapkan satrio (API-36, API-45, API-50): lima akun.
         //
-        // Empat akun bersama — Customer Care, Kasir, Produksi, Kurir — dipakai
-        // bergantian oleh beberapa orang, jadi alamatnya bukan alamat pribadi
-        // siapa pun.
+        // SEMUANYA beralamat `@lessworry.id`. Itu syarat, bukan kebetulan:
+        // `lessworry.id` memakai Google Workspace, kotak suratnya dikendalikan
+        // Less Worry, jadi tautan verifikasi (API-35) yang sampai ke sana
+        // benar-benar membuktikan kepemilikan akun. Tidak ada pengecualian
+        // untuk siapa pun di daftar ini.
         //
-        // Tiga di antaranya beralamat `getnada.com` supaya password sementara
-        // bisa diterima saat uji coba. Kotak surat itu bisa dibaca siapa saja
-        // yang tahu alamatnya, jadi ia CUKUP untuk mengantar password sekali
-        // pakai dan TIDAK CUKUP sebagai bukti kepemilikan akun — verifikasi
-        // email (API-35) tidak boleh bersandar padanya.
+        // Kasir, Produksi, dan Kurir dulu diseed dengan alamat `getnada.com`
+        // supaya password sementara bisa diterima saat uji coba. Ketiganya
+        // DIBUANG di API-50: kotak surat itu publik — siapa pun yang tahu
+        // alamatnya bisa membacanya, jadi ia cukup untuk mengantar password
+        // sekali pakai dan tidak pernah cukup sebagai bukti kepemilikan.
+        // Verifikasi email tidak bisa berlaku penuh selama akun seperti itu
+        // ada, jadi akunnya yang pergi, bukan verifikasinya yang dilonggarkan.
         //
-        // `care@lessworry.id` berbeda: `lessworry.id` memakai Google Workspace,
-        // kotak suratnya dikendalikan Less Worry. Tautan verifikasi ke sana
-        // benar-benar membuktikan sesuatu, jadi akun ini menempuh verifikasi
-        // email seperti keempat alamat `@lessworry.id` lainnya — tidak ada
-        // pengecualian untuknya di mana pun.
+        // Jangan hidupkan lagi barisnya dengan niat baik. Alamatnya ada di
+        // DEMO_LAMA supaya mesin yang pernah membuatnya ikut mematikannya.
+        // Yang dibuang adalah AKUNNYA, bukan perannya: `kasir`, `divisi`, dan
+        // `supervisor` tetap bisa dipilih di halaman Pengguna, dan akun
+        // sungguhannya dibuat Admin dari sana — beralamat kerja, satu orang
+        // satu akun, bukan lewat seeder.
         //
         // Customer Care ditambahkan di API-45; sebelumnya complaint Sedang dan
         // Berat tidak punya penutup selain supervisor dan admin. Alamat lama
         // `cc@lessworry.id` TIDAK dipakai ulang — ia tetap di DEMO_LAMA dan
         // tetap dinonaktifkan.
         //
-        // Ini akun peran, bukan akun perorangan: riwayat complaint akan
-        // mencatat "Customer Care" yang menutup tiket, bukan siapa orangnya.
-        // Begitu dua orang atau lebih memegang peran ini, jejak audit berhenti
-        // bisa menjawab "siapa yang memutuskan" dan akun perorangan jadi
-        // perlu. Dicatat di API-45, belum dikerjakan.
+        // `care@lessworry.id` akun peran, bukan akun perorangan: riwayat
+        // complaint akan mencatat "Customer Care" yang menutup tiket, bukan
+        // siapa orangnya. Begitu dua orang atau lebih memegang peran ini,
+        // jejak audit berhenti bisa menjawab "siapa yang memutuskan" dan akun
+        // perorangan jadi perlu. Dicatat di API-45, belum dikerjakan.
         $daftar = [
-            ['Satrio Wibowo', 'satrio@lessworry.id', 'admin', null, null],
-            ['Ainul Ghozi', 'ghozi@lessworry.id', 'admin', null, null],
-            ['Eric', 'eric@lessworry.id', 'admin', null, null],
-
-            ['Tsulasa', 'tsulasa@lessworry.id', 'supervisor', null, null],
-
-            // Tanpa outlet — Customer Care melihat seluruh outlet.
-            ['Customer Care', 'care@lessworry.id', 'customer_care', null, null],
-
-            ['Kasir', 'kasir@getnada.com', 'kasir', null, $tebet?->id],
-            ['Produksi', 'produksi@getnada.com', 'divisi', 'produksi', null],
-            ['Kurir', 'kurir@getnada.com', 'divisi', 'kurir', null],
+            ['Satrio Wibowo', 'satrio@lessworry.id', 'admin'],
+            ['Ainul Ghozi', 'ghozi@lessworry.id', 'admin'],
+            ['Eric', 'eric@lessworry.id', 'admin'],
+            ['Tsulasa', 'tsulasa@lessworry.id', 'admin'],
+            ['Customer Care', 'care@lessworry.id', 'customer_care'],
         ];
 
         $dicetak = [];
 
-        foreach ($daftar as [$nama, $email, $peran, $divisi, $outletId]) {
+        foreach ($daftar as [$nama, $email, $peran]) {
             $user = User::where('email', $email)->first();
 
+            // Kelima akun ini melihat seluruh outlet dan tidak terikat divisi
+            // mana pun, jadi kedua kolom itu kosong — dan disetel kosong,
+            // bukan dilewati, supaya akun yang dulu terikat outlet atau
+            // divisi ikut dilepaskan saat perannya naik.
             $atribut = [
                 'name' => $nama,
                 'role' => $peran,
-                'division' => $divisi,
-                'outlet_id' => $outletId,
+                'division' => null,
+                'outlet_id' => null,
             ];
 
             // `is_active` hanya disetel saat akun DIBUAT. Menonaktifkan orang
@@ -206,7 +215,7 @@ class DatabaseSeeder extends Seeder
             }
 
             if ($perluPasswordBaru) {
-                $dicetak[] = [$nama, $email, $peran.($divisi ? ' / '.$divisi : ''), $sementara];
+                $dicetak[] = [$nama, $email, $peran, $sementara];
             }
         }
 
