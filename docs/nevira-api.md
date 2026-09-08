@@ -110,6 +110,30 @@ data.media    []  { media_type, media_path, media_purpose }
 data.promos   []  { promo_name, promo_type, value_type, value }
 ```
 
+### Satu nota bisa berisi banyak baris layanan
+
+`data.services` adalah DAFTAR, dan tiap barisnya punya `processes[]` sendiri. Nota 31033 berisi
+sepuluh `Bedding - Sprei (King)` — sepuluh baris, sepuluh rantai pengerjaan, bukan satu barang
+yang dikerjakan sepuluh kali.
+
+Karena itu `summarizeTransaction()` menyimpan penandanya, dan snapshot complaint membawanya:
+
+```
+services[].index            int      <- nomor urut baris pada nota, mulai 1
+processes[].service_index   int      <- baris layanan yang dikerjakan proses ini
+processes[].service_name    string   <- namanya, untuk judul kelompok di halaman complaint
+```
+
+Complaint boleh menunjuk satu baris lewat kolom `nevira_service_index` (null = seluruh nota).
+Snapshot yang tersimpan sebelum API-51 tidak punya penanda ini; halaman complaint
+membacanya sebagai satu kelompok tanpa judul, persis seperti sebelumnya.
+
+Seberapa sering nota berisi lebih dari satu baris bisa diukur sendiri, tanpa menyentuh data:
+
+```
+php artisan nevira:hitung-layanan --jumlah=40
+```
+
 `GET /api/transactions` dan `GET /api/customer` mengembalikan paginasi Laravel: `{ current_page, data: [...] }`.
 
 `GET /api/customer/{id}` mengembalikan objek langsung, **tanpa** pembungkus `data`.

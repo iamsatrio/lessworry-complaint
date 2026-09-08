@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exceptions\NeviraAccessDenied;
 use App\Exceptions\NeviraException;
 use App\Models\Outlet;
+use App\Services\LayananNota;
 use App\Services\NeviraGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -72,6 +73,33 @@ class NeviraLookupController extends Controller
         return Outlet::where('nevira_outlet_id', (string) $idNevira)->value('id');
     }
 
+    /**
+     * Baris layanan nota, seperlunya saja: nomor urut, namanya, jumlahnya,
+     * dan tebakan kolom `layanan` yang dipakai mengisi form.
+     *
+     * @param  array<string,mixed>  $summary
+     * @return array<int,array<string,mixed>>
+     */
+    private function barisLayanan(array $summary): array
+    {
+        $rows = $summary['services'] ?? [];
+
+        return collect(is_array($rows) ? $rows : [])
+            ->filter(fn ($s) => is_array($s))
+            ->values()
+            ->map(function (array $s, int $i) {
+                $nama = is_string($s['name'] ?? null) ? $s['name'] : null;
+
+                return [
+                    'index' => is_numeric($s['index'] ?? null) ? (int) $s['index'] : $i + 1,
+                    'name' => $nama,
+                    'quantity' => $s['quantity'] ?? null,
+                    'layanan' => LayananNota::dariNama($nama),
+                ];
+            })
+            ->all();
+    }
+
     private function untukPeran(array $summary, $user): array
     {
         $aman = [
@@ -86,6 +114,12 @@ class NeviraLookupController extends Controller
             'customer_name' => $summary['customer_name'] ?? null,
             'customer_phone' => $summary['customer_phone'] ?? null,
             'created_at' => $summary['created_at'] ?? null,
+            // Baris layanan pada nota. Form intake memakainya untuk
+            // menawarkan "keluhannya tentang barang yang mana" — dan hanya
+            // menawarkannya kalau notanya memang berisi lebih dari satu.
+            // Nama barang bukan data karyawan, jadi tidak disaring peran.
+            // (API-51)
+            'services' => $this->barisLayanan($summary),
         ];
 
         // Nama karyawan menyangkut penilaian kerja orang.

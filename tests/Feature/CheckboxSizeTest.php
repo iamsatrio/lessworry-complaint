@@ -58,7 +58,11 @@ class CheckboxSizeTest extends TestCase
 
     public function test_baris_pemilihan_pelaku_memakai_label_pick(): void
     {
-        $markup = file_get_contents(resource_path('views/complaints/_staff.blade.php'));
+        // Barisnya pindah ke partial sendiri saat kandidat pelaku dipisah
+        // per barang yang dikeluhkan — dipakai grup yang terbuka maupun yang
+        // terlipat, jadi jaminan sasaran sentuhnya cukup dijaga di satu
+        // tempat. (API-51)
+        $markup = file_get_contents(resource_path('views/complaints/_kandidat.blade.php'));
 
         $this->assertStringContainsString('<label class="pick"', $markup);
         $this->assertStringContainsString('type="checkbox" name="pelaku[]"', $markup);
