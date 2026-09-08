@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\PengirimVerifikasiEmail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
@@ -13,7 +14,7 @@ class AuthController extends Controller
         return view('auth.login');
     }
 
-    public function login(Request $request)
+    public function login(Request $request, PengirimVerifikasiEmail $pengirim)
     {
         $credentials = $request->validate([
             'email' => ['required', 'email'],
@@ -37,6 +38,26 @@ class AuthController extends Controller
         }
 
         $request->session()->regenerate();
+
+        // Login pertama yang emailnya belum terverifikasi langsung dikirimi
+        // tautannya — tanpa itu orang mendarat di halaman verifikasi tanpa
+        // surat apa pun di kotak masuknya. (API-35)
+        //
+        // Kegagalan kirim TIDAK boleh menggagalkan login: yang gagal adalah
+        // suratnya, dan halaman verifikasilah yang mengatakannya apa adanya.
+        $user = Auth::user();
+
+        if (! $user->hasVerifiedEmail()) {
+            $hasil = $pengirim->kirim($user, 'login');
+
+            $tujuan = redirect()->intended(route('verification.notice'));
+
+            if ($hasil === PengirimVerifikasiEmail::GAGAL) {
+                return $tujuan->with('kirim_gagal', true);
+            }
+
+            return $tujuan;
+        }
 
         return redirect()->intended(route('dashboard'));
     }

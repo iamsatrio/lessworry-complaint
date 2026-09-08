@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -17,6 +18,7 @@ use Illuminate\Notifications\Notifiable;
  * @property string|null $division
  * @property bool $is_active
  * @property bool $must_change_password
+ * @property Carbon|null $email_verified_at
  * @property-read Outlet|null $outlet
  */
 class User extends Authenticatable
@@ -54,6 +56,37 @@ class User extends Authenticatable
     public function outlet(): BelongsTo
     {
         return $this->belongsTo(Outlet::class);
+    }
+
+    /* ---------- Verifikasi email (API-35) ---------- */
+
+    /*
+     * hasVerifiedEmail() dan markEmailAsVerified() datang dari kelas induk
+     * Laravel — tidak ditulis ulang di sini. Yang TIDAK dipakai adalah
+     * notifikasi bawaannya: suratnya punya bentuk sendiri (App\Mail\VerifikasiEmail)
+     * dan tautannya diterbitkan PengirimVerifikasiEmail.
+     */
+
+    /**
+     * Alamat email yang disamarkan sebagian: `a****y@lessworry.id`.
+     *
+     * Halaman verifikasi dibuka di perangkat outlet yang terlihat orang lain.
+     * Yang perlu diketahui pemilik akun hanya "suratnya ke alamat yang benar
+     * atau tidak" — itu cukup dijawab huruf pertama, huruf terakhir, dan
+     * domainnya. Jumlah bintangnya dipatok empat supaya panjang alamat pun
+     * tidak ikut bocor.
+     */
+    public function emailTersamar(): string
+    {
+        [$lokal, $domain] = array_pad(explode('@', $this->email, 2), 2, '');
+
+        $samar = match (true) {
+            mb_strlen($lokal) <= 1 => '****',
+            mb_strlen($lokal) === 2 => mb_substr($lokal, 0, 1).'****',
+            default => mb_substr($lokal, 0, 1).'****'.mb_substr($lokal, -1),
+        };
+
+        return $domain === '' ? $samar : $samar.'@'.$domain;
     }
 
     /* ---------- Peran (API-13) ---------- */
@@ -221,6 +254,24 @@ class User extends Authenticatable
      * atas siapa yang boleh masuk ke sistem.
      */
     public function canManageUsers(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    /**
+     * Mengelola divisi berdiri di sisi yang sama dengan mengelola pengguna:
+     * ia menentukan kotak-kotak yang orang bisa ditaruh di dalamnya, dan
+     * menghapus satu divisi memutus jalur penerusan complaint yang berjalan.
+     * Wewenang Admin, bukan Supervisor. (API-36)
+     *
+     * BELUM ADA halaman pengelolaan divisi, dan ini bukan langkah pertama
+     * membuatnya. `config/complaint.php` → `divisions` masih daftar tetap di
+     * berkas, dan menambah divisi keempat berarti satu baris di berkas itu —
+     * jarang terjadi, tidak sepadan dengan sebuah halaman. Gerbangnya
+     * ditulis sekarang supaya kalau halaman itu kelak dibuat, ia sudah punya
+     * satu tempat untuk bertanya, bukan pemeriksaan baru yang ditebak ulang.
+     */
+    public function canManageDivisions(): bool
     {
         return $this->role === 'admin';
     }
