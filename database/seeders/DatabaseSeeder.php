@@ -109,25 +109,43 @@ class DatabaseSeeder extends Seeder
     {
         $tebet = Outlet::where('nevira_outlet_id', '118')->first();
 
-        // Daftar yang ditetapkan satrio (API-36): tujuh akun, bukan sebelas.
+        // Daftar yang ditetapkan satrio (API-36, API-45): delapan akun.
         //
-        // Tiga akun bersama — Kasir, Produksi, Kurir — dipakai bergantian oleh
-        // beberapa orang, jadi alamatnya bukan alamat pribadi siapa pun.
-        // Alamatnya `getnada.com` supaya password sementara bisa diterima
-        // saat uji coba. Kotak surat itu bisa dibaca siapa saja yang tahu
-        // alamatnya, jadi ia CUKUP untuk mengantar password sekali pakai dan
-        // TIDAK CUKUP sebagai bukti kepemilikan akun — verifikasi email
-        // (API-35) tidak boleh bersandar padanya.
+        // Empat akun bersama — Customer Care, Kasir, Produksi, Kurir — dipakai
+        // bergantian oleh beberapa orang, jadi alamatnya bukan alamat pribadi
+        // siapa pun.
         //
-        // Tidak ada akun Customer Care di sini, dan itu memang isi daftarnya.
-        // Akibatnya complaint Sedang dan Berat tidak punya penutup selain
-        // supervisor dan admin; sudah diangkat ke satrio di API-36.
+        // Tiga di antaranya beralamat `getnada.com` supaya password sementara
+        // bisa diterima saat uji coba. Kotak surat itu bisa dibaca siapa saja
+        // yang tahu alamatnya, jadi ia CUKUP untuk mengantar password sekali
+        // pakai dan TIDAK CUKUP sebagai bukti kepemilikan akun — verifikasi
+        // email (API-35) tidak boleh bersandar padanya.
+        //
+        // `care@lessworry.id` berbeda: `lessworry.id` memakai Google Workspace,
+        // kotak suratnya dikendalikan Less Worry. Tautan verifikasi ke sana
+        // benar-benar membuktikan sesuatu, jadi akun ini menempuh verifikasi
+        // email seperti keempat alamat `@lessworry.id` lainnya — tidak ada
+        // pengecualian untuknya di mana pun.
+        //
+        // Customer Care ditambahkan di API-45; sebelumnya complaint Sedang dan
+        // Berat tidak punya penutup selain supervisor dan admin. Alamat lama
+        // `cc@lessworry.id` TIDAK dipakai ulang — ia tetap di DEMO_LAMA dan
+        // tetap dinonaktifkan.
+        //
+        // Ini akun peran, bukan akun perorangan: riwayat complaint akan
+        // mencatat "Customer Care" yang menutup tiket, bukan siapa orangnya.
+        // Begitu dua orang atau lebih memegang peran ini, jejak audit berhenti
+        // bisa menjawab "siapa yang memutuskan" dan akun perorangan jadi
+        // perlu. Dicatat di API-45, belum dikerjakan.
         $daftar = [
             ['Satrio Wibowo', 'satrio@lessworry.id', 'admin', null, null],
             ['Ainul Ghozi', 'ghozi@lessworry.id', 'admin', null, null],
             ['Eric', 'eric@lessworry.id', 'admin', null, null],
 
             ['Tsulasa', 'tsulasa@lessworry.id', 'supervisor', null, null],
+
+            // Tanpa outlet — Customer Care melihat seluruh outlet.
+            ['Customer Care', 'care@lessworry.id', 'customer_care', null, null],
 
             ['Kasir', 'kasir@getnada.com', 'kasir', null, $tebet?->id],
             ['Produksi', 'produksi@getnada.com', 'divisi', 'produksi', null],
