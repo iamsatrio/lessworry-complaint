@@ -27,6 +27,16 @@ use Throwable;
  *
  * NEVIRA tidak dipanggil sekali pun. Nomor nota data lama tidak unik;
  * menautkannya akan menempelkan keluhan ke order pelanggan lain.
+ *
+ * Bawaannya SELURUH berkas diimpor. `--sejak=YYYY-MM-DD`
+ * (atau `config('complaint.impor_sejak')`) menyaringnya; baris yang lebih tua
+ * dilewati dan DIHITUNG TERSENDIRI di laporan, karena tanpa angkanya orang
+ * yang membaca "88 masuk" dari berkas 545 baris akan mengira berkasnya memang
+ * hanya berisi 88.
+ *
+ * Saringan itu terpisah dari penanda era: complaint yang lebih tua dari
+ * `config('complaint.nevira_mulai')` ditandai pra-NEVIRA apa pun saringannya,
+ * dan biayanya dihitung penuh — laporan kerugian tidak butuh tautan ke order.
  */
 class ImporComplaint extends Command
 {
@@ -34,6 +44,7 @@ class ImporComplaint extends Command
         {berkas : Berkas CSV hasil ekspor spreadsheet}
         {--tulis : Benar-benar menyimpan. Tanpa ini perintah hanya menghitung}
         {--dry-run : Paksa hanya menghitung, walau --tulis diberikan}
+        {--sejak= : Impor hanya baris dengan Date >= tanggal ini (YYYY-MM-DD, inklusif). Bawaannya config complaint.impor_sejak; --sejak= kosong mematikan batasnya}
         {--sumber= : Penanda asal. Bawaannya nama berkas}
         {--laporan= : Tujuan berkas laporan. Bawaannya storage/app/impor}';
 
@@ -78,7 +89,22 @@ class ImporComplaint extends Command
         $kering = ! $this->option('tulis') || (bool) $this->option('dry-run');
         $sumber = (string) ($this->option('sumber') ?: basename($berkas));
 
-        $laporan = new LaporanImpor($sumber, $berkas, $kering);
+        // Tiga keadaan, dan ketiganya berbeda: tidak diberikan → pakai config;
+        // diberikan berisi → pakai itu; diberikan KOSONG → tidak ada batas.
+        $sejakMentah = $this->option('sejak') ?? config('complaint.impor_sejak');
+        $sejak = null;
+
+        if (filled($sejakMentah)) {
+            $sejak = $this->tanggalPotong((string) $sejakMentah);
+
+            if ($sejak === null) {
+                $this->error('--sejak harus berformat YYYY-MM-DD, bukan: '.$sejakMentah);
+
+                return self::FAILURE;
+            }
+        }
+
+        $laporan = new LaporanImpor($sumber, $berkas, $kering, $sejak?->toDateString());
 
         $baris = $this->baca($berkas);
 
@@ -87,7 +113,7 @@ class ImporComplaint extends Command
         }
 
         foreach ($baris as $nomor => $isi) {
-            $this->olah($isi, $nomor, $sumber, $kering, $pemeta, $jejak, $laporan);
+            $this->olah($isi, $nomor, $sumber, $kering, $sejak, $pemeta, $jejak, $laporan);
         }
 
         // Dry-run tidak boleh MENGKLAIM sudah membandingkan dengan basis
@@ -170,6 +196,7 @@ class ImporComplaint extends Command
         int $nomor,
         string $sumber,
         bool $kering,
+        ?Carbon $sejak,
         PemetaBarisImpor $pemeta,
         JejakComplaint $jejak,
         LaporanImpor $laporan,
@@ -178,13 +205,38 @@ class ImporComplaint extends Command
 
         $hasil = $pemeta->petakan($isi);
 
-        $this->hitungStatistik($isi, $pemeta, $laporan);
+        $this->hitungStatistikBerkas($isi, $pemeta, $laporan);
 
+        // Tanggal yang tidak terbaca tetap KEGAGALAN, bukan baris tua yang
+        // dilewati: kalau tanggalnya tidak diketahui, tidak ada yang tahu
+        // baris itu di sisi mana dari tanggal potong. Menganggapnya tua
+        // membuang baris yang mungkin baru, tanpa jejak.
         if ($hasil['galat'] !== []) {
             $laporan->gagal[] = ['baris' => $nomor, 'alasan' => implode('; ', $hasil['galat'])];
 
             return;
         }
+
+        /** @var Carbon $tanggalMasuk */
+        $tanggalMasuk = $hasil['data']['created_at'];
+
+        // Lebih tua dari tanggal potong: dilewati sebelum apa pun dihitung,
+        // supaya angka-angka laporan menggambarkan yang BENAR-BENAR masuk ke
+        // sistem — bukan berkasnya.
+        if ($sejak !== null && $tanggalMasuk->lt($sejak)) {
+            $laporan->dilewatiTua++;
+
+            return;
+        }
+
+        $this->hitungStatistikDiimpor($isi, $pemeta, $laporan);
+
+        // Biaya per era. Dihitung dari nilai yang SUDAH diterjemahkan, bukan
+        // dari teks kolomnya, supaya angkanya sama persis dengan yang tersimpan.
+        $laporan->catatEra(
+            $tanggalMasuk->lt(Complaint::awalNevira()),
+            (int) $hasil['data']['compensation_amount'],
+        );
 
         foreach ($hasil['anomali'] as $a) {
             $laporan->catatAnomali($a['kolom'], $a['alasan']);
@@ -315,26 +367,55 @@ class ImporComplaint extends Command
         return $prefix.'-'.str_pad((string) $urut, 3, '0', STR_PAD_LEFT);
     }
 
+    /** Tanggal potong dari `--sejak`/config. Null kalau bentuknya salah. */
+    private function tanggalPotong(string $mentah): ?Carbon
+    {
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', trim($mentah))) {
+            return null;
+        }
+
+        try {
+            return Carbon::createFromFormat('Y-m-d', trim($mentah))->startOfDay();
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
     /* ---------- statistik untuk laporan ---------- */
 
-    /** @param array<string,string> $isi */
-    private function hitungStatistik(array $isi, PemetaBarisImpor $pemeta, LaporanImpor $laporan): void
+    /**
+     * Hitungan atas SELURUH berkas — pembanding untuk angka yang diimpor.
+     *
+     * @param  array<string,string>  $isi
+     */
+    private function hitungStatistikBerkas(array $isi, PemetaBarisImpor $pemeta, LaporanImpor $laporan): void
+    {
+        $laporan->pelakuTotal += $this->pelakuTerisi($isi) ? 1 : 0;
+        $laporan->qiTotal += $pemeta->tipe($isi) === 'Quality Incident' ? 1 : 0;
+    }
+
+    /**
+     * Hitungan atas baris yang BENAR-BENAR diimpor — di sinilah angka-angka
+     * yang dipakai mengambil keputusan berada. Setelah tanggal potong, "2026
+     * saja" tidak lagi berarti apa-apa: semua yang masuk memang 2026.
+     *
+     * @param  array<string,string>  $isi
+     */
+    private function hitungStatistikDiimpor(array $isi, PemetaBarisImpor $pemeta, LaporanImpor $laporan): void
     {
         $laporan->catatNota(trim($isi['Nomor Nota'] ?? ''));
 
+        $laporan->barisDiimpor++;
+        $laporan->pelakuDiimpor += $this->pelakuTerisi($isi) ? 1 : 0;
+        $laporan->qiDiimpor += $pemeta->tipe($isi) === 'Quality Incident' ? 1 : 0;
+    }
+
+    /** `-` di kolom Pelaku berarti tidak ada pelaku, bukan orang bernama `-`. */
+    private function pelakuTerisi(array $isi): bool
+    {
         $pelaku = trim($isi['Pelaku'] ?? '');
-        $terisi = $pelaku !== '' && $pelaku !== '-';
-        $tahun = $pemeta->tanggal(trim($isi['Date'] ?? ''))?->year;
-        $qi = $pemeta->tipe($isi) === 'Quality Incident';
 
-        $laporan->pelakuTotal += $terisi ? 1 : 0;
-        $laporan->qiTotal += $qi ? 1 : 0;
-
-        if ($tahun === 2026) {
-            $laporan->baris2026++;
-            $laporan->pelaku2026 += $terisi ? 1 : 0;
-            $laporan->qi2026 += $qi ? 1 : 0;
-        }
+        return $pelaku !== '' && $pelaku !== '-';
     }
 
     /**

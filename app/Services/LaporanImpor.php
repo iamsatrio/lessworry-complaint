@@ -26,6 +26,17 @@ class LaporanImpor
 
     public int $dilewati = 0;
 
+    /**
+     * Dilewati karena lebih tua dari tanggal potong.
+     *
+     * Punya barisnya sendiri di laporan, terpisah dari `dilewati`: keduanya
+     * sama-sama "tidak masuk", tapi yang satu berarti sudah ada dan yang lain
+     * berarti sengaja tidak diambil. Tanpa angka ini, orang yang membaca
+     * "88 masuk" dari berkas 545 baris akan mengira berkasnya memang hanya
+     * berisi 88.
+     */
+    public int $dilewatiTua = 0;
+
     /** @var list<array{baris:int,alasan:string}> */
     public array $gagal = [];
 
@@ -37,13 +48,14 @@ class LaporanImpor
 
     public int $pelakuTotal = 0;
 
-    public int $pelaku2026 = 0;
+    /** Baris yang lolos tanggal potong — denominator setiap angka keputusan. */
+    public int $barisDiimpor = 0;
 
-    public int $baris2026 = 0;
+    public int $pelakuDiimpor = 0;
 
     public int $qiTotal = 0;
 
-    public int $qi2026 = 0;
+    public int $qiDiimpor = 0;
 
     /** @var array<string,int> */
     public array $sebaranCsv = [];
@@ -54,10 +66,28 @@ class LaporanImpor
     /** @var array<string,int> */
     public array $keanehan = [];
 
+    /**
+     * Biaya tercatat dan jumlah baris, dipecah menurut era NEVIRA.
+     *
+     * satrio ingin melihat besaran kerugian complaint SEJAK AWAL. Angka itu
+     * berasal dari kolom biaya pada complaint-nya sendiri, bukan dari
+     * transaksinya — jadi era pra-NEVIRA tetap terhitung penuh meski ordernya
+     * tidak bisa ditautkan. Dipecah supaya dua era yang tidak sepadan tidak
+     * diam-diam dijumlahkan jadi satu angka tanpa keterangan. (API-28)
+     *
+     * @var array<string,array{baris:int,biaya:int}>
+     */
+    public array $era = [
+        'pra' => ['baris' => 0, 'biaya' => 0],
+        'sejak' => ['baris' => 0, 'biaya' => 0],
+    ];
+
     public function __construct(
         public readonly string $sumber,
         public readonly string $berkas,
         public readonly bool $kering,
+        /** Tanggal potong yang berlaku, `YYYY-MM-DD`. Null berarti tanpa batas. */
+        public readonly ?string $sejak = null,
     ) {}
 
     public function catatAnomali(string $kolom, string $alasan): void
@@ -68,6 +98,14 @@ class LaporanImpor
     public function catatKeanehan(string $label): void
     {
         $this->keanehan[$label] = ($this->keanehan[$label] ?? 0) + 1;
+    }
+
+    public function catatEra(bool $praNevira, int $biaya): void
+    {
+        $kunci = $praNevira ? 'pra' : 'sejak';
+
+        $this->era[$kunci]['baris']++;
+        $this->era[$kunci]['biaya'] += $biaya;
     }
 
     /**
@@ -87,16 +125,21 @@ class LaporanImpor
         $this->nota[$bentuk]++;
     }
 
+    /**
+     * Dihitung atas baris yang DIIMPOR, bukan atas seluruh berkas: yang
+     * ditanyakan adalah berapa banyak complaint di dalam sistem yang tidak
+     * punya nomor nota terpakai.
+     */
     public function persenNotaTakTerpakai(): float
     {
-        return $this->totalBaris === 0
+        return $this->barisDiimpor === 0
             ? 0.0
-            : ($this->nota['kosong'] + $this->nota['tidak_terbaca']) / $this->totalBaris * 100;
+            : ($this->nota['kosong'] + $this->nota['tidak_terbaca']) / $this->barisDiimpor * 100;
     }
 
-    public function persenPelaku2026(): float
+    public function persenPelaku(): float
     {
-        return $this->baris2026 === 0 ? 0.0 : $this->pelaku2026 / $this->baris2026 * 100;
+        return $this->barisDiimpor === 0 ? 0.0 : $this->pelakuDiimpor / $this->barisDiimpor * 100;
     }
 
     public function render(string $waktu): string
@@ -108,12 +151,16 @@ class LaporanImpor
             '- Berkas: `'.basename($this->berkas).'`',
             '- Dijalankan: '.$waktu,
             '- Mode: '.($this->kering ? '**dry-run** — tidak ada satu baris pun ditulis' : 'tulis'),
+            '- Tanggal potong: '.($this->sejak === null
+                ? 'tidak ada — seluruh berkas diimpor'
+                : '`'.$this->sejak.'` (inklusif; baris lebih tua dilewati)'),
             '',
             ...$this->bagianBaris(),
             ...$this->bagianEnum(),
             ...$this->bagianNota(),
             ...$this->bagianPelaku(),
             ...$this->bagianSebaran(),
+            ...$this->bagianEra(),
             ...$this->bagianKeanehan(),
         ])."\n";
     }
@@ -129,9 +176,14 @@ class LaporanImpor
             '| | Jumlah |',
             '|---|---|',
             '| Dibaca dari berkas | '.$this->totalBaris.' |',
+            '| Dilewati (lebih tua dari tanggal potong) | '.$this->dilewatiTua.' |',
+            '| Lolos tanggal potong | '.$this->barisDiimpor.' |',
             '| '.($this->kering ? 'Akan masuk' : 'Masuk').' | '.$this->masuk.' |',
             '| Dilewati (sudah ada dari impor sebelumnya) | '.$this->dilewati.' |',
             '| Gagal | '.count($this->gagal).' |',
+            '',
+            'Angka di bagian 2–7 dihitung atas baris yang **lolos tanggal potong**, '
+                .'bukan atas seluruh berkas.',
             '',
         ];
 
@@ -196,7 +248,8 @@ class LaporanImpor
             '| Tidak terbaca | '.$this->nota['tidak_terbaca'].' |',
             '',
             'Tanpa nomor nota yang terpakai: **'.$this->angka($this->persenNotaTakTerpakai()).'%** '
-                .'('.$this->nota['kosong'].' kosong + '.$this->nota['tidak_terbaca'].' tidak terbaca).',
+                .'('.$this->nota['kosong'].' kosong + '.$this->nota['tidak_terbaca'].' tidak terbaca '
+                .'dari '.$this->barisDiimpor.' baris yang diimpor).',
             '',
             'Semuanya disimpan di `legacy_nota_number`. Tidak ada satu baris pun yang mengisi '
                 .'`nevira_transaction_id`, dan NEVIRA tidak dipanggil sekali pun selama impor.',
@@ -207,21 +260,27 @@ class LaporanImpor
     /** @return list<string> */
     private function bagianPelaku(): array
     {
-        $persen = $this->persenPelaku2026();
+        $persen = $this->persenPelaku();
 
         return [
             '## 4. Pengisian kolom `Pelaku`',
             '',
             '| Rentang | Terisi | Baris | Porsi |',
             '|---|---|---|---|',
-            '| 2026 saja | '.$this->pelaku2026.' | '.$this->baris2026.' | '.$this->angka($persen).'% |',
-            '| Seluruh data | '.$this->pelakuTotal.' | '.$this->totalBaris.' | '
+            '| **Diimpor** (lolos tanggal potong) | '.$this->pelakuDiimpor.' | '.$this->barisDiimpor.' | '
+                .$this->angka($persen).'% |',
+            '| Seluruh berkas | '.$this->pelakuTotal.' | '.$this->totalBaris.' | '
                 .$this->angka($this->totalBaris === 0 ? 0 : $this->pelakuTotal / $this->totalBaris * 100).'% |',
             '',
+            // Yang dipakai memutuskan adalah baris yang diimpor: itulah satu-
+            // satunya riwayat yang akan dimiliki sistem. Angka seluruh berkas
+            // ada sebagai pembanding, bukan sebagai dasar keputusan.
             'Ambang KB Landasan Produk (API-24): **'.$this->angka(self::AMBANG_PELAKU).'%**. '
-                .'Angka 2026 '.($persen < self::AMBANG_PELAKU ? '**di bawah** ambang' : 'di atas ambang').'.',
+                .'Angka baris yang diimpor '
+                .($persen < self::AMBANG_PELAKU ? '**di bawah** ambang' : 'di atas ambang').'.',
             '',
-            'Nilai `-` dihitung sebagai tidak terisi.',
+            'Nilai `-` dihitung sebagai tidak terisi. Keputusan mencabut atau mempertahankan '
+                .'fitur pelacakan pelaku ada di luar perintah ini.',
             '',
         ];
     }
@@ -273,10 +332,38 @@ class LaporanImpor
     }
 
     /** @return list<string> */
+    private function bagianEra(): array
+    {
+        $pra = $this->era['pra'];
+        $sejak = $this->era['sejak'];
+        $totalBiaya = $pra['biaya'] + $sejak['biaya'];
+        $totalBaris = $pra['baris'] + $sejak['baris'];
+
+        return [
+            '## 6. Biaya tercatat, dipecah menurut era NEVIRA',
+            '',
+            'Angka ini dari kolom biaya pada complaint-nya sendiri, **bukan** dari transaksi '
+                .'NEVIRA — jadi era pra-NEVIRA terhitung penuh meski ordernya tidak bisa ditautkan.',
+            '',
+            '| Era | Baris | Biaya tercatat | Porsi biaya |',
+            '|---|---|---|---|',
+            '| Sebelum NEVIRA | '.$pra['baris'].' | Rp '.$this->rupiah($pra['biaya']).' | '
+                .$this->angka($totalBiaya === 0 ? 0 : $pra['biaya'] / $totalBiaya * 100).'% |',
+            '| Sejak NEVIRA | '.$sejak['baris'].' | Rp '.$this->rupiah($sejak['biaya']).' | '
+                .$this->angka($totalBiaya === 0 ? 0 : $sejak['biaya'] / $totalBiaya * 100).'% |',
+            '| **Total** | **'.$totalBaris.'** | **Rp '.$this->rupiah($totalBiaya).'** | **100,0%** |',
+            '',
+            'Dua era ini tidak sepadan — yang satu punya order untuk dirujuk, yang satu tidak. '
+                .'Dipecah supaya keduanya tidak diam-diam dijumlahkan jadi satu angka tanpa keterangan.',
+            '',
+        ];
+    }
+
+    /** @return list<string> */
     private function bagianKeanehan(): array
     {
         $baris = [
-            '## 6. Keanehan yang perlu keputusan orang',
+            '## 7. Keanehan yang perlu keputusan orang',
             '',
             'Diimpor apa adanya. Tidak ada satu pun yang dirapikan diam-diam — merapikannya '
                 .'di sini akan menyembunyikan bahwa datanya memang begitu.',
@@ -302,5 +389,10 @@ class LaporanImpor
     private function angka(float $nilai): string
     {
         return number_format($nilai, 1, ',', '.');
+    }
+
+    private function rupiah(int $nilai): string
+    {
+        return number_format($nilai, 0, ',', '.');
     }
 }

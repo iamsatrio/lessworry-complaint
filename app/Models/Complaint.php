@@ -669,4 +669,42 @@ class Complaint extends Model
     {
         return filled($this->import_source);
     }
+
+    /**
+     * Complaint dari era sebelum NEVIRA dipakai. (API-28)
+     *
+     * DITURUNKAN dari tanggalnya, bukan disimpan sebagai kolom boolean, dan
+     * itu pilihan sadar: "sebelum NEVIRA" sepenuhnya ditentukan oleh
+     * `created_at` dibanding satu tanggal yang sudah lewat dan tidak akan
+     * berubah. Kolom boolean menambah sumber kebenaran kedua untuk fakta yang
+     * sama — dan begitu keduanya bisa berbeda, suatu hari mereka akan berbeda,
+     * tanpa ada yang tahu mana yang benar.
+     *
+     * Gunanya dua: laporan bisa memisahkan dua era saat perbandingannya tidak
+     * sepadan, dan siapa pun yang membuka complaint lama tahu kenapa tidak ada
+     * detail ordernya tanpa harus bertanya.
+     */
+    public function isPraNevira(): bool
+    {
+        return $this->created_at !== null
+            && $this->created_at->lt(self::awalNevira());
+    }
+
+    /** Tanggal NEVIRA mulai dipakai, sebagai Carbon. */
+    public static function awalNevira(): Carbon
+    {
+        return Carbon::parse((string) config('complaint.nevira_mulai'))->startOfDay();
+    }
+
+    /** Complaint dari era sebelum NEVIRA. */
+    public function scopePraNevira(Builder $query): Builder
+    {
+        return $query->where('created_at', '<', self::awalNevira());
+    }
+
+    /** Complaint sejak NEVIRA dipakai — yang bisa punya order untuk dirujuk. */
+    public function scopeSejakNevira(Builder $query): Builder
+    {
+        return $query->where('created_at', '>=', self::awalNevira());
+    }
 }
