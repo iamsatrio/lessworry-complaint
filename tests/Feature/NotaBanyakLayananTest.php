@@ -57,6 +57,19 @@ class NotaBanyakLayananTest extends TestCase
         ];
     }
 
+    /**
+     * Baris layanan seperti yang DIKHAWATIRKAN Modric: NEVIRA tidak
+     * mengirim `service.service_name` sama sekali, hanya kode angka.
+     */
+    private function barisTanpaNama(int $ke): array
+    {
+        $baris = $this->barisSprei($ke);
+        unset($baris['service']);
+        $baris['service_number'] = (string) (4470 + $ke);
+
+        return $baris;
+    }
+
     /** @param  int  $jumlahLayanan  berapa baris layanan pada notanya */
     private function payload(int $jumlahLayanan): array
     {
@@ -71,6 +84,15 @@ class NotaBanyakLayananTest extends TestCase
             'customer' => ['id_customer' => 900, 'customer_name' => 'Ibu Sari', 'phone' => '081200001111'],
             'services' => collect(range(1, $jumlahLayanan))->map(fn ($i) => $this->barisSprei($i))->all(),
         ]];
+    }
+
+    private function payloadTanpaNama(int $jumlahLayanan): array
+    {
+        $payload = $this->payload($jumlahLayanan);
+        $payload['data']['services'] = collect(range(1, $jumlahLayanan))
+            ->map(fn ($i) => $this->barisTanpaNama($i))->all();
+
+        return $payload;
     }
 
     private function fakeNevira(int $jumlahLayanan): void
@@ -237,6 +259,7 @@ class NotaBanyakLayananTest extends TestCase
         $this->assertCount(10, $data['services']);
         $this->assertSame(3, $data['services'][2]['index']);
         $this->assertSame('Bedding - Sprei (King)', $data['services'][2]['name']);
+        $this->assertSame('Bedding - Sprei (King) — barang ke-3 · 1 pcs', $data['services'][2]['label']);
         $this->assertSame('satuan_bedding', $data['services'][2]['layanan']);
     }
 
@@ -382,8 +405,27 @@ class NotaBanyakLayananTest extends TestCase
         ]);
 
         $this->artisan('nevira:hitung-layanan --jumlah=2')
-            ->expectsOutputToContain('Diperiksa       : 2 nota terakhir')
+            ->expectsOutputToContain('Diperiksa       : 2 nota terakhir, 11 baris layanan')
             ->expectsOutputToContain('Lebih dari satu : 1 nota (50%)')
+            ->expectsOutputToContain('JAWABAN: ADA di semua baris yang diperiksa.')
+            ->expectsOutputToContain('Terpetakan  : 1 nilai')
+            ->assertSuccessful();
+    }
+
+    public function test_perintah_hitung_layanan_mengatakan_kalau_nama_layanan_tidak_ada(): void
+    {
+        Http::fake([
+            '*/login' => Http::response(['access_token' => 'tok'], 200),
+            '*/transactions/31033' => Http::response($this->payloadTanpaNama(3), 200),
+            '*/transactions?*' => Http::response(['data' => [['id_transaction' => 31033]]], 200),
+        ]);
+
+        $this->artisan('nevira:hitung-layanan --jumlah=1')
+            ->expectsOutputToContain('JAWABAN: TIDAK ADA.')
+            ->expectsOutputToContain('angka murni')
+            // Kodenya tetap dilaporkan apa adanya, supaya keputusannya
+            // diambil dari nilai sungguhan, bukan dari ringkasan.
+            ->expectsOutputToContain('4471')
             ->assertSuccessful();
     }
 
@@ -392,6 +434,121 @@ class NotaBanyakLayananTest extends TestCase
         config(['nevira.email' => null, 'nevira.password' => null]);
 
         $this->artisan('nevira:hitung-layanan')->assertFailed();
+    }
+
+    /* ---------- Kalau NEVIRA tidak memberi nama layanan ---------- */
+
+    public function test_kode_baris_tidak_pernah_menyamar_jadi_nama_layanan(): void
+    {
+        Http::fake([
+            '*/login' => Http::response(['access_token' => 'tok'], 200),
+            '*/transactions/31033' => Http::response($this->payloadTanpaNama(3), 200),
+            '*/transactions?*' => Http::response(['data' => [
+                ['id_transaction' => 31033, 'transaction_number' => self::NOTA],
+            ]], 200),
+            '*/deliveries-transactions*' => Http::response(['data' => []], 200),
+        ]);
+
+        $client = app(NeviraClient::class);
+        $snapshot = $client->summarizeTransaction($client->resolveTransaction(self::NOTA)['payload']);
+
+        // Namanya memang tidak ada — dan dikatakan tidak ada, bukan diisi kode.
+        $this->assertNull($snapshot['services'][0]['name']);
+        $this->assertSame('4471', $snapshot['services'][0]['code']);
+        $this->assertNull($snapshot['processes'][0]['service_name']);
+    }
+
+    public function test_sebutan_barang_jatuh_ke_nomor_urut_bukan_ke_kode(): void
+    {
+        Http::fake([
+            '*/login' => Http::response(['access_token' => 'tok'], 200),
+            '*/transactions/31033' => Http::response($this->payloadTanpaNama(3), 200),
+            '*/transactions?*' => Http::response(['data' => [
+                ['id_transaction' => 31033, 'transaction_number' => self::NOTA],
+            ]], 200),
+            '*/deliveries-transactions*' => Http::response(['data' => []], 200),
+        ]);
+
+        $client = app(NeviraClient::class);
+        $complaint = $this->complaint(
+            $client->summarizeTransaction($client->resolveTransaction(self::NOTA)['payload'])
+        );
+
+        $this->assertSame('Barang ke-2 dari 3', $complaint->serviceLabel(2));
+
+        $this->actingAs($this->userAs('supervisor'))
+            ->get('/complaints/'.$complaint->id)
+            ->assertOk()
+            ->assertSee('Barang ke-2 dari 3')
+            // Kodenya boleh muncul sebagai keterangan, tidak sebagai judul.
+            ->assertDontSee('4471 — barang ke-');
+    }
+
+    public function test_pemilih_menerima_sebutan_yang_sudah_jadi_dari_server(): void
+    {
+        Http::fake([
+            '*/login' => Http::response(['access_token' => 'tok'], 200),
+            '*/transactions/31033' => Http::response($this->payloadTanpaNama(3), 200),
+            '*/transactions?*' => Http::response(['data' => [
+                ['id_transaction' => 31033, 'transaction_number' => self::NOTA],
+            ]], 200),
+            '*/deliveries-transactions*' => Http::response(['data' => []], 200),
+        ]);
+
+        $data = $this->actingAs($this->userAs('customer_care'))
+            ->getJson('/nevira/lookup?id='.self::NOTA)
+            ->assertOk()
+            ->json('data');
+
+        // Tanpa nama layanan, yang dibaca kasir tetap bisa dicocokkan dengan
+        // struk: nomor urut dan jumlahnya.
+        $this->assertSame('Barang ke-2 · 1 pcs', $data['services'][1]['label']);
+        $this->assertNull($data['services'][1]['name']);
+        $this->assertNull($data['services'][1]['layanan']);
+    }
+
+    /* ---------- Enum layanan tidak boleh dilonggarkan prefill ---------- */
+
+    public function test_ejaan_nevira_tidak_bisa_masuk_sebagai_nilai_layanan(): void
+    {
+        // Delapan ejaan untuk enam layanan adalah yang terjadi tanpa enum.
+        // Prefill tidak boleh jadi pintu belakang untuk itu.
+        $this->actingAs($this->userAs('customer_care'))->post('/complaints', [
+            'channel' => 'wa_cc', 'reporter_name' => 'Ibu Sari', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'Satuan - Non Cloth', 'description' => 'Uji ejaan',
+            'nota_exemption' => array_key_first(config('complaint.nota_exemptions')),
+        ])->assertSessionHasErrors('layanan');
+
+        $this->assertSame(0, Complaint::count());
+    }
+
+    public function test_pemetaan_hanya_mengembalikan_nilai_enum_yang_ada(): void
+    {
+        foreach (['Bedding - Sprei (King)', 'Non Cloth - Tas', 'Kiloan - Cuci Lipat'] as $nama) {
+            $this->assertArrayHasKey(
+                LayananNota::dariNama($nama),
+                config('complaint.layanan'),
+                'Pemetaan mengembalikan nilai di luar enam nilai enum.'
+            );
+        }
+    }
+
+    public function test_prefill_tidak_menimpa_pilihan_kasir(): void
+    {
+        $this->fakeNevira(10);
+
+        // Barisnya Bedding, tapi kasir memegang barangnya dan memilih lain.
+        $this->actingAs($this->userAs('customer_care'))->post('/complaints', [
+            'channel' => 'wa_cc', 'reporter_name' => 'Ibu Sari', 'category' => 'kurang_bersih',
+            'bobot' => 'sedang', 'layanan' => 'satuan_cloth', 'description' => 'Kasir lebih tahu',
+            'nevira_transaction_number' => self::NOTA,
+            'nevira_service_index' => 3,
+        ]);
+
+        $complaint = Complaint::latest('id')->first();
+
+        $this->assertSame('satuan_cloth', $complaint->layanan);
+        $this->assertSame(3, $complaint->nevira_service_index);
     }
 
     /* ---------- Menebak kolom layanan dari nama baris ---------- */

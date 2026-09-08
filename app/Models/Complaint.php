@@ -191,7 +191,7 @@ class Complaint extends Model
 
     /** Kunci yang selalu ada di satu baris layanan nota. */
     private const BENTUK_LAYANAN = [
-        'index' => null, 'name' => null, 'quantity' => null,
+        'index' => null, 'name' => null, 'code' => null, 'quantity' => null,
         'status' => null, 'notes' => null,
     ];
 
@@ -201,7 +201,7 @@ class Complaint extends Model
      * Snapshot lama belum menyimpan `index`; diisi di sini dari urutannya
      * sendiri supaya tampilan tidak perlu tahu versi mana yang dibacanya.
      *
-     * @return array<int,array{index:?int,name:?string,quantity:mixed,status:?string,notes:?string}>
+     * @return array<int,array{index:?int,name:?string,code:?string,quantity:mixed,status:?string,notes:?string}>
      */
     public function services(): array
     {
@@ -237,6 +237,11 @@ class Complaint extends Model
 
     /**
      * Sebutan satu baris layanan, mis. "Sprei (King) — barang ke-3 dari 10".
+     *
+     * Kalau NEVIRA tidak memberi namanya, sebutannya jatuh ke nomor urut —
+     * "Barang ke-3 dari 10" — dan BUKAN ke kode barisnya. Nomor urut masih
+     * bisa dicocokkan orang dengan struk di tangannya; kode seperti "4471"
+     * tidak. (API-51)
      */
     public function serviceLabel(?int $index): ?string
     {

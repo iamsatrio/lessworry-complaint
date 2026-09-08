@@ -399,8 +399,11 @@ function isiBarang(services){
     return;
   }
 
+  // Sebutannya disusun server: nama layanan NEVIRA belum dipastikan ada, dan
+  // yang tampil kalau namanya tidak ada tetap harus bisa dicocokkan dengan
+  // struk — nomor urut dan jumlahnya, bukan kode mentah. (API-51)
   barisLayanan.forEach(s => barang.add(
-    new Option((s.name || 'Barang') + ' — barang ke-' + s.index, String(s.index))
+    new Option(s.label || ('Barang ke-' + s.index), String(s.index))
   ));
 
   // Bawaannya seluruh nota; pilihan sebelumnya dipertahankan kalau notanya

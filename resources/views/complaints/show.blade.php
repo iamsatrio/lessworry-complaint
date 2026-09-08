@@ -164,8 +164,14 @@
                   @if($complaint->hasMultipleServices())
                     <span class="muted small">{{ $svc['index'] }}.</span>
                   @endif
-                  {{ $svc['name'] ?? 'Layanan' }}
+                  {{-- Nama layanan NEVIRA belum dipastikan selalu ada. Kalau
+                       tidak ada, yang tampil nomor urutnya — bukan kode
+                       barisnya, yang tidak bisa dicocokkan siapa pun. --}}
+                  {{ $svc['name'] ?: 'Barang ke-'.$svc['index'] }}
                   @if(!empty($svc['quantity'])) · {{ $svc['quantity'] }} item @endif
+                  @if(blank($svc['name']) && filled($svc['code']))
+                    <span class="muted small">· kode {{ $svc['code'] }}</span>
+                  @endif
                   @if(!empty($svc['status'])) · {{ $svc['status'] }} @endif
                   @if($dikeluhkan) <span class="badge">Yang dikeluhkan</span>@endif
                   @if(!empty($svc['notes']))<div class="muted small">Catatan: {{ $svc['notes'] }}</div>@endif

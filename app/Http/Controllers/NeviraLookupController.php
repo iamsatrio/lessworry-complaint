@@ -74,8 +74,15 @@ class NeviraLookupController extends Controller
     }
 
     /**
-     * Baris layanan nota, seperlunya saja: nomor urut, namanya, jumlahnya,
-     * dan tebakan kolom `layanan` yang dipakai mengisi form.
+     * Baris layanan nota, seperlunya saja: nomor urut, sebutannya, dan
+     * tebakan kolom `layanan` yang dipakai mengisi form.
+     *
+     * Sebutannya disusun SERVER, bukan browser. Nama layanan yang terbaca
+     * manusia belum dipastikan ada di respons NEVIRA — dokumennya tidak
+     * menjaminnya. Kalau namanya tidak ada, sebutannya jatuh ke nomor urut
+     * dan jumlahnya ("Barang ke-3 · 1 pcs"), yang masih bisa dicocokkan
+     * dengan struk di tangan pelanggan. Yang tidak boleh terjadi adalah
+     * kode mentah berdiri sendiri sebagai nama barang. (API-51)
      *
      * @param  array<string,mixed>  $summary
      * @return array<int,array<string,mixed>>
@@ -88,16 +95,28 @@ class NeviraLookupController extends Controller
             ->filter(fn ($s) => is_array($s))
             ->values()
             ->map(function (array $s, int $i) {
-                $nama = is_string($s['name'] ?? null) ? $s['name'] : null;
+                $nama = is_string($s['name'] ?? null) && filled($s['name']) ? $s['name'] : null;
+                $urut = is_numeric($s['index'] ?? null) ? (int) $s['index'] : $i + 1;
 
                 return [
-                    'index' => is_numeric($s['index'] ?? null) ? (int) $s['index'] : $i + 1,
+                    'index' => $urut,
                     'name' => $nama,
+                    'label' => $this->sebutanBaris($nama, $urut, $s['quantity'] ?? null),
                     'quantity' => $s['quantity'] ?? null,
                     'layanan' => LayananNota::dariNama($nama),
                 ];
             })
             ->all();
+    }
+
+    /** Sebutan satu baris seperti yang dibaca kasir di pemilih. */
+    private function sebutanBaris(?string $nama, int $urut, mixed $jumlah): string
+    {
+        $sebutan = filled($nama)
+            ? $nama.' — barang ke-'.$urut
+            : 'Barang ke-'.$urut;
+
+        return is_numeric($jumlah) ? $sebutan.' · '.$jumlah.' pcs' : $sebutan;
     }
 
     private function untukPeran(array $summary, $user): array

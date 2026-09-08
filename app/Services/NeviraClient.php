@@ -388,6 +388,7 @@ class NeviraClient
                     // complaint saat keluhannya menunjuk satu barang.
                     'index' => $i + 1,
                     'name' => $this->namaLayanan($s),
+                    'code' => $this->kodeLayanan($s),
                     'quantity' => $s['quantity'] ?? null,
                     'status' => $s['status'] ?? null,
                     'notes' => $s['notes'] ?? null,
@@ -399,15 +400,36 @@ class NeviraClient
     }
 
     /**
-     * Nama satu baris layanan pada nota, mis. "Bedding - Sprei (King)".
+     * Nama satu baris layanan yang terbaca manusia, mis. "Bedding - Sprei (King)".
+     *
+     * TIDAK jatuh ke `service_number`. Kunci itu tidak dijamin berisi nama —
+     * dokumen NEVIRA hanya menyebutnya ada, tanpa menyebut isinya — dan
+     * cadangan diam-diam ke sana membuat kode yang tidak terbaca ("4471")
+     * lewat sebagai nama layanan. Kalau namanya tidak ada, yang benar adalah
+     * mengatakan tidak ada; sebutan barisnya disusun dari nomor urutnya.
+     * (API-51, gerbang bukti API-49)
      *
      * @param  array<string,mixed>  $service
      */
     private function namaLayanan(array $service): ?string
     {
-        $nama = $service['service']['service_name'] ?? ($service['service_number'] ?? null);
+        $nama = $service['service']['service_name'] ?? null;
 
-        return is_scalar($nama) ? (string) $nama : null;
+        return is_scalar($nama) && filled($nama) ? (string) $nama : null;
+    }
+
+    /**
+     * Kode baris layanan apa adanya. Disimpan terpisah dari namanya supaya
+     * keduanya tidak pernah tertukar: kode boleh muncul sebagai keterangan,
+     * tidak boleh berdiri sebagai identitas barang di layar kasir.
+     *
+     * @param  array<string,mixed>  $service
+     */
+    private function kodeLayanan(array $service): ?string
+    {
+        $kode = $service['service_number'] ?? null;
+
+        return is_scalar($kode) && filled($kode) ? (string) $kode : null;
     }
 
     private function url(string $path): string
