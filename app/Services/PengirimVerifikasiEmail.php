@@ -32,6 +32,29 @@ class PengirimVerifikasiEmail
     public const JENDELA_DETIK = 600;
 
     /**
+     * Mailer yang menerima surat lalu tidak mengantarkannya ke mana pun.
+     *
+     * `log` menulisnya ke storage/logs/laravel.log, `array` menyimpannya di
+     * memori proses. Keduanya "berhasil" dari sudut pandang Mail::send —
+     * tidak ada galat yang bisa ditangkap — jadi satu-satunya cara membedakan
+     * surat yang terkirim dari surat yang tidak pernah berangkat adalah
+     * membaca konfigurasinya, bukan menunggu kegagalan.
+     */
+    public const MAILER_TANPA_PENGIRIMAN = ['log', 'array'];
+
+    /**
+     * Benar kalau surat hanya dicatat, tidak diantar.
+     *
+     * Dipakai halaman verifikasi supaya tidak mengaku mengirim sesuatu yang
+     * tidak dikirim, dan /health supaya keadaan ini terlihat dari luar sebelum
+     * ada yang terkunci karenanya. (API-47)
+     */
+    public static function hanyaMencatat(): bool
+    {
+        return in_array((string) config('mail.default'), self::MAILER_TANPA_PENGIRIMAN, true);
+    }
+
+    /**
      * Dua sumber, dua penghitung — sengaja.
      *
      * Batas 3 per 10 menit di issue adalah batas untuk PERMINTAAN KIRIM ULANG.

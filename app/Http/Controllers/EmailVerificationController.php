@@ -34,11 +34,22 @@ class EmailVerificationController extends Controller
         }
 
         return match ($this->pengirim->kirim($user, 'permintaan')) {
-            PengirimVerifikasiEmail::TERKIRIM => back()->with(
-                'status',
-                'Tautan verifikasi dikirim ulang ke '.$user->emailTersamar().'. Berlaku '
-                    .PengirimVerifikasiEmail::UMUR_MENIT.' menit.'
-            ),
+            // Mail::send tidak melempar apa pun saat mailernya `log`/`array` —
+            // suratnya diterima lalu berhenti di situ. Mengatakan "dikirim
+            // ulang" di keadaan itu mengulang kebohongan yang sama seperti
+            // halamannya. (API-47)
+            PengirimVerifikasiEmail::TERKIRIM => PengirimVerifikasiEmail::hanyaMencatat()
+                ? back()->with(
+                    'status',
+                    'Tautan baru dicatat ke storage/logs/laravel.log — tidak ada surat '
+                        .'yang dikirim ke mana pun. Berlaku '
+                        .PengirimVerifikasiEmail::UMUR_MENIT.' menit.'
+                )
+                : back()->with(
+                    'status',
+                    'Tautan verifikasi dikirim ulang ke '.$user->emailTersamar().'. Berlaku '
+                        .PengirimVerifikasiEmail::UMUR_MENIT.' menit.'
+                ),
             PengirimVerifikasiEmail::DIBATASI => back()->withErrors([
                 'kirim' => 'Tautan sudah dikirim '.PengirimVerifikasiEmail::BATAS
                     .' kali dalam 10 menit terakhir. Tunggu sebentar lalu coba lagi, '

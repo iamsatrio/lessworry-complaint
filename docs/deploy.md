@@ -50,7 +50,13 @@ di bawah ini menahan rilis — bukan menahan pembangunan:
       berikut `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`,
       `MAIL_FROM_ADDRESS`). Semuanya dari environment, tidak pernah dari
       repositori. Selama `MAIL_MAILER=log`, tautan verifikasi hanya mendarat
-      di `storage/logs` — cukup untuk pengembangan, tidak untuk orang.
+      di `storage/logs` — cukup untuk pengembangan, tidak untuk orang. Halaman
+      verifikasi mengatakannya apa adanya, dan `/health` melaporkan `mail`
+      tidak `ok` kalau keadaan itu terbawa ke produksi (API-47).
+- [ ] **Satu verifikasi sungguhan sudah dikirim dan suratnya terbukti sampai** —
+      sebelum password sementara dibagikan ke tim, bukan sesudah. Langkahnya di
+      `docs/deploy-care-lessworry.md`, bagian "Buktikan surat benar-benar
+      sampai".
 - [ ] **`APP_URL` benar.** Tautan verifikasi dibangun dari nilai ini. `APP_URL`
       salah = tautan yang menunjuk ke mesin yang tidak ada.
 - [ ] **Daftar alamat email yang benar-benar ada sudah diperiksa satu per
@@ -152,9 +158,14 @@ tidak terbaca.
 `GET /health` — terbuka tanpa autentikasi, tanpa membocorkan apa pun:
 
 ```
-200  {"status":"ok","checks":{"database":"ok","nevira":"ok","storage":"ok"}}
+200  {"status":"ok","checks":{"database":"ok","nevira":"ok","storage":"ok","mail":"ok"}}
 503  ada yang tidak "ok"
 ```
+
+`mail` menjawab satu pertanyaan yang tidak bisa dijawab dari luar dengan cara
+lain: apakah surat verifikasi benar-benar dikirim. `"error"` di `APP_ENV=production`
+berarti `MAIL_MAILER` masih `log`/`array`, dan itu mengunci **seluruh** tim di
+login pertama. Di luar produksi nilainya `disabled` dan `/health` tetap `200`.
 
 Yang dibaca pemantau adalah **kode statusnya**; isi JSON untuk manusia yang
 menyusul. Hasil pemeriksaan NEVIRA disimpan 60 detik, jadi pemantau yang

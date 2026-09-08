@@ -20,15 +20,35 @@
   @endif
 
   <div class="card">
-    <p style="margin:0 0 14px">
-      Tautan verifikasi dikirim ke
-      <b style="font-family:var(--mono)">{{ $user->emailTersamar() }}</b>.
-      Buka tautan di dalamnya, lalu kamu akan diantar ke halaman ganti password.
-    </p>
-    <p class="hint" style="margin:0 0 18px">
-      Tautannya berlaku {{ \App\Services\PengirimVerifikasiEmail::UMUR_MENIT }} menit dan hanya bisa dipakai sekali.
-      Kalau sudah lewat, minta yang baru di bawah.
-    </p>
+    {{-- Mailer `log`/`array` menerima surat lalu tidak mengantarkannya ke mana
+         pun. Mengatakan "dikirim" di sini membuat orang menunggu surat yang
+         tidak akan pernah datang, lalu mencari kesalahan di tempat yang salah.
+         Tautannya SENGAJA tidak ditampilkan: sekali pola itu ada di kode, ia
+         akan sampai ke produksi dan gerbang verifikasinya lenyap. (API-47) --}}
+    @if(\App\Services\PengirimVerifikasiEmail::hanyaMencatat())
+      <p style="margin:0 0 14px">
+        <b>Surat tidak dikirim ke mana pun.</b>
+        Sistem ini sedang berjalan tanpa pengiriman email, jadi tidak ada surat
+        yang masuk ke <b style="font-family:var(--mono)">{{ $user->emailTersamar() }}</b>
+        — menunggunya tidak ada gunanya.
+      </p>
+      <p class="hint" style="margin:0 0 18px">
+        Ini lingkungan pengembangan. Tautan verifikasinya tercatat di berkas
+        <b style="font-family:var(--mono)">storage/logs/laravel.log</b> di mesin
+        tempat aplikasi ini berjalan. Kalau kamu tidak punya akses ke berkas itu,
+        hubungi Admin.
+      </p>
+    @else
+      <p style="margin:0 0 14px">
+        Tautan verifikasi dikirim ke
+        <b style="font-family:var(--mono)">{{ $user->emailTersamar() }}</b>.
+        Buka tautan di dalamnya, lalu kamu akan diantar ke halaman ganti password.
+      </p>
+      <p class="hint" style="margin:0 0 18px">
+        Tautannya berlaku {{ \App\Services\PengirimVerifikasiEmail::UMUR_MENIT }} menit dan hanya bisa dipakai sekali.
+        Kalau sudah lewat, minta yang baru di bawah.
+      </p>
+    @endif
 
     <form method="POST" action="{{ route('verification.send') }}">
       @csrf

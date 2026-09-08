@@ -55,15 +55,16 @@ class HealthCheckTest extends TestCase
         ]);
     }
 
-    public function test_semuanya_hidup_membalas_200_dengan_tiga_pemeriksaan_ok(): void
+    public function test_semuanya_hidup_membalas_200_dengan_semua_pemeriksaan_ok(): void
     {
         $this->neviraHidup();
+        config(['mail.default' => 'smtp']);
 
         $this->getJson('/health')
             ->assertOk()
             ->assertExactJson([
                 'status' => 'ok',
-                'checks' => ['database' => 'ok', 'nevira' => 'ok', 'storage' => 'ok'],
+                'checks' => ['database' => 'ok', 'nevira' => 'ok', 'storage' => 'ok', 'mail' => 'ok'],
             ]);
     }
 
@@ -103,10 +104,10 @@ class HealthCheckTest extends TestCase
             $this->assertStringNotContainsStringIgnoringCase($rahasia, $isi, 'Bocor di /health: '.$rahasia);
         }
 
-        // Bentuknya persis tiga kunci pemeriksaan, tidak ada yang lain —
+        // Bentuknya persis empat kunci pemeriksaan, tidak ada yang lain —
         // tidak versi, tidak nama host.
         $this->assertSame(
-            ['database', 'nevira', 'storage'],
+            ['database', 'nevira', 'storage', 'mail'],
             array_keys($this->getJson('/health')->json('checks'))
         );
     }
@@ -300,5 +301,91 @@ class HealthCheckTest extends TestCase
 
         // Dan tidak ada permintaan yang dikirim ke NEVIRA.
         Http::assertNothingSent();
+    }
+
+    /* ---------- Pemeriksaan surat (API-47) ---------- */
+
+    /**
+     * Produksi tanpa pengiriman surat mengunci SELURUH tim di login pertama:
+     * gerbang verifikasi email berdiri sebelum gerbang ganti password, dan
+     * satu-satunya jalan keluarnya menuntut akses shell. Ini satu-satunya cara
+     * mengetahuinya sebelum ada yang terkunci lebih dulu.
+     */
+    public function test_produksi_dengan_mailer_log_membalas_503_dan_mail_tidak_ok(): void
+    {
+        $this->neviraHidup();
+        config(['app.env' => 'production', 'mail.default' => 'log']);
+
+        $response = $this->getJson('/health');
+
+        $response->assertStatus(503);
+        $this->assertSame('error', $response->json('status'));
+        $this->assertNotSame('ok', $response->json('checks.mail'));
+
+        // Yang lain tetap hidup — pemilik teknis tahu yang mati suratnya,
+        // bukan databasenya.
+        $this->assertSame('ok', $response->json('checks.database'));
+        $this->assertSame('ok', $response->json('checks.storage'));
+    }
+
+    public function test_produksi_dengan_mailer_array_juga_dilaporkan_tidak_ok(): void
+    {
+        $this->neviraHidup();
+        config(['app.env' => 'production', 'mail.default' => 'array']);
+
+        $response = $this->getJson('/health');
+
+        $response->assertStatus(503);
+        $this->assertNotSame('ok', $response->json('checks.mail'));
+    }
+
+    /** Mailer yang hanya mencatat adalah keadaan wajar saat pengembangan. */
+    public function test_lokal_dengan_mailer_log_tetap_200(): void
+    {
+        $this->neviraHidup();
+        config(['app.env' => 'local', 'mail.default' => 'log']);
+
+        $response = $this->getJson('/health');
+
+        $response->assertOk();
+        $this->assertSame('ok', $response->json('status'));
+        $this->assertSame('disabled', $response->json('checks.mail'));
+    }
+
+    public function test_produksi_dengan_smtp_terpasang_membalas_mail_ok(): void
+    {
+        $this->neviraHidup();
+        config(['app.env' => 'production', 'mail.default' => 'smtp']);
+
+        $this->getJson('/health')
+            ->assertOk()
+            ->assertJsonPath('checks.mail', 'ok');
+    }
+
+    /**
+     * Endpoint ini terbuka tanpa autentikasi, jadi pemeriksaan barunya pun
+     * tidak boleh menyebut nama host, pengguna, atau nama mailernya.
+     */
+    public function test_pemeriksaan_mail_tidak_membocorkan_konfigurasi_smtp(): void
+    {
+        $this->neviraHidup();
+        config([
+            'app.env' => 'production',
+            'mail.default' => 'smtp',
+            'mail.mailers.smtp.host' => 'smtp.rahasia-lessworry.id',
+            'mail.mailers.smtp.username' => 'surat@lessworry.id',
+            'mail.mailers.smtp.password' => 'password-smtp-rahasia',
+        ]);
+
+        $isi = $this->getJson('/health')->getContent();
+
+        foreach ([
+            'smtp.rahasia-lessworry.id',
+            'surat@lessworry.id',
+            'password-smtp-rahasia',
+            'smtp',
+        ] as $rahasia) {
+            $this->assertStringNotContainsStringIgnoringCase($rahasia, $isi, 'Bocor di /health: '.$rahasia);
+        }
     }
 }
