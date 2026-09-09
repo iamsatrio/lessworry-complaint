@@ -197,7 +197,7 @@ class GrafikLaporanTest extends TestCase
 
     /* ---------- Kriteria 1 dan 5: keempat grafik, ikut rentang, punya tabel ---------- */
 
-    public function test_keempat_grafik_tampil_dengan_tabel_angkanya(): void
+    public function test_kelima_grafik_tampil_dengan_tabel_angkanya(): void
     {
         $outlet = Outlet::create(['name' => 'Outlet A']);
         $this->complaint('2026-07-03 09:00', $outlet, [
@@ -212,11 +212,14 @@ class GrafikLaporanTest extends TestCase
             'Biaya complaint per kategori',
             'Barang Rusak per bulan — jumlah kasus',
             'Median waktu penyelesaian per bulan',
+            // Sumbu kedua untuk biaya, ditambahkan API-59: tanpa grafik ini
+            // "berapa kerugian dari layanan karpet" tidak punya jawaban.
+            'Biaya complaint per layanan',
         ] as $judul) {
             $this->assertStringContainsString($judul, $html);
         }
 
-        $this->assertSame(4, substr_count($html, 'Lihat angkanya sebagai tabel'),
+        $this->assertSame(5, substr_count($html, 'Lihat angkanya sebagai tabel'),
             'Tiap grafik wajib punya tabel angka yang bisa dibuka — itu jalannya bagi pembaca layar '
             .'dan bagi yang ingin menyalin angkanya.');
     }

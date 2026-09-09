@@ -139,7 +139,10 @@ class PemetaBarisImpor
             'legacy_outlet_name' => $namaOutletLama,
             'category' => $this->kategori($this->ambil($baris, 'Issue Category'), $anomali),
             'bobot' => $this->bobot($this->ambil($baris, 'Category Complaint'), $anomali),
-            'layanan' => $this->layanan($this->ambil($baris, 'Layanan'), $anomali),
+            // Uraiannya ikut masuk: `Satuan Non Cloth` dipertajam dari isi
+            // keluhannya, dan hasilnya harus sama dengan hasil perintah
+            // `complaint:betulkan-layanan` atas baris yang sama. (API-59)
+            'layanan' => $this->layanan($this->ambil($baris, 'Layanan'), $uraian, $anomali),
             'tindak_lanjut' => $this->tindakLanjut($this->ambil($baris, 'Tindak Lanjut Category'), $anomali),
             'description' => $uraian,
             'resolution' => $this->ambil($baris, 'Tindak lanjut') ?: null,
@@ -333,7 +336,7 @@ class PemetaBarisImpor
     }
 
     /** @param list<array{kolom:string,alasan:string}> $anomali */
-    private function layanan(string $mentah, array &$anomali): ?string
+    private function layanan(string $mentah, string $uraian, array &$anomali): ?string
     {
         // `-` di kolom layanan artinya tidak dicatat, sama seperti kosong.
         if ($mentah === '' || $mentah === '-') {
@@ -346,12 +349,48 @@ class PemetaBarisImpor
             ?? $this->cariLabel('layanan', $mentah, fn ($label) => $label);
 
         if ($kunci !== null) {
-            return $kunci;
+            return $this->pertajam($kunci, $uraian, $anomali);
         }
 
         $anomali[] = ['kolom' => 'Layanan', 'alasan' => 'tidak ada padanannya: '.$mentah];
 
         return null;
+    }
+
+    /**
+     * `Satuan Non Cloth` yang uraiannya menyebut sepatu/tas atau
+     * karpet/gorden turun ke nilai yang lebih tepat. (API-59)
+     *
+     * Kata kuncinya TIDAK ditulis di sini — `LayananDariUraian` yang
+     * memilikinya, dan perintah `complaint:betulkan-layanan` memanggil kelas
+     * yang sama. Itu yang membuat impor ulang berkas yang sudah dibetulkan
+     * menghasilkan nilai yang sama, bukan mengembalikannya ke
+     * `satuan_non_cloth`.
+     *
+     * Layanan selain `satuan_non_cloth` pulang apa adanya, apa pun isi
+     * uraiannya — termasuk empat baris "Tas laundry gak dikembalikan" yang
+     * ber-layanan Kiloan. Tas laundry itu kantong milik Less Worry.
+     *
+     * @param  list<array{kolom:string,alasan:string}>  $anomali
+     */
+    private function pertajam(string $kunci, string $uraian, array &$anomali): string
+    {
+        if ($kunci !== LayananDariUraian::ASAL) {
+            return $kunci;
+        }
+
+        $halus = LayananDariUraian::tebak($uraian);
+
+        if ($halus === null) {
+            return $kunci;
+        }
+
+        $anomali[] = [
+            'kolom' => 'Layanan',
+            'alasan' => 'Satuan Non Cloth dipertajam jadi '.config('complaint.layanan.'.$halus, $halus).' dari uraiannya',
+        ];
+
+        return $halus;
     }
 
     /** @param list<array{kolom:string,alasan:string}> $anomali */

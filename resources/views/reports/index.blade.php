@@ -153,6 +153,39 @@
   </x-slot:tabel>
 </x-grafik.batang>
 
+@php $biayaLayanan = $grafik->biayaPerLayanan(); @endphp
+@php $catatanBiayaLayanan = 'Sumbu yang berbeda dari grafik di atas, dan justru inilah alasan Sepatu & Tas dan Karpet & Gorden ditarik keluar dari Satuan Non Cloth: selama keduanya menumpang di sana, kerugian per layanan tidak bisa dibaca. Total '.\App\Services\GrafikLaporan::rupiah($totalBiaya).' '.$grafik->cakupanTeks($cakupan['terisi'], $cakupan['total']).'.'; @endphp
+
+<x-grafik.batang
+  judul="Biaya complaint per layanan"
+  :catatan="$catatanBiayaLayanan"
+  :baris="$grafik->batangBiayaLayanan()"
+  warna="var(--danger)">
+  <x-slot:tabel>
+    <table>
+      <thead><tr>
+        <th>Layanan</th><th class="num">Kasus</th><th class="num">Punya nilai</th>
+        <th class="num">Biaya</th><th class="num">Rata-rata</th><th class="num">Porsi biaya</th>
+      </tr></thead>
+      <tbody>
+        @foreach($biayaLayanan as $baris)
+          <tr>
+            <td>{{ $baris['label'] }}</td>
+            <td class="num">{{ $baris['kasus'] }}</td>
+            <td class="num">{{ $baris['terisi'] }}@if($baris['kasus'] > 0 && $baris['terisi'] / $baris['kasus'] < 0.5)<span class="muted small"> · cakupan rendah</span>@endif</td>
+            <td class="num">{{ \App\Services\GrafikLaporan::rupiah($baris['biaya']) }}</td>
+            {{-- Rata-rata per kejadian: di sinilah Karpet & Gorden terlihat
+                 apa adanya — jumlah kasusnya sedikit, tapi angkanya yang
+                 terbesar per complaint di seluruh data. --}}
+            <td class="num">{{ $baris['rata'] === null ? '—' : \App\Services\GrafikLaporan::rupiah($baris['rata']) }}</td>
+            <td class="num">{{ $totalBiaya > 0 ? round(100 * $baris['biaya'] / $totalBiaya).'%' : '—' }}</td>
+          </tr>
+        @endforeach
+      </tbody>
+    </table>
+  </x-slot:tabel>
+</x-grafik.batang>
+
 @php
   // Kalimat kedua WAJIB ikut, bukan hiasan: grafik ini memakai pembagi yang
   // berbeda dari grafik pertama, dan tanpa alasannya tertulis pembacanya
