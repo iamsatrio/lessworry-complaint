@@ -24,8 +24,10 @@ use Illuminate\Support\Facades\DB;
  * 2. **Hanya baris yang sekarang bernilai `satuan_non_cloth`.** Layanan lain
  *    tidak disentuh apa pun isi uraiannya. Yang paling penting: baris
  *    ber-layanan Kiloan TIDAK PERNAH ikut. Ada empat baris berbunyi "Tas
- *    laundry gak dikembalikan" di sana, dan tas laundry adalah kantong milik
- *    Less Worry — bukan tas pelanggan yang dicuci.
+ *    laundry gak dikembalikan" di sana, dan tas laundry itu wadah tempat
+ *    cucian datang dan pulang — tasnya milik pelanggan, tapi bukan tasnya
+ *    yang dicuci. Kolom `layanan` mencatat jasa yang DIBELI, bukan barang
+ *    yang disebut keluhannya, dan yang dibeli di keempat baris itu Kiloan.
  * 3. **Ada jalan mundur.** `--balikkan` mengembalikan baris yang pernah
  *    dipindah ke `satuan_non_cloth`, dikenali dari baris riwayat yang ditulis
  *    saat memindahkannya.

@@ -16,12 +16,20 @@ use Tests\TestCase;
  * Layanan jadi delapan nilai. (API-59)
  *
  * Yang dijaga di sini bukan "dropdownnya bertambah dua". Yang dijaga adalah
- * satu jebakan yang tidak kelihatan dari kodenya: **tas laundry adalah
- * kantong milik Less Worry, bukan tas pelanggan yang dicuci.** Ada empat
- * baris berbunyi "Tas laundry gak dikembalikan" di 545 complaint nyata, dan
- * semuanya ber-layanan Kiloan. Satu pola `tas` tanpa pengecualian mengubah
- * keluhan tentang kantong jadi keluhan tentang layanan tas — diam-diam, di
- * satu-satunya riwayat yang dimiliki sistem.
+ * satu aturan yang tidak kelihatan dari kodenya: **`layanan` adalah jasa yang
+ * DIBELI pelanggan, bukan barang yang kebetulan disebut dalam keluhan.**
+ *
+ * Tas laundry adalah wadah tempat cucian datang dan pulang. Tasnya memang
+ * milik pelanggan, tapi bukan tasnya yang dicuci — yang dibeli Kiloan.
+ * Bandingkan dengan baris yang memang pindah ke `sepatu_tas`: "Tas belum
+ * bersih", "tas carrer kurang bersih dibagian dalam". Di situ tasnya YANG
+ * DIKERJAKAN. Bedanya bukan siapa pemiliknya, tapi apakah barang itu objek
+ * jasanya.
+ *
+ * Ada empat baris berbunyi "Tas laundry gak dikembalikan" di 545 complaint
+ * nyata, dan semuanya ber-layanan Kiloan. Satu pola `tas` tanpa pengecualian
+ * mengubah keluhan tentang wadah jadi keluhan tentang layanan cuci tas —
+ * diam-diam, di satu-satunya riwayat yang dimiliki sistem.
  *
  * Angka 47 dan 13 dari data nyata TIDAK bisa diuji di sini: berkas aslinya
  * berisi nama dan keluhan pelanggan, dan data itu tidak masuk repositori.
@@ -209,9 +217,11 @@ class LayananDelapanTest extends TestCase
     /* ---------- 4. Tas laundry: jebakan yang paling mudah dilanggar ---------- */
 
     /**
-     * Tas laundry adalah KANTONG MILIK LESS WORRY. Empat baris di data nyata
-     * berbunyi begitu dan semuanya ber-layanan Kiloan; memindahkannya
-     * mengubah keluhan tentang kantong jadi keluhan tentang layanan tas.
+     * Tas laundry adalah WADAH, bukan objek jasanya. Empat baris di data nyata
+     * berbunyi begitu dan semuanya ber-layanan Kiloan: yang dibeli pelanggan
+     * cuci per kilo, dan tasnya cuma yang membawa cucian itu datang dan
+     * pulang. Memindahkannya mengubah keluhan tentang wadah jadi keluhan
+     * tentang layanan cuci tas.
      */
     public function test_baris_tas_laundry_tetap_di_layanan_semula(): void
     {
@@ -231,7 +241,7 @@ class LayananDelapanTest extends TestCase
 
         foreach ($baris as $i => $complaint) {
             $this->assertSame($sebelum[$i], $complaint->fresh()->layanan,
-                'Baris tas laundry ke-'.$i.' berpindah layanan. Itu kantong Less Worry, bukan tas pelanggan.');
+                'Baris tas laundry ke-'.$i.' berpindah layanan. Tasnya wadah, bukan yang dicuci.');
         }
 
         $this->assertSame(0, Complaint::where('layanan', 'sepatu_tas')->count());

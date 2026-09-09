@@ -369,7 +369,9 @@ class PemetaBarisImpor
      *
      * Layanan selain `satuan_non_cloth` pulang apa adanya, apa pun isi
      * uraiannya — termasuk empat baris "Tas laundry gak dikembalikan" yang
-     * ber-layanan Kiloan. Tas laundry itu kantong milik Less Worry.
+     * ber-layanan Kiloan. Yang tercatat di kolom ini jasa yang DIBELI
+     * pelanggan, bukan barang yang disebut keluhannya: tas laundry itu wadah
+     * tempat cucian datang dan pulang, dan yang dibeli tetap Kiloan.
      *
      * @param  list<array{kolom:string,alasan:string}>  $anomali
      */

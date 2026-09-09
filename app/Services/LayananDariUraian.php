@@ -12,16 +12,26 @@ namespace App\Services;
  * sama akan mengembalikan baris ke `satuan_non_cloth` begitu salah satunya
  * disunting, dan tidak ada yang tahu sampai laporannya dibaca.
  *
- * Tiga aturan yang bukan kehati-hatian berlebihan:
+ * Aturan yang menentukan seluruh kelas ini: **`layanan` adalah jasa yang
+ * DIBELI pelanggan, bukan barang yang kebetulan disebut dalam keluhan.**
+ * Kata kunci di bawah cuma alat untuk menebak jasanya dari uraian; begitu
+ * alat itu dibaca sebagai "sebut barangnya, dapat layanannya", ia mulai
+ * memindahkan baris yang salah.
+ *
+ * Tiga aturan turunannya, dan tak satu pun kehati-hatian berlebihan:
  *
  * 1. **Hanya baris yang sekarang bernilai `satuan_non_cloth`.** Yang memanggil
  *    kelas ini bertanggung jawab menyaringnya; `self::ASAL` yang menyebut
  *    nilainya supaya penyaringnya tidak ditulis ulang sebagai teks lepas.
- * 2. **`tas laundry` dan `tas cuci` DIKECUALIKAN.** Tas laundry adalah kantong
- *    milik Less Worry, bukan tas pelanggan yang dicuci — ada empat baris
- *    berbunyi "Tas laundry gak dikembalikan" dan semuanya ber-layanan Kiloan.
- *    Memindahkannya mengubah keluhan tentang kantong jadi keluhan tentang
- *    layanan tas.
+ * 2. **`tas laundry` dan `tas cuci` DIKECUALIKAN.** Tas laundry itu WADAH
+ *    tempat cucian datang dan pulang — tasnya memang milik pelanggan, tapi
+ *    bukan tasnya yang dicuci. Yang dibeli pelanggan Kiloan: pakaiannya, per
+ *    kilo. Bandingkan dengan 47 baris yang memang pindah ke `sepatu_tas` —
+ *    "Tas belum bersih", "tas carrer kurang bersih dibagian dalam" — di situ
+ *    tasnya YANG DIKERJAKAN. Bedanya bukan siapa pemiliknya; bedanya apakah
+ *    barang itu objek jasanya. Empat baris "Tas laundry gak dikembalikan" di
+ *    data nyata semuanya ber-layanan Kiloan, dan memindahkannya mengubah
+ *    keluhan tentang wadah jadi keluhan tentang layanan cuci tas.
  * 3. **Semua pencocokan memakai batas kata.** `tas` tanpa `\b` mencocokkan
  *    "batas", "pantas", dan "tastes" — dan itu merusak diam-diam.
  */

@@ -202,7 +202,9 @@ Tiga hal yang perlu diketahui sebelum menjalankannya:
 - **Hanya baris yang sekarang bernilai `satuan_non_cloth`** yang disentuh.
   Baris ber-layanan Kiloan tidak pernah ikut, apa pun isi uraiannya — di sana
   ada keluhan berbunyi *"Tas laundry gak dikembalikan"*, dan tas laundry itu
-  kantong milik Less Worry, bukan tas pelanggan yang dicuci.
+  **wadah** tempat cucian datang dan pulang. Tasnya memang milik pelanggan,
+  tapi bukan tasnya yang dicuci; yang dibeli Kiloan. Kolom `layanan` mencatat
+  **jasa yang dibeli**, bukan barang yang disebut keluhannya.
 - **`updated_at` tidak dinaikkan.** Yang mencatat perubahannya adalah baris
   riwayat pada complaint itu.
 - **Impor ulang berkas yang sama menghasilkan nilai yang sama.**
