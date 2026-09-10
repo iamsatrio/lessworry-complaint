@@ -81,7 +81,11 @@
       </select>
     </div>
     <div class="shrink"><button>Terapkan</button></div>
+    {{-- Dua format berdampingan. CSV lebih dulu: ia yang dipakai alat lain.
+         `.xlsx` di sebelahnya karena CSV yang dibuka Excel wilayah Indonesia
+         bisa membaca ulang angka dan tanggalnya sendiri. (API-62 nomor 4) --}}
     <div class="shrink"><a class="btn ghost" href="{{ route('reports.export', request()->query()) }}">Unduh CSV</a></div>
+    <div class="shrink"><a class="btn ghost" href="{{ route('reports.export.xlsx', request()->query()) }}">Unduh Excel</a></div>
   </form>
 </div>
 

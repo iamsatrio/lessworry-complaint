@@ -18,11 +18,13 @@ nginx -v
 git --version
 ```
 
-PHP butuh ekstensi ini: `bcmath curl dom fileinfo mbstring openssl pcre pdo pdo_mysql tokenizer xml zip`
+PHP butuh ekstensi ini: `bcmath curl dom fileinfo filter mbstring openssl pcre pdo pdo_mysql tokenizer xml xmlreader zip`
+
+`filter`, `xmlreader`, `zip`, `dom`, dan `fileinfo` dituntut `openspout/openspout`, yang menulis rekap `.xlsx` halaman Laporan (API-62). Tanpa salah satunya `composer install` berhenti sebelum aplikasinya jalan.
 
 ```bash
 php -m | tr 'A-Z' 'a-z' | sort > /tmp/ada.txt
-for e in bcmath curl dom fileinfo mbstring openssl pdo_mysql tokenizer xml zip; do
+for e in bcmath curl dom fileinfo filter mbstring openssl pdo_mysql tokenizer xml xmlreader zip; do
   grep -qx "$e" /tmp/ada.txt || echo "KURANG: $e"
 done
 ```
