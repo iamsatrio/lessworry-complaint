@@ -182,10 +182,10 @@ php artisan tinker --execute="echo config('mail.default');"    # harus 'smtp'
 ```
 
 Kalau yang keluar `log` atau `array`, surat tidak dikirim ke mana pun. Perbaiki
-`.env`, jalankan `php artisan config:cache`, lalu ulangi. Setelah HTTPS hidup,
-`/health` melaporkan keadaan yang sama sebagai `"mail":"error"` — pemeriksaan
-itu ada supaya keadaan ini terlihat dari luar tanpa perlu mengunci siapa pun
-lebih dulu.
+`.env`, jalankan `php artisan config:cache`, lalu ulangi.
+
+`smtp` yang tertulis benar **belum** berarti SMTP-nya bisa dihubungi — itu yang
+dibuktikan langkah berikutnya, dan itu sebabnya langkah ini tidak cukup sendiri.
 
 Lalu kirim satu verifikasi sungguhan ke satu alamat dan tunggu suratnya sampai:
 
@@ -199,7 +199,11 @@ app(App\Services\PengirimVerifikasiEmail::class)->kirim($u, 'permintaan');
 exit
 ```
 
-Balasannya harus `"terkirim"`. Lalu **buka kotak surat alamat itu dan pastikan
+Balasannya harus `"terkirim"`. Hasilnya juga tercatat untuk `/health`: setiap
+pengiriman yang gagal membuat `"mail"` jadi `"error"`, dan pengiriman berikutnya
+yang berhasil menghapus penandanya kembali.
+
+Lalu **buka kotak surat alamat itu dan pastikan
 suratnya benar-benar ada** — `"terkirim"` hanya berarti server SMTP menerimanya,
 belum berarti surat itu lolos dari filter spam. Kalau tidak sampai dalam lima
 menit, cek folder spam, lalu:
@@ -477,13 +481,30 @@ curl -s -o /dev/null -w '%{http_code}\n' https://care.lessworry.id/health
 - `503` — ada yang tidak. Isi jawabannya menyebut yang mana:
   `{"status":"error","checks":{"database":"ok","nevira":"error","storage":"ok","mail":"ok"}}`
 
-`"mail":"error"` hanya muncul di `APP_ENV=production`, dan artinya satu hal:
-`MAIL_MAILER` masih `log` atau `array`, jadi tidak ada surat verifikasi yang
-benar-benar dikirim. Di produksi itu mengunci **seluruh** tim di login pertama,
-tanpa satu pun pesan galat yang terlihat dari layar — karena itu ia dilaporkan
-di sini, sebelum ada yang mencoba masuk. Di luar produksi nilainya `disabled`:
-mailer yang hanya mencatat memang wajar saat pengembangan, dan `/health` tetap
-`200`.
+Pemeriksaan `mail` membaca **hasil pengiriman terakhir**, bukan isi `.env`:
+
+| nilai | artinya | HTTP |
+|---|---|---|
+| `ok` | tidak ada kegagalan kirim yang tercatat | 200 |
+| `error` | pengiriman terakhir gagal, **atau** `MAIL_MAILER` masih `log`/`array` di `APP_ENV=production` | 503 |
+| `unknown` | penandanya sendiri tidak terbaca — keadaan surat tidak diketahui | 200 |
+| `disabled` | mailer hanya mencatat, dan ini bukan produksi | 200 |
+
+`error` di produksi berarti tidak ada surat verifikasi yang benar-benar
+terkirim, dan itu mengunci **seluruh** tim di login pertama tanpa satu pun
+pesan galat yang terlihat dari layar — karena itu ia dilaporkan di sini,
+sebelum ada yang mencoba masuk.
+
+Dua hal yang perlu diketahui tentang cara kerjanya:
+
+- **`/health` tidak menghubungi SMTP sendiri.** Kalau ia melakukannya, tiap
+  ketukan pemantau jadi satu koneksi keluar. Yang dibacanya penanda hasil kirim
+  yang sebenarnya.
+- **Penandanya kedaluwarsa 24 jam.** Bukan supaya papannya cepat hijau lagi:
+  selama SMTP benar-benar mati, tiap percobaan login memperbarui penandanya,
+  jadi papannya tetap merah. Yang dihindari adalah satu kegagalan sesaat
+  berbulan-bulan lalu mengunci papan pada sistem yang sejak itu tidak pernah
+  mengirim apa pun.
 
 Endpoint ini sengaja tidak menyebut versi, nama host, maupun pesan galat —
 terbuka tanpa autentikasi, jadi tidak boleh berguna bagi penyerang. Hasil

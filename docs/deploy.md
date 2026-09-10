@@ -163,9 +163,14 @@ tidak terbaca.
 ```
 
 `mail` menjawab satu pertanyaan yang tidak bisa dijawab dari luar dengan cara
-lain: apakah surat verifikasi benar-benar dikirim. `"error"` di `APP_ENV=production`
-berarti `MAIL_MAILER` masih `log`/`array`, dan itu mengunci **seluruh** tim di
-login pertama. Di luar produksi nilainya `disabled` dan `/health` tetap `200`.
+lain: apakah surat verifikasi benar-benar terkirim. Yang dibacanya **hasil
+pengiriman terakhir**, bukan isi `.env` — `MAIL_MAILER=smtp` yang tertulis benar
+tapi host-nya mati tetap mengunci seluruh tim, dan menyimpulkan sehat dari
+konfigurasi membuat pemantauan hijau justru sepanjang itu terjadi.
+
+`ok` tidak ada kegagalan tercatat · `error` pengiriman terakhir gagal, atau
+mailer masih `log`/`array` di produksi (503) · `unknown` penandanya tidak
+terbaca · `disabled` mailer hanya mencatat di luar produksi.
 
 Yang dibaca pemantau adalah **kode statusnya**; isi JSON untuk manusia yang
 menyusul. Hasil pemeriksaan NEVIRA disimpan 60 detik, jadi pemantau yang
