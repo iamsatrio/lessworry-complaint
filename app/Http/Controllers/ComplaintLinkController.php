@@ -84,6 +84,10 @@ class ComplaintLinkController extends Controller
         $complaint->forceFill([
             'nevira_transaction_number' => $baru !== '' ? $baru : null,
             'nevira_transaction_id' => null,
+            // Barang yang dikeluhkan menunjuk baris di nota LAMA. Nota baru
+            // punya isi lain: 'barang ke-3' di sana barang yang berbeda,
+            // dan penetapan pelaku ikut menunjuk orang yang salah. (API-51)
+            'nevira_service_index' => null,
             'nota_exemption' => $baru !== '' ? null : ($pengecualian ?? $complaint->nota_exemption),
             'nevira_snapshot' => null,
             'nevira_customer_id' => null,

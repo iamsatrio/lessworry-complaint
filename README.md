@@ -17,17 +17,16 @@ php artisan migrate --seed
 php artisan serve
 ```
 
-Seeder membuat tujuh akun tim — akun sungguhan, bukan akun contoh (API-36):
+Seeder membuat lima akun tim — akun sungguhan, bukan akun contoh (API-36,
+API-45, API-50):
 
 | Peran | Email |
 |---|---|
 | Admin | `satrio@lessworry.id` |
 | Admin | `ghozi@lessworry.id` |
 | Admin | `eric@lessworry.id` |
-| Supervisor | `tsulasa@lessworry.id` |
-| Kasir (outlet Tebet) | `kasir@getnada.com` |
-| Divisi Produksi | `produksi@getnada.com` |
-| Divisi Kurir | `kurir@getnada.com` |
+| Admin | `tsulasa@lessworry.id` |
+| Customer Care (seluruh outlet) | `care@lessworry.id` |
 
 Tidak ada password di berkas ini dan tidak ada password bawaan. Seeder
 mencetak password sementara acak ke layar orang yang menjalankannya, sekali,
@@ -35,21 +34,97 @@ lalu tidak menyimpannya di mana pun; semuanya wajib diganti saat login
 pertama. Menjalankan seeder ulang tidak menyetel ulang password yang sudah
 diganti sendiri.
 
-Tiga akun terakhir dipakai bergantian beberapa orang, jadi alamatnya bukan
-alamat pribadi siapa pun. `getnada.com` adalah kotak surat sekali pakai yang
-bisa dibaca siapa saja yang tahu alamatnya — cukup untuk mengantar password
-sementara saat uji coba, dan **tidak boleh** dipakai sebagai bukti kepemilikan
-akun kalau verifikasi email dibangun nanti (API-35).
+Semua akun awal beralamat `@lessworry.id`, dan itu syarat: kotak suratnya ada
+di Google Workspace Less Worry, jadi tautan verifikasi email (API-35) yang
+sampai ke sana benar-benar membuktikan kepemilikan akun. Verifikasi berlaku
+penuh untuk kelimanya, tanpa pengecualian.
+
+Akun bersama Kasir, Produksi, dan Kurir sempat diseed dengan alamat
+`getnada.com` — kotak surat publik yang bisa dibaca siapa saja yang tahu
+alamatnya. Ketiganya dibuang di API-50. Yang dibuang **akunnya, bukan
+perannya**: `kasir`, `divisi`, dan `supervisor` tetap bisa dipilih di halaman
+Pengguna, dan akun sungguhannya dibuat Admin dari sana dengan alamat kerja
+masing-masing.
+
+`care@lessworry.id` adalah akun peran, bukan akun perorangan: riwayat complaint
+mencatat "Customer Care" yang menutup tiket, bukan siapa orangnya. Begitu peran
+ini dipegang dua orang atau lebih, akun perorangan jadi perlu (dicatat di
+API-45). Alamat lama `cc@lessworry.id` tidak dipakai ulang dan tetap
+dinonaktifkan.
 
 Akun seeder versi lama (`cc@`, `kasirbaru@`, `samsuri@`, `arifin@`,
-`adhyasta@`, `audry@`, dan alamat `kasir@`/`produksi@`/`kurir@` di
-`lessworry.id`) dinonaktifkan dan passwordnya dibuang saat seeder dijalankan —
-tidak dihapus, supaya jejak audit complaint yang pernah disentuhnya utuh.
+`adhyasta@`, `audry@`, alamat `kasir@`/`produksi@`/`kurir@` di `lessworry.id`,
+dan ketiga alamat `getnada.com`) dinonaktifkan dan passwordnya dibuang saat
+seeder dijalankan — tidak dihapus, supaya jejak audit complaint yang pernah
+disentuhnya utuh.
+
+## Memperbarui salinan yang sudah ada
+
+`git pull` saja **tidak cukup**. Yang berubah bukan cuma berkas kode: ada
+migrasi baru, kunci `.env` baru, dan versi paket baru yang semuanya perlu
+langkah sendiri. Urutan lengkapnya:
+
+```bash
+git pull                    # ambil kode terbaru
+composer install            # samakan paket dengan composer.lock
+php artisan migrate         # jalankan migrasi baru
+php artisan config:clear    # buang cache konfigurasi lama
+```
+
+Kenapa tiga perintah setelah `git pull` perlu:
+
+| Perintah | Kalau dilewat |
+|---|---|
+| `composer install` | `composer.lock` ikut berubah saat paket ditambah (Larastan, misalnya). Tanpa ini: "class not found" atau versi paket tidak cocok. |
+| `php artisan migrate` | Tabel dan kolom baru belum ada. Halaman yang memakainya balas **500**, dan pesannya tidak menyebut migrasi. |
+| `php artisan config:clear` | Kalau konfigurasi pernah di-cache, perubahan di `config/` tidak berlaku sampai cache dibuang. Aman dijalankan walau belum pernah di-cache. |
+
+Tidak perlu `npm install`. Seluruh CSS ada di dalam blade; `@vite` cuma dipakai
+`resources/views/welcome.blade.php`, dan halaman itu tidak punya route — `/`
+langsung diarahkan ke `/dashboard`.
+
+### Kunci `.env` yang tertinggal
+
+Ini yang paling sering luput. `.env` diabaikan git, jadi kunci baru yang
+ditambahkan ke `.env.example` **tidak pernah sampai** ke `.env` siapa pun.
+Tidak ada yang memberi tahu — yang muncul cuma galat di tempat yang kelihatan
+tidak berhubungan (`/health` gagal, perintah backup gagal, email tidak
+terkirim).
+
+Cari selisihnya:
+
+```bash
+comm -23 <(grep -E '^[A-Z_]+=' .env.example | cut -d= -f1 | sort) \
+         <(grep -E '^[A-Z_]+=' .env | cut -d= -f1 | sort)
+```
+
+Yang keluar adalah kunci yang ada di `.env.example` tapi belum ada di `.env`.
+Salin nilainya dari `.env.example`, lalu isi yang perlu diisi. Kalau tidak ada
+keluaran sama sekali, `.env` sudah lengkap.
+
+Butuh bash atau zsh (`<(...)` tidak jalan di `sh`). Jalankan dari akar
+repositori.
+
+### Kapan `migrate:fresh --seed` dipakai
+
+```bash
+php artisan migrate:fresh --seed
+```
+
+Perintah ini **menghapus seluruh isi database** lalu membangunnya dari nol.
+Pakai hanya kalau datanya memang boleh hilang — mesin pengembangan sendiri,
+atau saat migrasi lokal sudah kadung berantakan dan lebih cepat mulai ulang.
+
+> **Jangan pernah di produksi.** Data complaint sungguhan tidak bisa
+> dikembalikan dengan `git`. Urutan pembaruan untuk server produksi ada di
+> **API-34**, dan langkah deploy lengkapnya di
+> `docs/deploy-care-lessworry.md`.
 
 ## Dokumentasi
 
 - `docs/nevira-api.md` — kontrak integrasi NEVIRA, termasuk jebakan header `Bearer`
 - `docs/deploy.md` — daftar periksa sebelum produksi
+- `docs/deploy-care-lessworry.md` — rujukan produksi: langkah deploy dan pembaruan di `care.lessworry.id`
 
 ## Pengujian
 

@@ -1,4 +1,13 @@
-@php $handlers = $complaint->orderHandlers(); @endphp
+@php
+  // Dikelompokkan per baris layanan nota. Satu nota bisa berisi sepuluh
+  // sprei, masing-masing dengan rantai pengerjaannya sendiri: diratakan jadi
+  // satu daftar, sepuluh rantai itu terbaca sebagai pengulangan. Nota satu
+  // layanan pulang sebagai satu grup tanpa judul, jadi tampilannya tidak
+  // berubah sama sekali. (API-51)
+  $grupHandler = $complaint->orderHandlerGroups();
+  $handlers = $complaint->orderHandlers();
+  $adaJudulGrup = collect($grupHandler)->contains(fn ($g) => filled($g['label']));
+@endphp
 
 <div class="card">
   <div class="eyebrow">Karyawan yang menangani order ini</div>
@@ -17,24 +26,40 @@
     <table style="font-size:14px">
       <thead><tr><th>Tahap</th><th>Karyawan</th><th>Waktu</th></tr></thead>
       <tbody>
-      @foreach($handlers as $h)
-        <tr>
-          <td>{{ $h['stage'] }}
-            @if($h['status'])<div class="muted small">{{ $h['status'] }}</div>@endif
-          </td>
-          <td><b class="display">{{ $h['name'] }}</b>
-            @if($h['nip'])<div class="muted small" style="font-family:var(--mono)">{{ $h['nip'] }}</div>@endif
-          </td>
-          <td class="muted small">
-            @if($h['duration']){{ intdiv($h['duration'],60) }} mnt {{ $h['duration']%60 }} dtk @else — @endif
-          </td>
-        </tr>
+      @foreach($grupHandler as $grup)
+        @if($grup['label'])
+          <tr>
+            <td colspan="3" style="padding-top:14px;border-bottom:none">
+              <div class="eyebrow" style="margin:0">{{ $grup['label'] }}</div>
+              @if($grup['index'] !== null && $grup['index'] === $complaint->nevira_service_index)
+                <span class="badge">Yang dikeluhkan</span>
+              @endif
+            </td>
+          </tr>
+        @endif
+        @foreach($grup['items'] as $h)
+          <tr>
+            <td>{{ $h['stage'] }}
+              @if($h['status'])<div class="muted small">{{ $h['status'] }}</div>@endif
+            </td>
+            <td><b class="display">{{ $h['name'] }}</b>
+              @if($h['nip'])<div class="muted small" style="font-family:var(--mono)">{{ $h['nip'] }}</div>@endif
+            </td>
+            <td class="muted small">
+              @if($h['duration']){{ intdiv($h['duration'],60) }} mnt {{ $h['duration']%60 }} dtk @else — @endif
+            </td>
+          </tr>
+        @endforeach
       @endforeach
       </tbody>
     </table>
     <p class="hint">
       Ini catatan NEVIRA tentang siapa mengerjakan tahap apa — keterangan, bukan kesimpulan.
       Nama muncul di sini karena orangnya menangani order ini, belum tentu karena dia penyebabnya.
+      @if($adaJudulGrup)
+        Nota ini berisi beberapa barang dan tiap barang punya rantai pengerjaannya sendiri —
+        nama yang muncul lebih dari sekali mengerjakan barang yang berbeda, bukan tahap yang sama dua kali.
+      @endif
     </p>
   @endif
 </div>
@@ -119,31 +144,20 @@
       <input type="hidden" name="_form" value="tambah-pelaku">
 
       @foreach($kandidat->groups() as $grup)
-        <div style="margin-top:14px">
-          <div class="eyebrow">{{ $grup['label'] }}</div>
-          @foreach($grup['items'] as $item)
-            <div style="display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);flex-wrap:wrap">
-              <label class="pick" style="flex:1;min-width:200px">
-                <input type="checkbox" name="pelaku[]" value="{{ $item['key'] }}"
-                       @checked(in_array($item['key'], (array) old('pelaku', []), true))>
-                <span style="min-width:0">
-                  <b class="display" style="text-transform:none">{{ $item['name'] }}</b>
-                  @if($item['nip'])
-                    <span class="muted small" style="font-family:var(--mono)"> · {{ $item['nip'] }}</span>
-                  @endif
-                  @if($item['stage'])<div class="muted small">{{ $item['stage'] }}</div>@endif
-                </span>
-              </label>
-              <select name="peran[{{ $item['key'] }}]" style="max-width:190px;margin:0">
-                @foreach(config('complaint.responsible_roles') as $k=>$v)
-                  {{-- Dibaca sebagai indeks array, bukan lewat notasi titik:
-                       kunci kandidat bisa memuat titik (nama disingkat). --}}
-                  <option value="{{ $k }}" @selected((old('peran', [])[$item['key']] ?? $item['role'])===$k)>{{ $v }}</option>
-                @endforeach
-              </select>
-            </div>
-          @endforeach
-        </div>
+        @if($grup['collapsed'])
+          {{-- Barang lain di nota yang sama: dipersempit, TIDAK disembunyikan.
+               Kesalahan bisa terjadi di tahap mana pun, termasuk pengemasan
+               yang mencampur barang antar-baris. (API-51) --}}
+          <details style="margin-top:14px">
+            <summary class="muted small">{{ $grup['label'] }} ({{ count($grup['items']) }} nama)</summary>
+            @include('complaints._kandidat', ['items' => $grup['items']])
+          </details>
+        @else
+          <div style="margin-top:14px">
+            <div class="eyebrow">{{ $grup['label'] }}</div>
+            @include('complaints._kandidat', ['items' => $grup['items']])
+          </div>
+        @endif
       @endforeach
 
       @if(empty($kandidat->groups()))

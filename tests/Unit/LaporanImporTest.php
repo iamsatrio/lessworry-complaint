@@ -23,24 +23,66 @@ class LaporanImporTest extends TestCase
     {
         $laporan = $this->laporan();
         $laporan->totalBaris = 545;
-        $laporan->baris2026 = 237;
-        $laporan->pelaku2026 = 34;
+        $laporan->barisDiimpor = 88;
+        $laporan->pelakuDiimpor = 14;
 
-        // 14,3% — ambang API-24 adalah 25%. Kalimatnya harus menyebut itu
+        // 15,9% — ambang API-24 adalah 25%. Kalimatnya harus menyebut itu
         // apa adanya; keputusan mencabut fitur pelacakan pelaku bergantung
         // pada kalimat ini dibaca benar.
-        $this->assertSame(14.3, round($laporan->persenPelaku2026(), 1));
+        $this->assertSame(15.9, round($laporan->persenPelaku(), 1));
         $this->assertStringContainsString('**di bawah** ambang', $laporan->render('2026-09-05 00:00:00'));
+    }
+
+    public function test_porsi_pelaku_dihitung_atas_baris_yang_diimpor_bukan_seluruh_berkas(): void
+    {
+        $laporan = $this->laporan();
+        // Seluruh berkas 40%, tapi yang diimpor cuma 10% — yang menentukan
+        // keputusan adalah baris yang benar-benar masuk ke sistem.
+        $laporan->totalBaris = 100;
+        $laporan->pelakuTotal = 40;
+        $laporan->barisDiimpor = 10;
+        $laporan->pelakuDiimpor = 1;
+
+        $isi = $laporan->render('2026-09-05 00:00:00');
+
+        $this->assertSame(10.0, round($laporan->persenPelaku(), 1));
+        $this->assertStringContainsString('**di bawah** ambang', $isi);
+        $this->assertStringContainsString('| Seluruh berkas | 40 | 100 | 40,0% |', $isi);
     }
 
     public function test_porsi_pelaku_di_atas_ambang_tidak_dikatakan_di_bawah(): void
     {
         $laporan = $this->laporan();
         $laporan->totalBaris = 100;
-        $laporan->baris2026 = 100;
-        $laporan->pelaku2026 = 40;
+        $laporan->barisDiimpor = 100;
+        $laporan->pelakuDiimpor = 40;
 
         $this->assertStringNotContainsString('**di bawah** ambang', $laporan->render('2026-09-05 00:00:00'));
+    }
+
+    public function test_baris_yang_dilewati_karena_tua_punya_angkanya_sendiri(): void
+    {
+        $laporan = new LaporanImpor('uji', '/tmp/uji.csv', false, '2026-05-16');
+        $laporan->totalBaris = 545;
+        $laporan->dilewatiTua = 457;
+        $laporan->barisDiimpor = 88;
+        $laporan->masuk = 88;
+
+        $isi = $laporan->render('2026-09-05 00:00:00');
+
+        // Tanpa angka ini, "88 masuk" dari berkas 545 baris terbaca seolah
+        // berkasnya memang hanya berisi 88.
+        $this->assertStringContainsString('| Dibaca dari berkas | 545 |', $isi);
+        $this->assertStringContainsString('| Dilewati (lebih tua dari tanggal potong) | 457 |', $isi);
+        $this->assertStringContainsString('| Lolos tanggal potong | 88 |', $isi);
+        $this->assertStringContainsString('`2026-05-16` (inklusif; baris lebih tua dilewati)', $isi);
+    }
+
+    public function test_tanpa_tanggal_potong_dikatakan_tanpa_batas(): void
+    {
+        $isi = $this->laporan()->render('2026-09-05 00:00:00');
+
+        $this->assertStringContainsString('Tanggal potong: tidak ada — seluruh berkas diimpor', $isi);
     }
 
     public function test_bentuk_nomor_nota_dipilah_bukan_dianggap_seragam(): void
@@ -52,6 +94,7 @@ class LaporanImporTest extends TestCase
         }
 
         $laporan->totalBaris = 6;
+        $laporan->barisDiimpor = 6;
 
         $this->assertSame(1, $laporan->nota['angka']);
         $this->assertSame(1, $laporan->nota['angka_bulan']);

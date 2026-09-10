@@ -28,7 +28,7 @@ class KandidatPelaku
     /** @var array<string,array<string,mixed>> */
     private array $kandidat = [];
 
-    /** @var array<int,array{label:string,items:array<int,array<string,mixed>>}> */
+    /** @var array<int,array{label:string,collapsed:bool,items:array<int,array<string,mixed>>}> */
     private array $grup = [];
 
     /**
@@ -39,7 +39,10 @@ class KandidatPelaku
     {
         $daftar = new self;
 
-        $daftar->tambahGrup('Tercatat di nota ini', $daftar->dariNota($complaint));
+        foreach ($daftar->grupDariNota($complaint) as $grup) {
+            $daftar->tambahGrup($grup['label'], $grup['items'], $grup['collapsed']);
+        }
+
         $daftar->tambahGrup(
             'Karyawan '.($complaint->outlet?->name ? 'outlet '.$complaint->outlet->name : 'outlet nota ini'),
             collect($karyawanOutlet)->map(fn ($k) => [
@@ -48,6 +51,7 @@ class KandidatPelaku
                 'nip' => $k['nip'] ?? null,
                 'role' => 'lainnya',
                 'stage' => null,
+                'service_index' => null,
             ])->all()
         );
         $daftar->tambahGrup('Pengguna sistem complaint', collect($penggunaSistem)->map(fn ($u) => [
@@ -56,12 +60,13 @@ class KandidatPelaku
             'nip' => null,
             'role' => $u->isCustomerCare() ? 'customer_care' : ($u->isKasir() ? 'kasir' : 'lainnya'),
             'stage' => null,
+            'service_index' => null,
         ])->all());
 
         return $daftar;
     }
 
-    /** @return array<int,array{label:string,items:array<int,array<string,mixed>>}> */
+    /** @return array<int,array{label:string,collapsed:bool,items:array<int,array<string,mixed>>}> */
     public function groups(): array
     {
         return array_values(array_filter($this->grup, fn ($g) => $g['items'] !== []));
@@ -75,6 +80,44 @@ class KandidatPelaku
     public function isEmpty(): bool
     {
         return $this->kandidat === [];
+    }
+
+    /**
+     * Orang dari nota ini, dipisah menurut barang yang dikeluhkan.
+     *
+     * Complaint yang menunjuk satu baris layanan menampilkan yang
+     * mengerjakan baris itu lebih dulu; sisanya tetap ada, hanya terlipat.
+     * Kesalahan bisa terjadi di tahap mana pun — pengemasan yang mencampur
+     * barang antar-baris, misalnya. Mempersempit itu menolong, mengunci itu
+     * menebak. (API-51)
+     *
+     * @return array<int,array{label:string,collapsed:bool,items:array<int,array<string,mixed>>}>
+     */
+    private function grupDariNota(Complaint $complaint): array
+    {
+        $items = $this->dariNota($complaint);
+        $dipilih = $complaint->nevira_service_index;
+
+        if ($dipilih === null || ! $complaint->hasMultipleServices()) {
+            return [['label' => 'Tercatat di nota ini', 'collapsed' => false, 'items' => $items]];
+        }
+
+        // Yang tidak menempel pada satu baris — kasir penerima, kurirnya —
+        // menyentuh seluruh nota, jadi ia tetap relevan untuk barang apa pun.
+        $terkait = fn (array $i) => in_array($i['service_index'] ?? null, [null, $dipilih], true);
+
+        return [
+            [
+                'label' => 'Mengerjakan barang yang dikeluhkan',
+                'collapsed' => false,
+                'items' => array_values(array_filter($items, $terkait)),
+            ],
+            [
+                'label' => 'Barang lain di nota yang sama',
+                'collapsed' => true,
+                'items' => array_values(array_filter($items, fn (array $i) => ! $terkait($i))),
+            ],
+        ];
     }
 
     /**
@@ -95,6 +138,7 @@ class KandidatPelaku
                 'nip' => $h['nip'] ?? null,
                 'role' => $kasir ? 'kasir' : 'produksi',
                 'stage' => $kasir ? null : $h['stage'],
+                'service_index' => $h['service_index'] ?? null,
             ];
         }
 
@@ -109,13 +153,14 @@ class KandidatPelaku
                 'nip' => $d['courier_nip'] ?? null,
                 'role' => 'kurir',
                 'stage' => null,
+                'service_index' => null,
             ];
         }
 
         return $items;
     }
 
-    private function tambahGrup(string $label, array $items): void
+    private function tambahGrup(string $label, array $items, bool $collapsed = false): void
     {
         $bersih = [];
 
@@ -142,6 +187,6 @@ class KandidatPelaku
             $bersih[] = $item;
         }
 
-        $this->grup[] = ['label' => $label, 'items' => $bersih];
+        $this->grup[] = ['label' => $label, 'collapsed' => $collapsed, 'items' => $bersih];
     }
 }

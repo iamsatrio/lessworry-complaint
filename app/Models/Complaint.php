@@ -21,6 +21,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $reporter_phone
  * @property string|null $nevira_transaction_id
  * @property string|null $nevira_transaction_number
+ * @property int|null $nevira_service_index
  * @property string|null $nevira_customer_id
  * @property array<string,mixed>|null $nevira_snapshot
  * @property Carbon|null $nevira_synced_at
@@ -73,7 +74,7 @@ class Complaint extends Model
      */
     protected $fillable = [
         'channel', 'reporter_name', 'reporter_phone',
-        'nevira_transaction_number', 'nota_exemption',
+        'nevira_transaction_number', 'nevira_service_index', 'nota_exemption',
         'outlet_id', 'category', 'sub_category', 'bobot', 'layanan',
         'description', 'assigned_to', 'forwarded_division',
     ];
@@ -92,6 +93,7 @@ class Complaint extends Model
     {
         return [
             'nevira_snapshot' => 'array',
+            'nevira_service_index' => 'integer',
             'nevira_synced_at' => 'datetime',
             'due_response_at' => 'datetime',
             'due_resolution_at' => 'datetime',
@@ -138,7 +140,12 @@ class Complaint extends Model
      * Orang-orang yang menyentuh order ini menurut NEVIRA — kasir penerima
      * dan setiap tahap produksi. Fakta, bukan tuduhan.
      *
-     * @return array<int,array{stage:string,name:?string,nip:?string,staff_id:mixed,status:?string,duration:?int}>
+     * Tiap baris membawa `service_index`: nomor urut baris layanan yang
+     * dikerjakannya, atau null kalau tidak diketahui — kasir penerima
+     * memang menerima seluruh nota, dan snapshot lama belum menyimpan
+     * penandanya sama sekali. (API-51)
+     *
+     * @return array<int,array{stage:string,name:?string,nip:?string,staff_id:mixed,status:?string,duration:?int,service_index:?int,service_name:?string}>
      */
     public function orderHandlers(): array
     {
@@ -153,13 +160,19 @@ class Complaint extends Model
                 'staff_id' => $snapshot['cashier_id'] ?? null,
                 'status' => null,
                 'duration' => null,
+                'service_index' => null,
+                'service_name' => null,
             ];
         }
 
-        foreach ($snapshot['processes'] ?? [] as $process) {
-            if (empty($process['staff_name'])) {
+        $processes = $snapshot['processes'] ?? [];
+
+        foreach (is_array($processes) ? $processes : [] as $process) {
+            if (! is_array($process) || empty($process['staff_name'])) {
                 continue;
             }
+
+            $index = $process['service_index'] ?? null;
 
             $handlers[] = [
                 'stage' => $process['stage'] ?? 'Tahap produksi',
@@ -168,10 +181,130 @@ class Complaint extends Model
                 'staff_id' => $process['staff_id'] ?? null,
                 'status' => $process['status'] ?? null,
                 'duration' => $process['duration'] ?? null,
+                'service_index' => is_numeric($index) ? (int) $index : null,
+                'service_name' => $process['service_name'] ?? null,
             ];
         }
 
         return $handlers;
+    }
+
+    /** Kunci yang selalu ada di satu baris layanan nota. */
+    private const BENTUK_LAYANAN = [
+        'index' => null, 'name' => null, 'code' => null, 'quantity' => null,
+        'status' => null, 'notes' => null,
+    ];
+
+    /**
+     * Baris layanan pada nota, dengan bentuk yang dijamin.
+     *
+     * Snapshot lama belum menyimpan `index`; diisi di sini dari urutannya
+     * sendiri supaya tampilan tidak perlu tahu versi mana yang dibacanya.
+     *
+     * @return array<int,array{index:?int,name:?string,code:?string,quantity:mixed,status:?string,notes:?string}>
+     */
+    public function services(): array
+    {
+        $rows = $this->nevira_snapshot['services'] ?? [];
+
+        if (! is_array($rows)) {
+            return [];
+        }
+
+        return collect($rows)
+            ->filter(fn ($row) => is_array($row))
+            ->values()
+            ->map(function (array $row, int $i) {
+                $row = array_merge(self::BENTUK_LAYANAN, $row);
+                $row['index'] = is_numeric($row['index']) ? (int) $row['index'] : $i + 1;
+
+                return $row;
+            })
+            ->all();
+    }
+
+    /** Jumlah baris layanan pada nota; 0 kalau notanya tidak tertaut. */
+    public function serviceCount(): int
+    {
+        return count($this->services());
+    }
+
+    /** Nota ini berisi lebih dari satu baris layanan. */
+    public function hasMultipleServices(): bool
+    {
+        return $this->serviceCount() > 1;
+    }
+
+    /**
+     * Sebutan satu baris layanan, mis. "Sprei (King) — barang ke-3 dari 10".
+     *
+     * Kalau NEVIRA tidak memberi namanya, sebutannya jatuh ke nomor urut —
+     * "Barang ke-3 dari 10" — dan BUKAN ke kode barisnya. Nomor urut masih
+     * bisa dicocokkan orang dengan struk di tangannya; kode seperti "4471"
+     * tidak. (API-51)
+     */
+    public function serviceLabel(?int $index): ?string
+    {
+        if ($index === null) {
+            return null;
+        }
+
+        $total = $this->serviceCount();
+        $baris = collect($this->services())->firstWhere('index', $index);
+        $nama = $baris['name'] ?? null;
+        $urutan = 'barang ke-'.$index.($total > 0 ? ' dari '.$total : '');
+
+        return filled($nama) ? $nama.' — '.$urutan : ucfirst($urutan);
+    }
+
+    /** Sebutan barang yang dikeluhkan; null kalau keluhannya seluruh nota. */
+    public function complainedServiceLabel(): ?string
+    {
+        return $this->serviceLabel($this->nevira_service_index);
+    }
+
+    /**
+     * Jejak pengerjaan, dikelompokkan menurut baris layanan yang dikerjakan.
+     *
+     * Nota satu layanan — dan snapshot lama yang belum punya penanda —
+     * pulang sebagai SATU grup tanpa judul, jadi tampilannya persis seperti
+     * sebelum pengelompokan ada. Judul grup hanya muncul kalau memang ada
+     * yang perlu dibedakan. (API-51)
+     *
+     * @return array<int,array{index:?int,label:?string,items:array<int,array<string,mixed>>}>
+     */
+    public function orderHandlerGroups(): array
+    {
+        $handlers = $this->orderHandlers();
+
+        if ($handlers === []) {
+            return [];
+        }
+
+        if (! $this->hasMultipleServices()) {
+            return [['index' => null, 'label' => null, 'items' => $handlers]];
+        }
+
+        $grup = [];
+
+        foreach ($handlers as $handler) {
+            // Kunci string: yang tanpa penanda dikumpulkan terpisah, dan
+            // urutan angkanya tetap urutan baris pada nota.
+            $grup[(string) $handler['service_index']][] = $handler;
+        }
+
+        // Kunci numerik jadi int sendiri di PHP; yang tanpa penanda tetap
+        // string kosong, dan sengaja ditaruh paling atas — kasir penerima
+        // memang menerima seluruh nota, bukan salah satu barangnya.
+        uksort($grup, fn ($a, $b) => [$a !== '', (int) $a] <=> [$b !== '', (int) $b]);
+
+        return collect($grup)
+            ->map(fn (array $items, $key) => [
+                'index' => $key === '' ? null : (int) $key,
+                'label' => $key === '' ? null : $this->serviceLabel((int) $key),
+                'items' => $items,
+            ])
+            ->values()->all();
     }
 
     /** Kunci yang selalu ada di satu baris perjalanan kurir. */
@@ -700,5 +833,43 @@ class Complaint extends Model
 
         return 'https://wa.me/'.$angka
             .(filled($pesan) ? '?text='.rawurlencode($pesan) : '');
+    }
+
+    /**
+     * Complaint dari era sebelum NEVIRA dipakai. (API-28)
+     *
+     * DITURUNKAN dari tanggalnya, bukan disimpan sebagai kolom boolean, dan
+     * itu pilihan sadar: "sebelum NEVIRA" sepenuhnya ditentukan oleh
+     * `created_at` dibanding satu tanggal yang sudah lewat dan tidak akan
+     * berubah. Kolom boolean menambah sumber kebenaran kedua untuk fakta yang
+     * sama — dan begitu keduanya bisa berbeda, suatu hari mereka akan berbeda,
+     * tanpa ada yang tahu mana yang benar.
+     *
+     * Gunanya dua: laporan bisa memisahkan dua era saat perbandingannya tidak
+     * sepadan, dan siapa pun yang membuka complaint lama tahu kenapa tidak ada
+     * detail ordernya tanpa harus bertanya.
+     */
+    public function isPraNevira(): bool
+    {
+        return $this->created_at !== null
+            && $this->created_at->lt(self::awalNevira());
+    }
+
+    /** Tanggal NEVIRA mulai dipakai, sebagai Carbon. */
+    public static function awalNevira(): Carbon
+    {
+        return Carbon::parse((string) config('complaint.nevira_mulai'))->startOfDay();
+    }
+
+    /** Complaint dari era sebelum NEVIRA. */
+    public function scopePraNevira(Builder $query): Builder
+    {
+        return $query->where('created_at', '<', self::awalNevira());
+    }
+
+    /** Complaint sejak NEVIRA dipakai — yang bisa punya order untuk dirujuk. */
+    public function scopeSejakNevira(Builder $query): Builder
+    {
+        return $query->where('created_at', '>=', self::awalNevira());
     }
 }
