@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\LaporanFilterRequest;
 use App\Models\ComplaintResponsible;
+use App\Services\EksporCsv;
+use App\Services\EksporXlsx;
 use App\Services\GrafikLaporan;
+use App\Services\RekapEkspor;
 use App\Services\SaringanLaporan;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -98,66 +101,30 @@ class ReportController extends Controller
         ]);
     }
 
+    /**
+     * Rekap CSV. TETAP ADA dan tidak berubah bentuk oleh hadirnya `.xlsx`:
+     * ia yang dipakai alat lain, dan ia satu-satunya yang tidak menuntut
+     * pustaka apa pun. (API-62 nomor 4)
+     */
     public function export(LaporanFilterRequest $request): StreamedResponse
     {
+        return (new EksporCsv($this->rekap($request)))->unduh();
+    }
+
+    /**
+     * Rekap `.xlsx`. Kolomnya sama persis dengan CSV — keduanya berangkat
+     * dari RekapEkspor yang sama, termasuk aturan nomor nota dan kolom
+     * karyawan.
+     */
+    public function exportXlsx(LaporanFilterRequest $request): StreamedResponse
+    {
+        return (new EksporXlsx($this->rekap($request)))->unduh();
+    }
+
+    private function rekap(LaporanFilterRequest $request): RekapEkspor
+    {
         $saringan = SaringanLaporan::dariPermintaan($request);
-        $user = $saringan->user;
-        $complaints = $saringan->complaints(['outlet', 'assignee']);
 
-        $showStaff = $user->canSeeStaffAttribution();
-
-        // Semua pelaku satu complaint masuk ke satu baris CSV — rekap ini
-        // dibaca per complaint, bukan per orang.
-        $pelaku = $showStaff
-            ? ComplaintResponsible::whereIn('complaint_id', $complaints->modelKeys())->get()->groupBy('complaint_id')
-            : collect();
-
-        return response()->streamDownload(function () use ($complaints, $showStaff, $pelaku) {
-            $out = fopen('php://output', 'w');
-            fputcsv($out, [
-                'Nomor Tiket', 'Dibuat', 'Kanal', 'Outlet', 'Pelapor', 'Telepon',
-                // Nomor nota, bukan id internal NEVIRA. CSV rekap diteruskan
-                // lewat WhatsApp dan email; pengenal internal sistem lain
-                // tidak boleh ikut keluar. (API-8 T2)
-                'Nomor Nota', 'Kategori', 'Bobot', 'Layanan', 'Status', 'Alasan Penutupan', 'Tindak Lanjut',
-                'Penanggung Jawab', 'Selesai', 'Menit Penyelesaian', 'Kompensasi', 'Lewat SLA',
-                ...($showStaff ? ['Karyawan Penanggung Jawab', 'NIP', 'Peran', 'Alasan'] : []),
-            ]);
-
-            foreach ($complaints as $c) {
-                fputcsv($out, [
-                    $c->ticket_number,
-                    $c->created_at?->format('Y-m-d H:i'),
-                    $c->channelLabel(),
-                    $c->outlet?->name,
-                    $c->reporter_name,
-                    $c->reporter_phone,
-                    $c->nevira_transaction_number,
-                    $c->categoryLabel(),
-                    $c->bobotLabel(),
-                    $c->layananLabel(),
-                    $c->statusLabel(),
-                    $c->closeReasonLabel(),
-                    $c->tindakLanjutLabel(),
-                    $c->assignee?->name,
-                    $c->resolved_at?->format('Y-m-d H:i'),
-                    $c->resolutionMinutes(),
-                    $c->compensation_amount,
-                    $c->isOverdue() ? 'YA' : 'tidak',
-                    ...($showStaff ? [
-                        $pelaku->get($c->id, collect())->pluck('staff_name')->implode('; '),
-                        $pelaku->get($c->id, collect())->pluck('staff_nip')->implode('; '),
-                        $pelaku->get($c->id, collect())
-                            ->map(fn ($p) => $p->roleLabel().($p->stage ? ' ('.$p->stage.')' : ''))
-                            ->implode('; '),
-                        $pelaku->get($c->id, collect())
-                            ->map(fn ($p) => $p->staff_name.': '.$p->reason)
-                            ->implode(' | '),
-                    ] : []),
-                ]);
-            }
-
-            fclose($out);
-        }, 'complaint-'.now()->format('Ymd-His').'.csv', ['Content-Type' => 'text/csv']);
+        return new RekapEkspor($saringan->user, $saringan->complaints(['outlet', 'assignee']));
     }
 }
