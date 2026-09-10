@@ -27,6 +27,21 @@ class ComplaintController extends Controller
         private PenyelarasNevira $penyelaras,
     ) {}
 
+    /**
+     * Saringan papan kerja yang boleh datang dari query string.
+     *
+     * Semuanya SKALAR. `?category[]=x` mengirim array, dan array yang lolos ke
+     * `$request->string()` maupun ke `{{ }}` di Blade melempar — halaman
+     * tersibuk di sistem berbalas HTTP 500 pada tautan yang disunting tangan,
+     * bookmark yang rusak, atau crawler. Disaring sekali di satu tempat, bukan
+     * ditambal per pemakainya. (Tinjauan PR #14 nomor 1 dan 4)
+     *
+     * `channel` ikut di sini: controller memang menyaringnya, jadi ia harus
+     * ikut terbawa saat kotak Cari dipakai — kalau tidak, saringan kanal hilang
+     * diam-diam begitu ada tautan tembus yang menghasilkannya.
+     */
+    private const SARINGAN = ['status', 'category', 'bobot', 'channel', 'outlet_id', 'layanan'];
+
     /** Papan kerja: complaint terbuka, disaring per peran. */
     public function index(Request $request)
     {
@@ -36,6 +51,9 @@ class ComplaintController extends Controller
             ->visibleTo($user)
             ->with(['outlet', 'assignee']);
 
+        $saringan = $this->saringan($request);
+        $q = $this->skalar($request, 'q');
+
         // Pencarian eksplisit mencari di SELURUH data, termasuk tiket Close.
         // Sebelumnya scope open() tetap berlaku saat status tidak dipilih,
         // jadi mencari nomor tiket yang sudah ditutup selalu berbalas "tidak
@@ -43,10 +61,10 @@ class ComplaintController extends Controller
         // padahal ada. Mayoritas dari 545 baris impor berstatus Close, jadi
         // supervisor yang mencari kasus lama nyaris selalu mendapat nol.
         // (API-38 #1)
-        $mencari = $request->filled('q');
+        $mencari = $q !== null;
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->string('status'))->latest();
+        if (isset($saringan['status'])) {
+            $query->where('status', $saringan['status'])->latest();
         } elseif ($mencari) {
             $query->latest();
         } else {
@@ -57,14 +75,13 @@ class ComplaintController extends Controller
                 ->orderBy('due_resolution_at');
         }
 
-        foreach (['category', 'bobot', 'channel', 'outlet_id', 'layanan'] as $filter) {
-            if ($request->filled($filter)) {
-                $query->where($filter, $request->input($filter));
+        foreach ($saringan as $kolom => $nilai) {
+            if ($kolom !== 'status') {
+                $query->where($kolom, $nilai);
             }
         }
 
         if ($mencari) {
-            $q = $request->string('q');
             $query->where(function ($sub) use ($q) {
                 $sub->where('ticket_number', 'like', "%{$q}%")
                     ->orWhere('reporter_name', 'like', "%{$q}%")
@@ -85,7 +102,53 @@ class ComplaintController extends Controller
             // berubah — judul halaman menyebut sesuatu yang tidak sesuai
             // dengan baris yang benar-benar diambil. (Tinjauan PR #12)
             'mencari' => $mencari,
+            // View membaca DARI SINI, tidak memanggil request() lagi: nilai
+            // yang sudah disaring di satu tempat tidak boleh diambil ulang
+            // mentah-mentah di tempat kedua.
+            'saringan' => $saringan,
+            'q' => $q,
         ]);
+    }
+
+    /**
+     * Saringan yang benar-benar terpakai, sudah dipastikan skalar dan terisi.
+     *
+     * @return array<string,string>
+     */
+    private function saringan(Request $request): array
+    {
+        $terpakai = [];
+
+        foreach (self::SARINGAN as $kunci) {
+            $nilai = $this->skalar($request, $kunci);
+
+            if ($nilai !== null) {
+                $terpakai[$kunci] = $nilai;
+            }
+        }
+
+        return $terpakai;
+    }
+
+    /**
+     * Nilai skalar yang terisi, atau null.
+     *
+     * Array dianggap TIDAK ADA, bukan digabung jadi teks: `?category[]=a&category[]=b`
+     * bukan permintaan yang punya arti di halaman ini, dan menebak artinya
+     * lebih buruk daripada mengabaikannya. Halamannya tetap 200 dan tetap
+     * menampilkan papan kerja apa adanya.
+     */
+    private function skalar(Request $request, string $kunci): ?string
+    {
+        $nilai = $request->input($kunci);
+
+        if (! is_scalar($nilai)) {
+            return null;
+        }
+
+        $nilai = trim((string) $nilai);
+
+        return $nilai === '' ? null : $nilai;
     }
 
     public function create()

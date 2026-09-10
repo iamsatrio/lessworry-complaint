@@ -52,6 +52,17 @@ class TautanWhatsappTest extends TestCase
             'tanpa nol depan' => ['81234567890', 'https://wa.me/6281234567890'],
             'sudah 62' => ['6281234567890', 'https://wa.me/6281234567890'],
             'pakai plus dan spasi' => ['+62 812-3456-7890', 'https://wa.me/6281234567890'],
+            // Bentuk +62 yang ditulis dengan awalan panggilan internasional.
+            // Sebelumnya 00 dibiarkan, lalu aturan "diawali 0 → 62" mengubahnya
+            // jadi 62062812345678 — lolos, dan pesannya sampai ke orang lain.
+            'awalan internasional 00' => ['0062812345678', 'https://wa.me/62812345678'],
+            'awalan internasional 00 dengan plus' => ['+0062 812-3456-7890', 'https://wa.me/6281234567890'],
+            // Telepon rumah Jakarta. Nomornya sah, tapi bukan nomor WhatsApp.
+            'telepon rumah' => ['0211234567', null],
+            'telepon rumah Surabaya' => ['0311234567', null],
+            // Diawali 62 tapi bukan seluler: yang dituntut 628, bukan 62.
+            'bukan seluler tapi diawali 62' => ['620000000000', null],
+            'bukan seluler, panjang maksimum' => ['6200000000000', null],
             'terlalu pendek' => ['0812', null],
             'bukan angka' => ['tidak tahu', null],
             'kosong' => ['', null],

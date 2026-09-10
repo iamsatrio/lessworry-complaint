@@ -60,6 +60,56 @@ class KotakCariTest extends TestCase
         );
     }
 
+    /**
+     * Saringan yang datang sebagai array tidak boleh menjatuhkan halamannya.
+     *
+     * `?category[]=x` mengirim array. Array yang lolos ke `{{ }}` di Blade
+     * membuat htmlspecialchars() melempar, dan halaman tersibuk di sistem
+     * berbalas HTTP 500 tanpa jalan kembali — cukup tautan yang disunting
+     * tangan, bookmark yang rusak, atau crawler. Yang benar: parameter itu
+     * dianggap tidak ada, halamannya tetap 200. (Tinjauan PR #14 nomor 1)
+     *
+     * `status[]` dan `q[]` ikut di sini meski rusaknya sudah ada sebelum
+     * PR ini — sekali disaring di satu tempat, ketujuhnya tertutup.
+     */
+    public function test_saringan_berbentuk_array_tidak_menjatuhkan_halaman(): void
+    {
+        foreach ([
+            '?category[]=x',
+            '?bobot[]=x',
+            '?layanan[]=x',
+            '?outlet_id[]=1',
+            '?channel[]=x',
+            '?status[]=close',
+            '?q[]=LW',
+            '?q=LW&category[]=x',
+            '?category[]=a&category[]=b',
+        ] as $url) {
+            $this->papanKerja($url);
+        }
+    }
+
+    /** Array diabaikan, bukan ditebak artinya — papan kerjanya apa adanya. */
+    public function test_saringan_array_diabaikan_bukan_ditebak(): void
+    {
+        $html = $this->papanKerja('?category[]=kurang_bersih');
+
+        $this->assertStringContainsString('complaint terbuka', $html);
+        $this->assertDoesNotMatchRegularExpression(
+            '/<details class="filters"[^>]*\bopen\b/',
+            $html,
+            'Parameter array tidak boleh terbaca sebagai saringan aktif.'
+        );
+    }
+
+    /** Kanal disaring controller, jadi ia harus ikut terbawa. (Tinjauan PR #14 nomor 4) */
+    public function test_saringan_kanal_ikut_terbawa(): void
+    {
+        $html = $this->papanKerja('?channel=wa_cc');
+
+        $this->assertStringContainsString('<input type="hidden" name="channel" value="wa_cc">', $html);
+    }
+
     public function test_saringan_aktif_ikut_terbawa_saat_menekan_cari(): void
     {
         $this->assertStringContainsString(
