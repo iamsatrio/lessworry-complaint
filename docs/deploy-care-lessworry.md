@@ -110,6 +110,19 @@ SESSION_EXPIRE_ON_CLOSE=true
 SESSION_ENCRYPT=true
 SESSION_SECURE_COOKIE=true
 
+# Surat — WAJIB terisi sebelum akun dibagikan ke tim.
+# MAIL_MAILER=log menulis surat ke storage/logs/laravel.log dan tidak
+# mengirimkannya ke mana pun. Di produksi itu berarti SETIAP akun terkunci di
+# login pertama, karena verifikasi email berdiri sebelum ganti password.
+MAIL_MAILER=smtp
+MAIL_HOST=
+MAIL_PORT=587
+MAIL_USERNAME=
+MAIL_PASSWORD=
+MAIL_SCHEME=tls
+MAIL_FROM_ADDRESS=care@lessworry.id
+MAIL_FROM_NAME="Less Worry Complaint"
+
 # NEVIRA — pakai service account, bukan akun pribadi
 NEVIRA_API_BASE=https://api.nevira.id/api
 NEVIRA_LOGIN_ENDPOINT=/admin/login
@@ -151,7 +164,60 @@ $u->save();
 exit
 ```
 
-Sisanya dibuat lewat halaman **Pengguna** setelah kamu masuk.
+### Buktikan surat benar-benar sampai — sebelum akun dibagikan
+
+**Jangan lewati langkah ini, dan jangan menukar urutannya.** Verifikasi email
+berdiri di depan gerbang ganti password: kalau surat tidak benar-benar
+terkirim, setiap akun yang kamu buat terkunci di login pertama — semuanya
+sekaligus. Membagikan password sementara lebih dulu berarti seluruh tim
+memegang password untuk akun yang tidak bisa mereka buka, dan satu-satunya
+jalan keluarnya menuntut akses shell ke server ini.
+
+Pertama, pastikan mailernya memang mengirim. Nginx belum tentu hidup di titik
+ini, jadi dibaca langsung dari aplikasinya:
+
+```bash
+cd /var/www/care
+php artisan tinker --execute="echo config('mail.default');"    # harus 'smtp'
+```
+
+Kalau yang keluar `log` atau `array`, surat tidak dikirim ke mana pun. Perbaiki
+`.env`, jalankan `php artisan config:cache`, lalu ulangi.
+
+`smtp` yang tertulis benar **belum** berarti SMTP-nya bisa dihubungi — itu yang
+dibuktikan langkah berikutnya, dan itu sebabnya langkah ini tidak cukup sendiri.
+
+Lalu kirim satu verifikasi sungguhan ke satu alamat dan tunggu suratnya sampai:
+
+```bash
+php artisan tinker
+```
+
+```php
+$u = App\Models\User::where('email', 'satrio@lessworry.id')->firstOrFail();
+app(App\Services\PengirimVerifikasiEmail::class)->kirim($u, 'permintaan');
+exit
+```
+
+Balasannya harus `"terkirim"`. Hasilnya juga tercatat untuk `/health`: setiap
+pengiriman yang gagal membuat `"mail"` jadi `"error"`, dan pengiriman berikutnya
+yang berhasil menghapus penandanya kembali.
+
+Lalu **buka kotak surat alamat itu dan pastikan
+suratnya benar-benar ada** — `"terkirim"` hanya berarti server SMTP menerimanya,
+belum berarti surat itu lolos dari filter spam. Kalau tidak sampai dalam lima
+menit, cek folder spam, lalu:
+
+```bash
+tail -n 50 storage/logs/laravel.log | grep -i 'Gagal mengirim email verifikasi'
+```
+
+Baru setelah surat itu terbukti sampai, lanjutkan membuat akun tim.
+
+### Buat akun tim dan bagikan password sementaranya
+
+Sisanya dibuat lewat halaman **Pengguna** setelah kamu masuk. Setiap akun baru
+dapat password sementara dan wajib menggantinya saat pertama masuk.
 
 ### Petakan outlet ke NEVIRA
 
@@ -247,7 +313,7 @@ Ulangi tiga perintah ini **setiap kali `.env` atau config berubah** — kalau ti
 ```bash
 curl -I https://care.lessworry.id/login          # harus 200, dan header HTTPS
 curl -I https://care.lessworry.id/storage/       # harus 403 atau 404, TIDAK boleh listing
-curl -s https://care.lessworry.id/health         # ketiga pemeriksaan harus "ok"
+curl -s https://care.lessworry.id/health         # keempat pemeriksaan harus "ok"
 ```
 
 Lalu lewat browser: masuk sebagai supervisor → sistem memaksa ganti password → buat satu akun kasir → catat satu complaint uji → cek nomor nota NEVIRA tertarik.
@@ -410,9 +476,35 @@ objek storage), lalu **uji `backup:verify` dari salinan itu** minimal sekali.
 curl -s -o /dev/null -w '%{http_code}\n' https://care.lessworry.id/health
 ```
 
-- `200` — database, NEVIRA, dan penyimpanan lampiran ketiganya hidup.
+- `200` — database, NEVIRA, penyimpanan lampiran, dan pengiriman surat
+  keempatnya hidup.
 - `503` — ada yang tidak. Isi jawabannya menyebut yang mana:
-  `{"status":"error","checks":{"database":"ok","nevira":"error","storage":"ok"}}`
+  `{"status":"error","checks":{"database":"ok","nevira":"error","storage":"ok","mail":"ok"}}`
+
+Pemeriksaan `mail` membaca **hasil pengiriman terakhir**, bukan isi `.env`:
+
+| nilai | artinya | HTTP |
+|---|---|---|
+| `ok` | tidak ada kegagalan kirim yang tercatat | 200 |
+| `error` | pengiriman terakhir gagal, **atau** `MAIL_MAILER` masih `log`/`array` di `APP_ENV=production` | 503 |
+| `unknown` | penandanya sendiri tidak terbaca — keadaan surat tidak diketahui | 200 |
+| `disabled` | mailer hanya mencatat, dan ini bukan produksi | 200 |
+
+`error` di produksi berarti tidak ada surat verifikasi yang benar-benar
+terkirim, dan itu mengunci **seluruh** tim di login pertama tanpa satu pun
+pesan galat yang terlihat dari layar — karena itu ia dilaporkan di sini,
+sebelum ada yang mencoba masuk.
+
+Dua hal yang perlu diketahui tentang cara kerjanya:
+
+- **`/health` tidak menghubungi SMTP sendiri.** Kalau ia melakukannya, tiap
+  ketukan pemantau jadi satu koneksi keluar. Yang dibacanya penanda hasil kirim
+  yang sebenarnya.
+- **Penandanya kedaluwarsa 24 jam.** Bukan supaya papannya cepat hijau lagi:
+  selama SMTP benar-benar mati, tiap percobaan login memperbarui penandanya,
+  jadi papannya tetap merah. Yang dihindari adalah satu kegagalan sesaat
+  berbulan-bulan lalu mengunci papan pada sistem yang sejak itu tidak pernah
+  mengirim apa pun.
 
 Endpoint ini sengaja tidak menyebut versi, nama host, maupun pesan galat —
 terbuka tanpa autentikasi, jadi tidak boleh berguna bagi penyerang. Hasil

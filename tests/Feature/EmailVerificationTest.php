@@ -7,7 +7,10 @@ use App\Models\User;
 use App\Models\UserAudit;
 use App\Services\PengirimVerifikasiEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\TestCase;
 
 /**
@@ -422,5 +425,254 @@ class EmailVerificationTest extends TestCase
                 && str_contains($isi, 'tidak merasa meminta')
                 && str_contains($isi, '60 menit');
         });
+    }
+
+    /* ---------- 11. Halaman tidak mengaku mengirim yang tidak dikirim (API-47) ---------- */
+
+    /**
+     * `log` dan `array` menerima surat lalu tidak mengantarkannya ke mana pun.
+     * Halaman yang tetap bilang "dikirim" membuat orang menunggu surat yang
+     * tidak akan pernah datang, lalu mencari kesalahan di tempat yang salah.
+     */
+    public function test_mailer_log_halaman_menyatakan_surat_tidak_dikirim_dan_menyebut_berkas_lognya(): void
+    {
+        config(['mail.default' => 'log']);
+        $user = $this->pengguna();
+
+        $halaman = $this->actingAs($user)->get('/verifikasi-email');
+
+        $halaman->assertOk();
+        $halaman->assertSee('Surat tidak dikirim ke mana pun');
+        $halaman->assertSee('storage/logs/laravel.log');
+
+        // Dan TIDAK berpura-pura mengirim.
+        $halaman->assertDontSee('Tautan verifikasi dikirim ke');
+    }
+
+    public function test_mailer_array_diperlakukan_sama_dengan_log(): void
+    {
+        config(['mail.default' => 'array']);
+        $user = $this->pengguna();
+
+        $this->actingAs($user)->get('/verifikasi-email')
+            ->assertOk()
+            ->assertSee('Surat tidak dikirim ke mana pun');
+    }
+
+    /**
+     * Menampilkan tautannya di layar akan menghapus gerbangnya begitu polanya
+     * tersalin ke produksi. Halamannya menyebut DI MANA tautannya bisa dicari,
+     * bukan tautannya sendiri.
+     */
+    public function test_tautan_verifikasi_tidak_pernah_ditampilkan_di_halaman(): void
+    {
+        config(['mail.default' => 'log']);
+        $user = $this->pengguna();
+
+        $isi = $this->actingAs($user)->get('/verifikasi-email')->getContent();
+
+        $this->assertStringNotContainsString('signature=', $isi);
+        $this->assertStringNotContainsString(sha1($user->email), $isi);
+        $this->assertStringNotContainsString('/verifikasi-email/'.$user->id.'/', $isi);
+    }
+
+    /** Pesan kirim ulang pun tidak boleh mengulang kebohongan yang sama. */
+    public function test_kirim_ulang_dengan_mailer_log_tidak_mengaku_mengirim(): void
+    {
+        config(['mail.default' => 'log']);
+        $user = $this->pengguna();
+
+        $this->actingAs($user)->from('/verifikasi-email')->post('/verifikasi-email/kirim-ulang')
+            ->assertRedirect('/verifikasi-email');
+
+        $pesan = session('status');
+
+        $this->assertStringContainsString('storage/logs/laravel.log', $pesan);
+        $this->assertStringNotContainsString('dikirim ulang ke', $pesan);
+    }
+
+    /** Kriteria 3: kalau suratnya benar-benar terkirim, kalimatnya tidak berubah. */
+    public function test_surat_yang_benar_benar_terkirim_kalimatnya_tidak_berubah(): void
+    {
+        config(['mail.default' => 'smtp']);
+        Mail::fake();
+        $user = $this->pengguna();
+
+        $halaman = $this->actingAs($user)->get('/verifikasi-email');
+
+        $halaman->assertOk();
+        $halaman->assertSee('Tautan verifikasi dikirim ke');
+        $halaman->assertDontSee('Surat tidak dikirim ke mana pun');
+        $halaman->assertDontSee('storage/logs/laravel.log');
+
+        $this->from('/verifikasi-email')->post('/verifikasi-email/kirim-ulang');
+
+        $this->assertStringContainsString('dikirim ulang ke', (string) session('status'));
+    }
+
+    /**
+     * Kegagalan kirim yang sesungguhnya masuk log server dengan tingkat
+     * `error` — di situlah pesan SMTP mentahnya boleh ada, dan hanya di situ.
+     */
+    public function test_kegagalan_kirim_dicatat_sebagai_error_bukan_hanya_ditampilkan(): void
+    {
+        config(['mail.default' => 'mailer-yang-tidak-ada']);
+        Log::spy();
+        $user = $this->pengguna();
+
+        $this->actingAs($user)->post('/verifikasi-email/kirim-ulang');
+
+        Log::shouldHaveReceived('error')
+            ->withArgs(fn (string $pesan, array $konteks = []) => str_contains($pesan, 'Gagal mengirim email verifikasi')
+                && ($konteks['user_id'] ?? null) === $user->id)
+            ->once();
+    }
+
+    /**
+     * Kriteria 2 dengan bentuk kegagalan yang sesungguhnya: transport SMTP
+     * yang melempar. Pesan mentahnya memuat nama host DAN nama pengguna —
+     * persis yang tidak boleh sampai ke layar siapa pun.
+     */
+    public function test_smtp_yang_menolak_tidak_membocorkan_host_atau_pengguna_ke_layar(): void
+    {
+        $mentah = 'Connection to "smtp.rahasia-lessworry.id:587" failed: '
+            .'authentication failed for user "surat@lessworry.id"';
+
+        config(['mail.default' => 'smtp']);
+        Mail::shouldReceive('to')->andThrow(new TransportException($mentah));
+        Log::spy();
+
+        $user = $this->pengguna();
+
+        $response = $this->actingAs($user)->from('/verifikasi-email')
+            ->post('/verifikasi-email/kirim-ulang');
+
+        $response->assertRedirect('/verifikasi-email');
+        $response->assertSessionHasErrors('kirim');
+
+        $pesan = implode(' ', session('errors')->get('kirim'));
+
+        $this->assertStringContainsString('Surat gagal dikirim', $pesan);
+        $this->assertStringContainsString('hubungi Admin', $pesan);
+
+        foreach (['smtp.rahasia-lessworry.id', 'surat@lessworry.id', 'authentication failed', '587'] as $rahasia) {
+            $this->assertStringNotContainsString($rahasia, $pesan, 'Bocor ke layar: '.$rahasia);
+        }
+
+        // Yang mentah itu boleh ada di satu tempat saja: log server.
+        Log::shouldHaveReceived('error')
+            ->withArgs(fn (string $p, array $k = []) => str_contains($p, 'Gagal mengirim email verifikasi')
+                && str_contains((string) ($k['error'] ?? ''), 'smtp.rahasia-lessworry.id'))
+            ->once();
+    }
+
+    /** Halaman yang menyusul setelah login gagal-kirim ikut mengatakannya. */
+    public function test_halaman_verifikasi_menampilkan_kegagalan_kirim_dari_login(): void
+    {
+        config(['mail.default' => 'smtp']);
+        $user = $this->pengguna();
+
+        $halaman = $this->actingAs($user)
+            ->withSession(['kirim_gagal' => true])
+            ->get('/verifikasi-email');
+
+        $halaman->assertOk();
+        $halaman->assertSee('Surat gagal dikirim');
+    }
+
+    /* ---------- 7. SMTP terpasang tapi gagal: halamannya tidak boleh mengaku ---------- */
+
+    /**
+     * Jalur yang benar-benar terjadi di produksi.
+     *
+     * mail.default = smtp, tapi pengirimannya gagal. Sebelum perbaikan ini
+     * viewnya bercabang pada `hanyaMencatat()` — yaitu konfigurasi mailer —
+     * jadi cabang @else tetap berjalan dan mencetak "Tautan verifikasi dikirim
+     * ke …" di layar yang sama dengan spanduk "Surat gagal dikirim". Dua
+     * kalimat yang saling membantah, berjarak satu paragraf; orang membaca
+     * yang menyebut alamat emailnya sendiri lalu menunggu surat yang tidak
+     * akan datang. (Tinjauan PR #17 nomor 1)
+     */
+    public function test_smtp_gagal_saat_login_tidak_mengaku_sudah_mengirim(): void
+    {
+        config(['mail.default' => 'smtp']);
+        Mail::shouldReceive('to')->andThrow(new TransportException('smtp mati'));
+
+        $user = $this->pengguna();
+
+        $halaman = $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'rahasia123',
+        ])->assertRedirect();
+
+        $halaman = $this->followRedirects($halaman)->assertOk();
+
+        $halaman->assertSee('Suratnya tidak jadi terkirim');
+        $halaman->assertDontSee('Tautan verifikasi dikirim ke');
+        // Kalimat yang menyuruh menunggu juga tidak boleh ada.
+        $halaman->assertDontSee('hanya bisa dipakai sekali');
+    }
+
+    public function test_kirim_ulang_yang_gagal_tidak_mengaku_sudah_mengirim(): void
+    {
+        config(['mail.default' => 'smtp']);
+        Mail::shouldReceive('to')->andThrow(new TransportException('smtp mati'));
+
+        $user = $this->pengguna();
+
+        $halaman = $this->actingAs($user)->from('/verifikasi-email')
+            ->post('/verifikasi-email/kirim-ulang');
+
+        $halaman = $this->followRedirects($halaman)->assertOk();
+
+        $halaman->assertSee('Suratnya tidak jadi terkirim');
+        $halaman->assertDontSee('Tautan verifikasi dikirim ke');
+    }
+
+    /** Yang berhasil tetap mengatakan apa adanya. */
+    public function test_kirim_yang_berhasil_tetap_menyebut_tautannya_dikirim(): void
+    {
+        config(['mail.default' => 'smtp']);
+        Mail::fake();
+
+        $user = $this->pengguna();
+
+        $this->actingAs($user)->get('/verifikasi-email')
+            ->assertOk()
+            ->assertSee('Tautan verifikasi dikirim ke')
+            ->assertDontSee('Suratnya tidak jadi terkirim');
+    }
+
+    /* ---------- 8. /health tahu mailernya mati ---------- */
+
+    /**
+     * Sebelum ini /health membalas `mail: ok` begitu mailernya bukan log/array,
+     * tanpa pernah tahu apakah mailer itu bisa dihubungi — jadi produksi dengan
+     * SMTP terpasang tapi mati mengunci setiap akun di login pertama sementara
+     * pemantauannya tetap hijau 200. (Tinjauan PR #17 nomor 2)
+     */
+    public function test_health_merah_setelah_pengiriman_gagal(): void
+    {
+        config(['mail.default' => 'smtp']);
+        Mail::shouldReceive('to')->andThrow(new TransportException('smtp mati'));
+
+        $this->app->make(PengirimVerifikasiEmail::class)->kirim($this->pengguna(), 'login');
+
+        $this->getJson('/health')
+            ->assertStatus(503)
+            ->assertJsonPath('checks.mail', 'error')
+            ->assertJsonPath('status', 'error');
+    }
+
+    /** Satu pengiriman berhasil membuktikan mailernya hidup dan menghapus penandanya. */
+    public function test_pengiriman_berhasil_menghijaukan_health_lagi(): void
+    {
+        config(['mail.default' => 'smtp']);
+        Cache::put(PengirimVerifikasiEmail::CACHE_GAGAL, true, 60);
+
+        Mail::fake();
+        $this->app->make(PengirimVerifikasiEmail::class)->kirim($this->pengguna(), 'login');
+
+        $this->getJson('/health')->assertJsonPath('checks.mail', 'ok');
     }
 }
