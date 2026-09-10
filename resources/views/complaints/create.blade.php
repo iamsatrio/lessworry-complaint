@@ -89,12 +89,29 @@
 <div class="card">
     <div class="eyebrow">Siapa yang melapor</div>
     <div class="row">
+      @php $kanal = $nilai('channel', auth()->user()->defaultChannel()); @endphp
       <div><label for="ch">Masuk lewat <span class="req">*</span></label>
         <select id="ch" name="channel" required>
+          {{-- Kanal ada tiga, peran hanya dua: WA Outlet diterima kasir juga.
+               Jadi yang disimpulkan dari peran adalah NILAI BAWAANNYA, bukan
+               kanalnya — kolomnya tetap tampil, ketiga opsinya tetap bisa
+               dipilih, dan pilihan manual menimpa bawaan.
+
+               Untuk peran yang bawaannya memang tidak ada (supervisor, admin)
+               opsi kosong tetap dipasang. Tanpa itu opsi pertama — Direct
+               Kasir — terpilih diam-diam, persis kesalahan yang sedang
+               diperbaiki. Yang tidak dilakukan adalah memaksa memilih pada
+               peran yang bawaannya sudah benar. (API-38 #4) --}}
+          @if(blank(auth()->user()->defaultChannel()))
+            <option value="" disabled @selected(blank($kanal))>— pilih kanal —</option>
+          @endif
           @foreach(config('complaint.channels') as $k=>$v)
-            <option value="{{ $k }}" @selected($nilai('channel')===$k)>{{ $v }}</option>
+            <option value="{{ $k }}" @selected($kanal===$k)>{{ $v }}</option>
           @endforeach
         </select>
+        @if(filled(auth()->user()->defaultChannel()) && blank($nilai('channel')))
+          <p class="hint">Terisi dari peranmu. Ganti kalau keluhan ini sebenarnya masuk lewat kanal lain.</p>
+        @endif
       </div>
       @if(!auth()->user()->isKasir())
       <div><label for="out">Outlet</label>
@@ -117,6 +134,29 @@
     </div>
     <div id="nvbox" class="panel" style="display:none"></div>
     <p class="hint">Isi ini lebih dulu — nama dan telepon pelapor akan terisi sendiri dari data pelanggan pada nota.</p>
+
+    {{-- Barang yang dikeluhkan. Kosong dan tersembunyi sampai notanya
+         diperiksa DAN ternyata berisi lebih dari satu baris layanan: nota
+         satu layanan tidak menambah satu langkah pun bagi kasir yang sedang
+         melayani antrean. (API-51)
+
+         Yang dirender server hanya pilihan yang sudah terpilih sebelumnya —
+         supaya simpan yang gagal tidak menghapus barang yang sudah dipilih.
+         Daftar penuhnya disusun skrip dari jawaban pemeriksaan nota. --}}
+    @php $barangDipilih = $nilai('nevira_service_index'); @endphp
+    <div id="barang-blok" @style(['display:none' => blank($barangDipilih)])>
+      <label for="barang">Keluhannya tentang barang yang mana</label>
+      <select id="barang" name="nevira_service_index">
+        <option value="">Seluruh nota</option>
+        @if(filled($barangDipilih))
+          <option value="{{ $barangDipilih }}" selected>Barang ke-{{ $barangDipilih }}</option>
+        @endif
+      </select>
+      <p class="hint">
+        Bawaannya seluruh nota — tidak perlu diubah kalau sedang buru-buru. Kalau barangnya sudah
+        jelas, memilihnya membuat penelusuran pelaku nanti mendahulukan yang mengerjakan barang itu.
+      </p>
+    </div>
 
     <label for="exempt">Kalau tidak ada notanya, pilih alasannya</label>
     <select id="exempt" name="nota_exemption">
@@ -165,6 +205,9 @@ const btn    = el('cek');
 const box    = el('nvbox');
 const nm     = el('rn');
 const tp     = el('rp');
+const lay    = el('lay');
+const barang = el('barang');
+const barangBlok = el('barang-blok');
 const out    = el('out');
 const outHint= el('out-hint');
 const pakai  = el('pakai');
@@ -247,7 +290,12 @@ if (form) {
 /* ---------- Nota dan alasan tidak boleh terisi dua-duanya ---------- */
 if (exempt) {
   exempt.addEventListener('change', function(){
-    if (this.value && nvInput) { nvInput.value = ''; if (box) box.style.display = 'none'; }
+    if (this.value && nvInput) {
+      nvInput.value = '';
+      if (box) box.style.display = 'none';
+      // Tanpa nota tidak ada barang yang bisa ditunjuk.
+      isiBarang([]);
+    }
   });
 }
 
@@ -309,6 +357,7 @@ async function cekNota(){
       if (nm && pelangganNota.nama && !nm.value) nm.value = pelangganNota.nama;
       if (tp && pelangganNota.telp && !tp.value) tp.value = pelangganNota.telp;
       tawarkanPakai();
+      isiBarang(d.services);
 
       let umur = '';
       if (d.created_at) {
@@ -333,6 +382,59 @@ async function cekNota(){
     if (btn) { btn.disabled = false; btn.textContent = 'Cek'; }
   }
 }
+
+/* ---------- Barang yang dikeluhkan ---------- */
+// Satu nota bisa berisi sepuluh sprei, masing-masing dengan rantai
+// pengerjaannya sendiri. Keluhan pelanggan hampir selalu tentang satu
+// barang, jadi complaint boleh menunjuk barisnya — tapi pilihannya hanya
+// muncul kalau memang ada yang perlu dipilih. (API-51)
+let barisLayanan = [];
+
+function pakaiLayanan(kunci, timpa){
+  if (!lay || !kunci) return;
+  if (!timpa && lay.value) return;
+  if ([...lay.options].some(o => o.value === kunci)) lay.value = kunci;
+}
+
+function isiBarang(services){
+  barisLayanan = Array.isArray(services) ? services : [];
+  if (!barang || !barangBlok) return;
+
+  const sebelum = barang.value;
+
+  // Nama barang datang dari NEVIRA: dipasang lewat new Option, bukan
+  // innerHTML, supaya isinya tidak pernah dibaca sebagai markup.
+  barang.innerHTML = '';
+  barang.add(new Option('Seluruh nota', ''));
+
+  if (barisLayanan.length < 2) {
+    // Tidak ada yang perlu dipilih. Pilihan berisi satu jawaban tetap satu
+    // hal lagi yang harus dibaca kasir, jadi blok ini tidak ditampilkan.
+    barangBlok.style.display = 'none';
+    barang.value = '';
+    if (barisLayanan.length === 1) pakaiLayanan(barisLayanan[0].layanan, false);
+    return;
+  }
+
+  // Sebutannya disusun server: nama layanan NEVIRA belum dipastikan ada, dan
+  // yang tampil kalau namanya tidak ada tetap harus bisa dicocokkan dengan
+  // struk — nomor urut dan jumlahnya, bukan kode mentah. (API-51)
+  barisLayanan.forEach(s => barang.add(
+    new Option(s.label || ('Barang ke-' + s.index), String(s.index))
+  ));
+
+  // Bawaannya seluruh nota; pilihan sebelumnya dipertahankan kalau notanya
+  // memang masih punya barisnya.
+  barang.value = [...barang.options].some(o => o.value === sebelum) ? sebelum : '';
+  barangBlok.style.display = 'block';
+}
+
+if (barang) barang.addEventListener('change', function(){
+  const baris = barisLayanan.find(s => String(s.index) === this.value);
+  // Dipilih sendiri oleh petugas: kolom layanan boleh ditimpa, dan tetap
+  // bisa disunting lagi setelahnya.
+  if (baris) pakaiLayanan(baris.layanan, true);
+});
 
 function tawarkanPakai(){
   if (!pakai || !pelangganNota) return;

@@ -36,8 +36,19 @@ class ComplaintController extends Controller
             ->visibleTo($user)
             ->with(['outlet', 'assignee']);
 
+        // Pencarian eksplisit mencari di SELURUH data, termasuk tiket Close.
+        // Sebelumnya scope open() tetap berlaku saat status tidak dipilih,
+        // jadi mencari nomor tiket yang sudah ditutup selalu berbalas "tidak
+        // ada complaint yang cocok" — halaman menyatakan tiketnya tidak ada
+        // padahal ada. Mayoritas dari 545 baris impor berstatus Close, jadi
+        // supervisor yang mencari kasus lama nyaris selalu mendapat nol.
+        // (API-38 #1)
+        $mencari = $request->filled('q');
+
         if ($request->filled('status')) {
             $query->where('status', $request->string('status'))->latest();
+        } elseif ($mencari) {
+            $query->latest();
         } else {
             // Papan kerja diurut menurut tenggat: yang paling mepet tampil dulu.
             // Complaint tanpa tenggat jatuh ke bawah, bukan ke atas.
@@ -52,7 +63,7 @@ class ComplaintController extends Controller
             }
         }
 
-        if ($request->filled('q')) {
+        if ($mencari) {
             $q = $request->string('q');
             $query->where(function ($sub) use ($q) {
                 $sub->where('ticket_number', 'like', "%{$q}%")
@@ -68,6 +79,12 @@ class ComplaintController extends Controller
         return view('complaints.index', [
             'complaints' => $query->paginate(20)->withQueryString(),
             'outlets' => Outlet::orderBy('name')->get(),
+            // Dikirim dari sini, tidak dihitung ulang di view: yang memutuskan
+            // "ini pencarian" adalah query yang dibangun di atas. Dua tempat
+            // yang menghitungnya sendiri akan berpisah begitu aturannya
+            // berubah — judul halaman menyebut sesuatu yang tidak sesuai
+            // dengan baris yang benar-benar diambil. (Tinjauan PR #12)
+            'mencari' => $mencari,
         ]);
     }
 
@@ -120,6 +137,11 @@ class ComplaintController extends Controller
         // Nota terisi berarti tidak ada pengecualian yang berlaku.
         if (filled($data['nevira_transaction_number'] ?? null)) {
             $data['nota_exemption'] = null;
+        } else {
+            // Tanpa nota tidak ada baris layanan yang bisa ditunjuk. Nomor
+            // yang tertinggal di form akan menunjuk barang di nota yang
+            // tidak pernah tertaut. (API-51)
+            $data['nevira_service_index'] = null;
         }
 
         // Kasir hanya boleh mencatat untuk outletnya sendiri.

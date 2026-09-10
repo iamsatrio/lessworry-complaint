@@ -53,6 +53,7 @@ class PenyelarasNevira
 
             $this->isiPelapor($complaint, $summary);
             $this->isiOutlet($complaint, $summary);
+            $this->buangBarangYangTidakAda($complaint);
         } catch (NeviraAccessDenied) {
             // abort() di dalam service memang tidak lazim, tapi ini menjaga
             // perilaku yang sudah diuji: peran yang tidak berhak menerima
@@ -63,6 +64,25 @@ class PenyelarasNevira
                 'nevira_sync_error' => mb_substr($e->userMessage(), 0, 190),
             ])->save();
         }
+    }
+
+    /**
+     * Lepaskan penunjukan barang yang notanya tidak punya barisnya.
+     *
+     * Nomor urut baris dipilih saat intake, dari nota yang dilihat kasir
+     * saat itu. Kalau notanya berubah — atau barisnya dihapus di NEVIRA —
+     * nomor yang tertinggal menunjuk barang yang tidak ada, dan halaman
+     * complaint menyebut "barang ke-7 dari 3". (API-51)
+     */
+    private function buangBarangYangTidakAda(Complaint $complaint): void
+    {
+        $index = $complaint->nevira_service_index;
+
+        if ($index === null || $index <= $complaint->serviceCount()) {
+            return;
+        }
+
+        $complaint->forceFill(['nevira_service_index' => null])->save();
     }
 
     /**

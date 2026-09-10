@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exceptions\NeviraAccessDenied;
 use App\Exceptions\NeviraException;
 use App\Models\Outlet;
+use App\Services\LayananNota;
 use App\Services\NeviraGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -72,6 +73,52 @@ class NeviraLookupController extends Controller
         return Outlet::where('nevira_outlet_id', (string) $idNevira)->value('id');
     }
 
+    /**
+     * Baris layanan nota, seperlunya saja: nomor urut, sebutannya, dan
+     * tebakan kolom `layanan` yang dipakai mengisi form.
+     *
+     * Sebutannya disusun SERVER, bukan browser. Nama layanan yang terbaca
+     * manusia belum dipastikan ada di respons NEVIRA — dokumennya tidak
+     * menjaminnya. Kalau namanya tidak ada, sebutannya jatuh ke nomor urut
+     * dan jumlahnya ("Barang ke-3 · 1 pcs"), yang masih bisa dicocokkan
+     * dengan struk di tangan pelanggan. Yang tidak boleh terjadi adalah
+     * kode mentah berdiri sendiri sebagai nama barang. (API-51)
+     *
+     * @param  array<string,mixed>  $summary
+     * @return array<int,array<string,mixed>>
+     */
+    private function barisLayanan(array $summary): array
+    {
+        $rows = $summary['services'] ?? [];
+
+        return collect(is_array($rows) ? $rows : [])
+            ->filter(fn ($s) => is_array($s))
+            ->values()
+            ->map(function (array $s, int $i) {
+                $nama = is_string($s['name'] ?? null) && filled($s['name']) ? $s['name'] : null;
+                $urut = is_numeric($s['index'] ?? null) ? (int) $s['index'] : $i + 1;
+
+                return [
+                    'index' => $urut,
+                    'name' => $nama,
+                    'label' => $this->sebutanBaris($nama, $urut, $s['quantity'] ?? null),
+                    'quantity' => $s['quantity'] ?? null,
+                    'layanan' => LayananNota::dariNama($nama),
+                ];
+            })
+            ->all();
+    }
+
+    /** Sebutan satu baris seperti yang dibaca kasir di pemilih. */
+    private function sebutanBaris(?string $nama, int $urut, mixed $jumlah): string
+    {
+        $sebutan = filled($nama)
+            ? $nama.' — barang ke-'.$urut
+            : 'Barang ke-'.$urut;
+
+        return is_numeric($jumlah) ? $sebutan.' · '.$jumlah.' pcs' : $sebutan;
+    }
+
     private function untukPeran(array $summary, $user): array
     {
         $aman = [
@@ -86,6 +133,12 @@ class NeviraLookupController extends Controller
             'customer_name' => $summary['customer_name'] ?? null,
             'customer_phone' => $summary['customer_phone'] ?? null,
             'created_at' => $summary['created_at'] ?? null,
+            // Baris layanan pada nota. Form intake memakainya untuk
+            // menawarkan "keluhannya tentang barang yang mana" — dan hanya
+            // menawarkannya kalau notanya memang berisi lebih dari satu.
+            // Nama barang bukan data karyawan, jadi tidak disaring peran.
+            // (API-51)
+            'services' => $this->barisLayanan($summary),
         ];
 
         // Nama karyawan menyangkut penilaian kerja orang.

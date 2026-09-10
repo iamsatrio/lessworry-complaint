@@ -225,7 +225,6 @@ details.filters .body{padding:0 22px 20px}
 @media(max-width:820px){
   .fab{display:flex;position:fixed;left:16px;right:16px;bottom:16px;z-index:30;
     box-shadow:0 10px 30px -8px rgba(20,124,114,.55)}
-  main{padding-bottom:104px}
   nav a.cta{display:none}
 }
 
@@ -235,7 +234,20 @@ details.filters .body{padding:0 22px 20px}
   .hide-sm{display:none !important}
   .cards{display:block}
   h1{font-size:25px}
-  main{padding:22px 16px 60px}
+  /* Ruang bawah dilebihkan supaya tombol melayang .fab
+     (fixed, bottom:16px, tinggi 49px) mengambang di atas ruang kosong,
+     bukan di atas kartu complaint terakhir. Aturan ini datang SETELAH
+     .fab di atas, jadi padding-bottom-nya tidak boleh mengecil lagi —
+     itu yang dulu menutupi satu kartu di setiap posisi gulir. (API-38 #3)
+
+     Elemennya disebut lewat KELASNYA, tidak pernah lewat tulisan yang
+     tercetak di tombolnya. Blok <style> ini inline, jadi komentarnya ikut
+     terkirim ke peramban pada setiap halaman — termasuk /verifikasi-email,
+     yang navigasinya sengaja dikosongkan. Label tombol yang dikutip di sini
+     akan ditemukan assertDontSee() pada halaman itu, di dalam komentar CSS,
+     dan menjatuhkan test yang menjaga navigasi tetap kosong.
+     (Tinjauan PR #12) */
+  main{padding:22px 16px 104px}
   /* Nav pindah ke baris sendiri supaya tidak tertimbun tombol Keluar */
   .topin{padding:0 16px;gap:12px;flex-wrap:wrap;min-height:0;padding-top:12px}
   .brand{flex:1}
@@ -252,6 +264,29 @@ details.filters .body{padding:0 22px 20px}
 .ccard .hd{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:9px}
 .ccard .nm{font-family:var(--display);font-weight:700;font-size:15px}
 .ccard .meta{font-size:13px;color:var(--muted);margin-bottom:11px}
+
+/* ---------- Grafik (SVG langsung, tanpa satu pun pustaka) ---------- */
+/* Ukuran huruf di sini dalam satuan viewBox, bukan piksel layar: SVG-nya
+   ikut menyusut bersama lebar kartu. Itu sebabnya kanvasnya punya lebar
+   minimum dan boleh digeser mendatar di HP — huruf 5px bukan grafik. */
+.fig .fig-note{color:var(--muted);font-size:13.5px;margin:0 0 16px}
+.fig .g-canvas{overflow-x:auto}
+.fig svg{display:block;width:100%;min-width:560px;max-width:920px;height:auto;margin:0 auto}
+.fig .g-grid{stroke:var(--line);stroke-width:1}
+.fig .g-axis{fill:var(--muted);font-size:13px;font-family:var(--body)}
+.fig .g-baris-lab{fill:var(--ink);font-size:14px;font-family:var(--body)}
+.fig .g-nilai{fill:var(--ink);font-size:14px;font-weight:700;font-family:var(--display)}
+/* Pita acuan: bidang sunyi di belakang datanya, dengan label tertulis —
+   bukan seri kedua yang harus ditebak dari warnanya. */
+.fig .g-pita{fill:var(--mint-deep)}
+.fig .g-pita-lab{fill:var(--muted);font-size:13px;font-family:var(--body)}
+.fig details.g-tabel{margin-top:12px;border-top:1px solid var(--line)}
+.fig details.g-tabel>summary{cursor:pointer;font-family:var(--display);font-weight:700;font-size:13.5px;
+  color:var(--teal-deep);padding:11px 0;min-height:44px;display:flex;align-items:center}
+.fig details.g-tabel table{font-size:13.5px}
+.fig details.g-tabel th,.fig details.g-tabel td{padding:9px 12px}
+.fig .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.stat .c{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.4}
 
 @media(prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
 </style>

@@ -2,9 +2,14 @@
 @section('title','Papan Kerja')
 @section('content')
 <div class="eyebrow">Papan Kerja</div>
-<h1>{{ $complaints->total() }} complaint{{ request('status') ? '' : ' terbuka' }}</h1>
+{{-- $mencari datang dari controller: yang memutuskan "ini pencarian" adalah
+     query yang dibangun di sana. Judul harus menyebut apa yang benar-benar
+     ditampilkan — kata "terbuka" hanya berlaku saat papan kerja ditampilkan
+     apa adanya. (API-38 #1) --}}
+<h1>{{ $complaints->total() }} complaint{{ request('status') || $mencari ? '' : ' terbuka' }}</h1>
 <p class="lede">
   @if(request('status')) Berstatus "{{ config('complaint.statuses.'.request('status')) }}".
+  @elseif($mencari) Hasil pencarian "{{ request('q') }}" — mencakup complaint yang sudah ditutup.
   @else Yang paling dekat tenggat tampil paling atas. @endif
   @if(auth()->user()->isKasir()) Dibatasi outlet {{ auth()->user()->outlet?->name }}. @endif
 </p>
@@ -59,9 +64,15 @@
     <div class="empty">
       <div class="mark">🧺</div>
       <h3>Tidak ada complaint yang cocok</h3>
-      <p>Ubah saringan di atas, atau catat complaint baru kalau ada keluhan yang masuk.</p>
-      @if(auth()->user()->canCreateComplaint())
-        <a class="btn" href="{{ route('complaints.create') }}">Catat Complaint</a>
+      @if($mencari)
+        <p>Tidak ada complaint dengan "{{ request('q') }}" — pencarian ini sudah mencakup tiket yang
+          sudah ditutup. Periksa lagi ejaan nomor tiket atau nomor notanya.</p>
+        <a class="btn ghost" href="{{ route('complaints.index') }}">Kembali ke papan kerja</a>
+      @else
+        <p>Ubah saringan di atas, atau catat complaint baru kalau ada keluhan yang masuk.</p>
+        @if(auth()->user()->canCreateComplaint())
+          <a class="btn" href="{{ route('complaints.create') }}">Catat Complaint</a>
+        @endif
       @endif
     </div>
   </div>
