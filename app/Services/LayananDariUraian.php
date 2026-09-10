@@ -49,15 +49,29 @@ final class LayananDariUraian
      * kejadian jauh lebih besar, jadi salah pindah ke arah itu lebih mudah
      * terlihat di laporan daripada tenggelam di antara 47 baris sepatu.
      *
-     * `\w*` pada karpet menampung "karpetnya"/"gordennya". Sepatu tidak
-     * memakainya: "sandal" berimbuhan tidak muncul di data, sementara `\w*`
-     * di sana akan menarik kata lain yang berawalan sama.
+     * `\w*` pada karpet menampung "karpetnya"/"gordennya". Daftar sepatu
+     * tidak memakainya: "sandal" berimbuhan tidak muncul di data, sementara
+     * `\w*` di sana akan menarik kata lain yang berawalan sama.
+     *
+     * TAPI pengecualian tas memakainya, dan itu bukan ketidakkonsistenan:
+     * `\btas\b(?!\s+(?:laundry|cuci)\b)` bocor pada bentuk berakhiran. `\b`
+     * sesudah `laundry`/`cuci` menuntut kata itu berhenti di situ, jadi
+     * "tas laundrynya hilang", "Tas cucian belum kembali", dan "tas cucinya
+     * sobek" lolos dari pengecualian dan pindah ke sepatu_tas — mengubah
+     * keluhan tentang WADAH jadi keluhan tentang jasa cuci tas, persis
+     * pembalikan makna yang seluruh komentar di atas ada untuk mencegahnya.
+     * Akhiran `-nya` dan `-an` adalah cara paling wajar menulisnya.
+     *
+     * Arah kedua `\w*` berlawanan, dan itu yang membuat keduanya aman:
+     * pada karpet ia MELEBARKAN yang cocok, pada tas ia MELEBARKAN yang
+     * dikecualikan. Melebarkan pengecualian hanya bisa membuat lebih sedikit
+     * baris berpindah, tidak pernah lebih banyak. (Tinjauan PR #22)
      *
      * @var array<string,string>
      */
     private const POLA = [
         'karpet_gorden' => '/\b(?:karpet|gorden|gordyn|vitrase|tirai)\w*/iu',
-        'sepatu_tas' => '/\b(?:sepatu|sneakers?|sandal|sendal|heels|koper|ransel)\b|\btas\b(?!\s+(?:laundry|cuci)\b)/iu',
+        'sepatu_tas' => '/\b(?:sepatu|sneakers?|sandal|sendal|heels|koper|ransel)\b|\btas\b(?!\s+(?:laundry|cuci)\w*)/iu',
     ];
 
     /** Nilai layanan yang bisa dihasilkan kelas ini. @return list<string> */

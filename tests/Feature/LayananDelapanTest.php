@@ -233,6 +233,15 @@ class LayananDelapanTest extends TestCase
             // penyaring layanan dan hanya pengecualian frasa yang menahannya.
             $this->buat('Tas laundry gak dikembalikan', 'satuan_non_cloth'),
             $this->buat('Tas cuci belum kembali', 'satuan_non_cloth'),
+            // Bentuk berakhiran. `-nya` dan `-an` adalah cara paling wajar
+            // menulis kalimat ini, dan `\b` sesudah laundry/cuci membiarkan
+            // ketiganya lolos dari pengecualian — keluhan tentang WADAH
+            // tercatat sebagai keluhan tentang jasa cuci tas. Ketiganya
+            // ber-Satuan Non Cloth, jadi penyaring layanan tidak menolong:
+            // yang menahannya hanya polanya. (Tinjauan PR #22)
+            $this->buat('Tas laundrynya gak dikembalikan', 'satuan_non_cloth'),
+            $this->buat('Tas cucian belum kembali', 'satuan_non_cloth'),
+            $this->buat('tas cucinya sobek', 'satuan_non_cloth'),
         ];
 
         $sebelum = array_map(fn (Complaint $c) => $c->layanan, $baris);
