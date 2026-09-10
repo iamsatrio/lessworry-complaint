@@ -137,6 +137,11 @@ class ComplaintController extends Controller
         // Nota terisi berarti tidak ada pengecualian yang berlaku.
         if (filled($data['nevira_transaction_number'] ?? null)) {
             $data['nota_exemption'] = null;
+        } else {
+            // Tanpa nota tidak ada baris layanan yang bisa ditunjuk. Nomor
+            // yang tertinggal di form akan menunjuk barang di nota yang
+            // tidak pernah tertaut. (API-51)
+            $data['nevira_service_index'] = null;
         }
 
         // Kasir hanya boleh mencatat untuk outletnya sendiri.

@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Session;
 
 /**
  * Gerbang verifikasi email, berdiri DI DEPAN gerbang ganti password. (API-35)
@@ -29,7 +30,7 @@ class EnsureEmailVerified
             // ke halaman yang diminta sebelumnya; tanpa reflash, pesan itu
             // mati di pantulan ini dan orang melihat halaman verifikasi yang
             // seolah-olah baik-baik saja.
-            $request->session()->reflash();
+            Session::reflash();
 
             return redirect()->route('verification.notice');
         }

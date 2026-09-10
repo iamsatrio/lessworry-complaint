@@ -257,17 +257,37 @@
               <dt>Estimasi selesai</dt><dd>{{ \Illuminate\Support\Carbon::parse($nv['estimated_done'])->translatedFormat('d M Y, H:i') }}</dd>
             @endif
           </dl>
-          @if(!empty($nv['services']))
+          @php $layananNota = $complaint->services(); @endphp
+          @if($layananNota)
             <div class="panel" style="margin-top:12px">
               <b>Layanan dalam order ini</b>
-              @foreach($nv['services'] as $svc)
+              @foreach($layananNota as $svc)
+                @php $dikeluhkan = $complaint->nevira_service_index === $svc['index']; @endphp
                 <div style="margin-top:6px">
-                  {{ $svc['name'] ?? 'Layanan' }}
+                  {{-- Nomor urut hanya muncul kalau notanya memang berisi
+                       lebih dari satu barang: pada nota satu layanan tidak
+                       ada yang perlu dibedakan. (API-51) --}}
+                  @if($complaint->hasMultipleServices())
+                    <span class="muted small">{{ $svc['index'] }}.</span>
+                  @endif
+                  {{-- Nama layanan NEVIRA belum dipastikan selalu ada. Kalau
+                       tidak ada, yang tampil nomor urutnya — bukan kode
+                       barisnya, yang tidak bisa dicocokkan siapa pun. --}}
+                  {{ $svc['name'] ?: 'Barang ke-'.$svc['index'] }}
                   @if(!empty($svc['quantity'])) · {{ $svc['quantity'] }} item @endif
+                  @if(blank($svc['name']) && filled($svc['code']))
+                    <span class="muted small">· kode {{ $svc['code'] }}</span>
+                  @endif
                   @if(!empty($svc['status'])) · {{ $svc['status'] }} @endif
+                  @if($dikeluhkan) <span class="badge">Yang dikeluhkan</span>@endif
                   @if(!empty($svc['notes']))<div class="muted small">Catatan: {{ $svc['notes'] }}</div>@endif
                 </div>
               @endforeach
+              @if($complaint->hasMultipleServices() && $complaint->nevira_service_index === null)
+                <div class="muted small" style="margin-top:8px">
+                  Keluhan ini menyangkut seluruh nota — tidak ada satu barang yang ditunjuk.
+                </div>
+              @endif
             </div>
           @endif
           @if($complaint->transactionIsOld())
@@ -288,6 +308,25 @@
         <form method="POST" action="{{ route('complaints.resync',$complaint) }}" style="margin-top:14px">
           @csrf<button class="ghost">Tarik Ulang dari NEVIRA</button>
         </form>
+      @elseif($complaint->isPraNevira())
+        {{-- Complaint dari era sebelum NEVIRA: tidak tertaut BUKAN karena ada
+             yang terlewat, tapi karena sistem ordernya belum ada saat itu.
+             Tanpa kalimat ini orang akan mencari tautan yang tidak pernah bisa
+             ada, atau mengira datanya rusak. (API-28) --}}
+        <div class="panel" style="margin:0 0 14px">
+          <b>Complaint sebelum NEVIRA dipakai</b>
+          <div style="margin-top:5px">
+            Tercatat {{ $complaint->created_at->translatedFormat('d M Y') }}, sebelum
+            {{ \App\Models\Complaint::awalNevira()->translatedFormat('d M Y') }} —
+            saat itu order belum dicatat di NEVIRA, jadi tidak ada detail order untuk ditampilkan.
+          </div>
+          @if($complaint->legacy_nota_number)
+            <div class="small" style="margin-top:8px">
+              Nomor nota di catatan lama: <span class="tix">{{ $complaint->legacy_nota_number }}</span>
+              — dari penomoran sebelum NEVIRA, tidak bisa dipakai menautkan ke order.
+            </div>
+          @endif
+        </div>
       @else
         @if($complaint->nota_exemption)
           <div class="panel" style="margin:0 0 14px">

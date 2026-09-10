@@ -32,6 +32,12 @@ class StoreComplaintRequest extends FormRequest
             'reporter_phone' => ['nullable', 'string', 'max:30'],
             'nevira_transaction_number' => ['required_without:nota_exemption', 'nullable', 'string', 'max:64'],
             'nota_exemption' => ['required_without:nevira_transaction_number', 'nullable', Rule::in(array_keys(config('complaint.nota_exemptions')))],
+            // Nomor urut baris layanan yang dikeluhkan; kosong berarti
+            // seluruh nota. Batas atasnya menjaga kolom, bukan menghitung
+            // isi nota: jumlah baris sebenarnya baru diketahui setelah
+            // snapshot ditarik, dan penyelarasnya yang membuang nomor yang
+            // tidak ada barisnya. (API-51)
+            'nevira_service_index' => ['nullable', 'integer', 'min:1', 'max:65535'],
             'outlet_id' => ['nullable', 'exists:outlets,id'],
             'category' => ['required', Rule::in(array_keys(config('complaint.categories')))],
             'sub_category' => ['nullable', 'string', 'max:120'],
@@ -59,6 +65,7 @@ class StoreComplaintRequest extends FormRequest
         return [
             'nevira_transaction_number' => 'nomor nota',
             'nota_exemption' => 'alasan tanpa nota',
+            'nevira_service_index' => 'barang yang dikeluhkan',
         ];
     }
 }

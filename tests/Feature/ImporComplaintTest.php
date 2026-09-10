@@ -51,6 +51,10 @@ class ImporComplaintTest extends TestCase
         parent::tearDown();
     }
 
+    /**
+     * Tanpa `--sejak`, seluruh berkas diimpor — itu bawaannya sekarang.
+     * Perilaku saringan tanggal diuji terpisah, tanggalnya disebut eksplisit.
+     */
     private function impor(array $opsi = []): int
     {
         return $this->artisan('complaint:import', [
@@ -331,7 +335,7 @@ class ImporComplaintTest extends TestCase
 
     /* ---------- laporan ---------- */
 
-    public function test_laporan_memuat_kelima_butir_yang_diminta(): void
+    public function test_laporan_memuat_seluruh_butir_yang_diminta(): void
     {
         $this->impor(['--tulis' => true]);
 
@@ -343,21 +347,24 @@ class ImporComplaintTest extends TestCase
             '## 3. Nomor nota',
             '## 4. Pengisian kolom `Pelaku`',
             '## 5. Sebaran per bulan',
-            '## 6. Keanehan yang perlu keputusan orang',
+            '## 6. Biaya tercatat, dipecah menurut era NEVIRA',
+            '## 7. Keanehan yang perlu keputusan orang',
         ] as $judul) {
             $this->assertStringContainsString($judul, $isi);
         }
     }
 
-    public function test_laporan_menghitung_pengisian_pelaku_2026_terpisah(): void
+    public function test_laporan_memisahkan_pengisian_pelaku_yang_diimpor_dari_seluruh_berkas(): void
     {
         $this->impor(['--tulis' => true]);
 
         $isi = file_get_contents($this->laporan);
 
-        // Tiga baris 2026, satu terisi. `-` tidak dihitung terisi, dan baris
-        // tanpa pelaku juga tidak — jadi 1 dari 3, bukan 3 dari 3.
-        $this->assertStringContainsString('| 2026 saja | 1 | 3 | 33,3% |', $isi);
+        // 12 baris diimpor, satu pelakunya terisi. `-` dan kosong sama-sama
+        // tidak dihitung terisi. Dua baris yang gagal tidak ikut penyebut
+        // baris yang diimpor, tapi tetap ikut angka seluruh berkas.
+        $this->assertStringContainsString('| **Diimpor** (lolos tanggal potong) | 1 | 12 | 8,3% |', $isi);
+        $this->assertStringContainsString('| Seluruh berkas | 1 | 14 | 7,1% |', $isi);
         $this->assertStringContainsString('Ambang KB Landasan Produk (API-24): **25,0%**', $isi);
     }
 
@@ -367,12 +374,14 @@ class ImporComplaintTest extends TestCase
 
         $isi = file_get_contents($this->laporan);
 
-        // 8 kosong + 2 tidak terbaca (`-` dan `1559 Des`) dari 14 baris.
-        // Dihitung atas SELURUH baris berkas, termasuk yang gagal: angka ini
-        // menggambarkan sumbernya, bukan hasil impornya.
-        $this->assertStringContainsString('| Kosong | 8 |', $isi);
+        // 6 kosong + 2 tidak terbaca (`-` dan `1559 Des`) dari 12 baris yang
+        // diimpor. Dihitung atas baris yang MASUK, bukan atas berkasnya:
+        // yang ditanyakan adalah berapa complaint di dalam sistem yang tidak
+        // punya nomor nota terpakai.
+        $this->assertStringContainsString('| Kosong | 6 |', $isi);
         $this->assertStringContainsString('| Tidak terbaca | 2 |', $isi);
-        $this->assertStringContainsString('**71,4%**', $isi);
+        $this->assertStringContainsString('**66,7%**', $isi);
+        $this->assertStringContainsString('dari 12 baris yang diimpor', $isi);
     }
 
     public function test_sebaran_per_bulan_dicocokkan_dengan_sumbernya(): void
@@ -431,6 +440,211 @@ class ImporComplaintTest extends TestCase
         $laporan->assertSee('Kurang Bersih');
         $laporan->assertSee('Tidak tercatat (impor data lama)');
         $laporan->assertSee('Tanpa outlet');
+    }
+
+    /* ---------- tanggal potong ---------- */
+
+    public function test_hanya_baris_sejak_tanggal_potong_yang_diimpor(): void
+    {
+        $this->impor(['--tulis' => true, '--sejak' => '2026-02-05']);
+
+        // Berkas contoh: 14 baris, 2 gagal, 10 lebih tua dari 5 Feb 2026.
+        $this->assertSame(2, Complaint::count());
+        $this->assertTrue(Complaint::pluck('created_at')->every(
+            fn ($t) => $t->toDateString() >= '2026-02-05',
+        ));
+    }
+
+    public function test_batas_tanggal_potong_inklusif(): void
+    {
+        $this->impor(['--tulis' => true, '--sejak' => '2026-02-05']);
+
+        // Baris tertanggal persis 5 Feb 2026 IKUT MASUK. Batas eksklusif
+        // membuang satu hari penuh complaint tanpa ada yang menyadarinya.
+        $this->assertNotNull(
+            Complaint::whereDate('created_at', '2026-02-05')->first(),
+            'Baris tepat pada tanggal potong seharusnya ikut diimpor',
+        );
+    }
+
+    public function test_baris_yang_lebih_tua_dihitung_terpisah_bukan_dianggap_gagal(): void
+    {
+        $this->impor(['--tulis' => true, '--sejak' => '2026-02-05']);
+
+        $isi = file_get_contents($this->laporan);
+
+        $this->assertStringContainsString('| Dibaca dari berkas | 14 |', $isi);
+        $this->assertStringContainsString('| Dilewati (lebih tua dari tanggal potong) | 10 |', $isi);
+        $this->assertStringContainsString('| Lolos tanggal potong | 2 |', $isi);
+        $this->assertStringContainsString('| Masuk | 2 |', $isi);
+        // Baris tua BUKAN kegagalan — hanya 2 baris rusak yang gagal.
+        $this->assertStringContainsString('| Gagal | 2 |', $isi);
+        $this->assertStringContainsString('`2026-02-05` (inklusif; baris lebih tua dilewati)', $isi);
+    }
+
+    public function test_tanggal_tidak_terbaca_tetap_gagal_bukan_dibuang_sebagai_baris_tua(): void
+    {
+        $this->impor(['--tulis' => true, '--sejak' => '2026-02-05']);
+
+        // Kalau tanggalnya tidak diketahui, tidak ada yang tahu baris itu di
+        // sisi mana dari tanggal potong. Membuangnya diam-diam sebagai "tua"
+        // menghilangkan baris yang mungkin baru.
+        $this->assertStringContainsString(
+            '- baris 11: kolom Date tidak terbaca',
+            file_get_contents($this->laporan),
+        );
+    }
+
+    public function test_bawaannya_seluruh_berkas_diimpor(): void
+    {
+        // Bawaannya TIDAK ada tanggal potong: satrio ingin melihat kerugian
+        // sejak awal, dan memotongnya membuang 91% biaya yang pernah dicatat.
+        $this->assertNull(config('complaint.impor_sejak'));
+
+        $this->impor(['--tulis' => true]);
+
+        $this->assertSame(12, Complaint::count());
+        $this->assertStringContainsString(
+            'Tanggal potong: tidak ada — seluruh berkas diimpor',
+            file_get_contents($this->laporan),
+        );
+    }
+
+    public function test_tanggal_potong_bawaan_diambil_dari_config(): void
+    {
+        config(['complaint.impor_sejak' => '2026-03-05']);
+
+        // Tanpa --sejak sama sekali: nilainya datang dari config, bukan dari
+        // angka yang ditanam di kode.
+        $this->artisan('complaint:import', [
+            'berkas' => $this->berkas,
+            '--sumber' => 'uji',
+            '--laporan' => $this->laporan,
+            '--tulis' => true,
+        ])->run();
+
+        $this->assertSame(1, Complaint::count());
+        $this->assertStringContainsString(
+            '`2026-03-05` (inklusif; baris lebih tua dilewati)',
+            file_get_contents($this->laporan),
+        );
+    }
+
+    public function test_sejak_kosong_mematikan_batas_tanggal_walau_config_mengisinya(): void
+    {
+        config(['complaint.impor_sejak' => '2026-03-05']);
+
+        $this->impor(['--tulis' => true, '--sejak' => '']);
+
+        $this->assertSame(12, Complaint::count());
+        $this->assertStringContainsString(
+            'Tanggal potong: tidak ada — seluruh berkas diimpor',
+            file_get_contents($this->laporan),
+        );
+    }
+
+    public function test_sejak_yang_bentuknya_salah_ditolak_tanpa_menulis(): void
+    {
+        $kode = $this->artisan('complaint:import', [
+            'berkas' => $this->berkas,
+            '--sumber' => 'uji',
+            '--tulis' => true,
+            '--sejak' => '16 Mei 2026',
+        ])->run();
+
+        // Salah ketik pada tanggal potong tidak boleh berakhir dengan
+        // seluruh berkas masuk, atau dengan nol baris masuk diam-diam.
+        $this->assertSame(1, $kode);
+        $this->assertSame(0, Complaint::count());
+    }
+
+    public function test_angka_laporan_dihitung_atas_baris_yang_lolos_tanggal_potong(): void
+    {
+        $this->impor(['--tulis' => true, '--sejak' => '2026-02-05']);
+
+        $isi = file_get_contents($this->laporan);
+
+        // Dua baris lolos: satu pelaku `-` (tidak terisi), satu kosong.
+        $this->assertStringContainsString('| **Diimpor** (lolos tanggal potong) | 0 | 2 | 0,0% |', $isi);
+        // Pembandingnya tetap ada: seluruh berkas 1 dari 14.
+        $this->assertStringContainsString('| Seluruh berkas | 1 | 14 | 7,1% |', $isi);
+    }
+
+    /* ---------- penanda era NEVIRA ---------- */
+
+    public function test_complaint_lebih_tua_dari_nevira_ditandai_pra_nevira(): void
+    {
+        $this->impor(['--tulis' => true]);
+
+        // Baris 1 tertanggal 5 Mar 2025, jauh sebelum NEVIRA dipakai.
+        $this->assertTrue($this->baris(1)->isPraNevira());
+        // Baris 13 tertanggal 5 Jan 2026 — masih sebelum 16 Mei 2026.
+        $this->assertTrue($this->baris(12)->isPraNevira());
+    }
+
+    public function test_penanda_pra_nevira_inklusif_pada_hari_nevira_mulai(): void
+    {
+        config(['complaint.nevira_mulai' => '2026-02-05']);
+
+        $this->impor(['--tulis' => true]);
+
+        // Tepat pada hari NEVIRA mulai dipakai BUKAN lagi pra-NEVIRA.
+        $this->assertFalse($this->baris(13)->isPraNevira());
+        $this->assertTrue($this->baris(12)->isPraNevira());
+    }
+
+    public function test_scope_memisahkan_dua_era(): void
+    {
+        config(['complaint.nevira_mulai' => '2026-02-05']);
+
+        $this->impor(['--tulis' => true]);
+
+        $this->assertSame(10, Complaint::praNevira()->count());
+        $this->assertSame(2, Complaint::sejakNevira()->count());
+        // Keduanya harus berjumlah utuh — tidak ada baris yang jatuh di celah.
+        $this->assertSame(Complaint::count(), Complaint::praNevira()->count() + Complaint::sejakNevira()->count());
+    }
+
+    public function test_laporan_memecah_biaya_menurut_era_nevira(): void
+    {
+        config(['complaint.nevira_mulai' => '2026-02-05']);
+
+        $this->impor(['--tulis' => true]);
+
+        $isi = file_get_contents($this->laporan);
+
+        // Biaya era lama tetap terhitung PENUH meski ordernya tidak bisa
+        // ditautkan — angkanya dari kolom biaya complaint, bukan dari NEVIRA.
+        $praBiaya = (int) Complaint::praNevira()->sum('compensation_amount');
+        $sejakBiaya = (int) Complaint::sejakNevira()->sum('compensation_amount');
+
+        $this->assertGreaterThan(0, $praBiaya);
+        $this->assertStringContainsString('## 6. Biaya tercatat, dipecah menurut era NEVIRA', $isi);
+        $this->assertStringContainsString(
+            '| Sebelum NEVIRA | 10 | Rp '.number_format($praBiaya, 0, ',', '.').' |',
+            $isi,
+        );
+        $this->assertStringContainsString(
+            '| Sejak NEVIRA | 2 | Rp '.number_format($sejakBiaya, 0, ',', '.').' |',
+            $isi,
+        );
+    }
+
+    public function test_halaman_complaint_menjelaskan_kenapa_tidak_ada_detail_order(): void
+    {
+        $this->impor(['--tulis' => true]);
+
+        $supervisor = User::create([
+            'name' => 'Supervisor Era', 'email' => 'svera@lessworry.id',
+            'password' => 'secret123', 'role' => 'supervisor',
+        ]);
+
+        $halaman = $this->actingAs($supervisor)->get('/complaints/'.$this->baris(1)->id)->assertOk();
+
+        // Tanpa kalimat ini orang mencari tautan yang tidak pernah bisa ada,
+        // atau mengira datanya rusak.
+        $halaman->assertSee('Complaint sebelum NEVIRA dipakai');
+        $halaman->assertDontSee('Complaint ini belum tertaut ke order.');
     }
 
     /* ---------- pencegah ganda berdasar isi, bukan label ---------- */

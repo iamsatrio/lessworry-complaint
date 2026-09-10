@@ -12,6 +12,37 @@ return [
     ],
 
     /*
+    | Tanggal NEVIRA mulai dipakai. FAKTA SEJARAH, bukan setelan. (API-28)
+    |
+    | Complaint yang lebih tua dari tanggal ini tidak punya order NEVIRA yang
+    | bisa dirujuk — bukan karena datanya kurang, tapi karena sistemnya belum
+    | ada. Dipakai untuk MENANDAI, bukan untuk menyaring: siapa pun yang
+    | membuka complaint lama jadi tahu kenapa tidak ada detail ordernya, tanpa
+    | harus bertanya, dan laporan bisa memisahkan dua era saat perbandingannya
+    | memang tidak sepadan.
+    |
+    | Terpisah dari `impor_sejak` dengan sengaja. Yang satu fakta tentang
+    | kapan sistem lain mulai hidup; yang satu lagi pilihan tentang baris mana
+    | yang mau diimpor. Menyatukannya berarti mengubah saringan ikut mengubah
+    | arti data yang sudah tersimpan.
+    */
+    'nevira_mulai' => '2026-05-16',
+
+    /*
+    | Tanggal potong impor data lama — SARINGAN, bawaannya tidak ada. (API-28)
+    |
+    | Null berarti seluruh berkas diimpor. Cutoff 16 Mei sempat dipasang lalu
+    | dicabut: satrio ingin melihat besaran kerugian complaint SEJAK AWAL, dan
+    | laporan kerugian tidak butuh tautan ke order sama sekali — angkanya dari
+    | kolom biaya pada complaint itu sendiri. Memotong di 16 Mei membuang 91%
+    | biaya yang pernah dicatat tim (Rp 28,1 juta dari Rp 30,9 juta).
+    |
+    | Opsinya TIDAK dihapus: kalau satrio berubah pikiran lagi, itu satu
+    | argumen `--sejak=YYYY-MM-DD`, bukan satu commit.
+    */
+    'impor_sejak' => null,
+
+    /*
     | Kanal untuk data yang kanalnya TIDAK PERNAH DICATAT — spreadsheet lama
     | tidak punya kolomnya. (API-28)
     |
@@ -137,6 +168,29 @@ return [
         'satuan_non_cloth' => 'Satuan Non Cloth',
         'satuan_cloth' => 'Satuan Cloth',
         'satuan_bedding' => 'Satuan Bedding',
+    ],
+
+    /*
+    | Menebak kolom `layanan` dari nama baris layanan di NEVIRA. (API-51)
+    |
+    | Nama layanan NEVIRA berbentuk "Keluarga - Nama barang", mis.
+    | "Bedding - Sprei (King)". Yang dicocokkan potongan katanya, huruf besar
+    | kecil diabaikan, dan yang pertama cocok menang — karena itu "non cloth"
+    | berdiri SEBELUM "cloth", kalau tidak "Non Cloth" ikut tercocok sebagai
+    | "Cloth".
+    |
+    | Nama yang tidak cocok tidak mengisi apa pun: kasir tetap memilih
+    | sendiri. Isian yang salah diam-diam lebih buruk daripada isian kosong,
+    | karena laporan "layanan mana yang paling sering bermasalah" dibaca
+    | seolah datanya benar.
+    */
+    'layanan_dari_nevira' => [
+        'non cloth' => 'satuan_non_cloth',
+        'bedding' => 'satuan_bedding',
+        'cuci setrika' => 'kiloan_cuset',
+        'cuci lipat' => 'kiloan_culip',
+        'cloth' => 'satuan_cloth',
+        'kiloan' => 'kiloan',
     ],
 
     /*
