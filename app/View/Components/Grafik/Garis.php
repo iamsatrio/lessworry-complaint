@@ -34,6 +34,25 @@ class Garis extends Component
     /** Jarak antar label sumbu mendatar; 18 bulan tidak muat berdampingan. */
     private const LABEL_MAKS = 9;
 
+    /**
+     * Lebar layar terkecil yang dijamin untuk kanvasnya, dalam piksel. Di
+     * bawah ini kanvasnya digeser mendatar, tidak dikecilkan lagi — huruf
+     * 5px bukan grafik. Sama dengan `min-width` di CSS `.fig svg`.
+     */
+    private const LEBAR_MIN = 560;
+
+    /**
+     * Ruang mendatar minimum per titik, dalam piksel LAYAR. Ini angka yang
+     * membuat sasaran tunjuknya lolos: dua titik yang hanya berjarak 18px
+     * tidak bisa punya sasaran 28px, berapa pun jari-jari yang ditulis.
+     * Grafik yang titiknya rapat karena itu MELEBAR dan digeser mendatar,
+     * bukan memampatkan sasarannya. (API-62 nomor 1)
+     */
+    private const RUANG_TITIK_MIN = 28;
+
+    /** Garis tengah sasaran tunjuk yang dituju, dalam piksel LAYAR. */
+    private const SASARAN_PX = 28;
+
     private ?float $maks = null;
 
     private ?float $langkah = null;
@@ -186,7 +205,7 @@ class Garis extends Component
         return $segmen;
     }
 
-    /** @return list<array{x:float,y:float,teks:string}> */
+    /** @return list<array{x:float,y:float,label:string,nilai:string,teks:string}> */
     public function simpul(): array
     {
         $simpul = [];
@@ -199,11 +218,127 @@ class Garis extends Component
             $simpul[] = [
                 'x' => $this->x($i),
                 'y' => $this->y((float) $t['nilai']),
+                'label' => $t['label'],
+                'nilai' => $t['teks'],
+                // Keterangan satu baris untuk <title>: cadangan pembaca layar,
+                // dan satu-satunya keterangan yang tersisa kalau CSS gagal
+                // dimuat. Tooltipnya sendiri memisahkan kedua bagian ini.
                 'teks' => $t['label'].' · '.$t['teks'],
             ];
         }
 
         return $simpul;
+    }
+
+    /* ---------- Sasaran tunjuk dan tooltip (API-62 nomor 1) ---------- */
+
+    /**
+     * Lebar terkecil kanvasnya di layar, dalam piksel.
+     *
+     * Bukan angka tetap: ia tumbuh bersama jumlah titik supaya setiap titik
+     * selalu kebagian RUANG_TITIK_MIN piksel layar. Grafik 31 titik harian di
+     * kanvas 560px hanya punya 18px per titik — sasaran 28px di situ mustahil
+     * secara aritmetika, bukan karena salah tulis. Yang mengalah lebarnya:
+     * kanvasnya melebar dan digeser mendatar, sasarannya tidak dipampatkan.
+     */
+    public function lebarMin(): int
+    {
+        $n = count($this->titik);
+
+        if ($n <= 1) {
+            return self::LEBAR_MIN;
+        }
+
+        // Jarak antar titik di layar = jarak dalam satuan viewBox × skala,
+        // dan skalanya lebar layar dibagi W. Dibalik: lebar layar terkecil
+        // yang membuat jarak itu ≥ RUANG_TITIK_MIN. Satu piksel ditambahkan
+        // supaya pembulatan jari-jarinya ke dua angka desimal tidak menggerus
+        // hasilnya kembali ke bawah ambang.
+        $butuh = (int) ceil(
+            self::RUANG_TITIK_MIN * self::W * ($n - 1) / (self::W - self::KIRI - self::KANAN)
+        ) + 1;
+
+        return max(self::LEBAR_MIN, $butuh);
+    }
+
+    /**
+     * Jari-jari sasaran tunjuk tak terlihat, dalam satuan viewBox.
+     *
+     * Satuan viewBox bukan piksel: SVG-nya diregangkan ke lebar kartu, jadi
+     * satu satuan viewBox bernilai `lebarLayar / W` piksel. Yang dijamin di
+     * sini garis tengah ≥ SASARAN_PX pada skala TERKECIL — yaitu saat
+     * kanvasnya selebar lebarMin(). Di layar lebar sasarannya ikut membesar,
+     * dan itu tidak merugikan siapa pun: lingkarannya tak terlihat.
+     *
+     * Batas keduanya jarak antar titik: sasaran yang lebih lebar dari jarak
+     * antar titik saling menimpa, dan yang menang jadi tetangga sebelah —
+     * menunjuk Agustus lalu terbaca September. lebarMin() sudah membuat kedua
+     * batas ini bisa dipenuhi sekaligus.
+     */
+    public function jariSasaran(): float
+    {
+        $skalaTerkecil = $this->lebarMin() / self::W;
+
+        // Dibulatkan KE ATAS, bukan ke terdekat: pembulatan ke bawah sebesar
+        // 0,005 satuan sudah cukup membuat garis tengahnya 27,99px, dan
+        // ambang yang meleset sepersepuluh piksel tetap ambang yang meleset.
+        $butuh = ceil((self::SASARAN_PX / 2) / $skalaTerkecil * 100) / 100;
+
+        $n = count($this->titik);
+
+        if ($n <= 1) {
+            return $butuh;
+        }
+
+        // lebarMin() sudah menjamin jarak antar titik ≥ SASARAN_PX di layar,
+        // jadi batas ini praktis tidak pernah menggigit — ia berjaga kalau
+        // salah satu angka di atas kelak diubah tanpa yang lain ikut.
+        $jarak = (self::W - self::KIRI - self::KANAN) / ($n - 1);
+
+        return min($butuh, floor($jarak / 2 * 100) / 100);
+    }
+
+    /**
+     * Kotak keterangan yang muncul saat titiknya ditunjuk — muncul SEKETIKA
+     * dan bergaya halaman, bukan tooltip sistem operasi yang tertunda sedetik.
+     *
+     * Digambar di server bersama grafiknya dan ditampilkan CSS `:hover`, jadi
+     * tetap tanpa satu baris skrip. Lebarnya ditaksir dari jumlah huruf: SVG
+     * tidak bisa mengukur teks sebelum digambar, dan taksiran yang sedikit
+     * kelebihan hanya menyisakan ruang kosong di ujung kotaknya.
+     *
+     * @return array{x:float,y:float,lebar:float,tinggi:float,labelY:float,nilaiY:float,teksX:float,ekor:string}
+     */
+    public function tooltip(float $x, float $y, string $label, string $nilai): array
+    {
+        $lebar = max(96.0, round(max(mb_strlen($label), mb_strlen($nilai)) * 6.9 + 26, 2));
+        $tinggi = 48.0;
+
+        // Di atas titiknya kalau muat; kalau tidak, di bawahnya. Kotak yang
+        // terpotong tepi atas gambar tidak menjelaskan apa pun.
+        $atas = $y - 13 - $tinggi;
+        $diAtas = $atas >= 2;
+        $kotakY = $diAtas ? $atas : $y + 13;
+
+        // Digeser ke dalam supaya tidak terpotong tepi kiri/kanan gambar.
+        $kotakX = min(max($x - $lebar / 2, 4.0), self::W - 4 - $lebar);
+
+        // Ekor segitiga tetap menunjuk titiknya walau kotaknya sudah digeser.
+        $ekorX = min(max($x, $kotakX + 12), $kotakX + $lebar - 12);
+        $ekor = $diAtas
+            ? ($ekorX - 6).','.($kotakY + $tinggi).' '.($ekorX + 6).','.($kotakY + $tinggi).' '.$ekorX.','.($y - 4)
+            : ($ekorX - 6).','.$kotakY.' '.($ekorX + 6).','.$kotakY.' '.$ekorX.','.($y + 4);
+
+        return [
+            'x' => round($kotakX, 2),
+            'y' => round($kotakY, 2),
+            'lebar' => $lebar,
+            'tinggi' => $tinggi,
+            'labelY' => round($kotakY + 20, 2),
+            'nilaiY' => round($kotakY + 37, 2),
+            'teksX' => round($kotakX + 13, 2),
+            'ekor' => $ekor,
+        ];
     }
 
     /** @return list<array{x:float,teks:string}> */

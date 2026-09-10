@@ -299,6 +299,19 @@ details.filters .body{padding:0 22px 20px}
 .fig .g-axis{fill:var(--muted);font-size:13px;font-family:var(--body)}
 .fig .g-baris-lab{fill:var(--ink);font-size:14px;font-family:var(--body)}
 .fig .g-nilai{fill:var(--ink);font-size:14px;font-weight:700;font-family:var(--display)}
+/* Sasaran tunjuk tak terlihat di tiap titik. Jari-jarinya dihitung di
+   Garis::jariSasaran() supaya garis tengahnya ≥28px di layar, termasuk saat
+   kanvasnya sedang selebar min-width-nya. Tanpa fill sebuah <circle> tidak
+   menangkap tetikus sama sekali — transparent, bukan none. (API-62 nomor 1) */
+.fig .g-sasaran{fill:transparent;cursor:pointer}
+/* Tooltipnya CSS murni: tanpa penundaan sistem operasi, tanpa satu baris
+   skrip. pointer-events:none supaya kotaknya sendiri tidak pernah merebut
+   tetikus dari sasaran di bawahnya lalu berkedip. */
+.fig .g-tip{opacity:0;pointer-events:none}
+.fig .g-titik:hover .g-tip,.fig .g-titik:focus-within .g-tip{opacity:1}
+.fig .g-tip rect,.fig .g-tip polygon{fill:var(--ink)}
+.fig .g-tip-lab{fill:#fff;font-family:var(--display);font-weight:700;font-size:13.5px}
+.fig .g-tip-nil{fill:var(--mint-deep);font-size:13px;font-family:var(--body)}
 /* Pita acuan: bidang sunyi di belakang datanya, dengan label tertulis —
    bukan seri kedua yang harus ditebak dari warnanya. */
 .fig .g-pita{fill:var(--mint-deep)}
