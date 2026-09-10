@@ -33,7 +33,13 @@ class ReportController extends Controller
             // bukan lewat kueri sendiri: satu jalur data berarti satu jalur
             // wewenang. Kalau grafik mengambil datanya sendiri, kebocoran di
             // sana tidak akan terlihat karena tabelnya tetap benar. (API-52)
-            'grafik' => new GrafikLaporan($user, $complaints, $saringan->outletId()),
+            'grafik' => new GrafikLaporan($user, $complaints, $saringan->outletId(), $saringan->satuan),
+            // Satuan waktu sumbu grafik, dan pintasan rentang tanggal.
+            // (API-62 nomor 2 dan 5)
+            'satuan' => $saringan->satuan,
+            'satuanDipilih' => $saringan->satuanDipilih,
+            'pintasan' => $saringan->pintasan(),
+            'rentangTerbaca' => $saringan->rentangTerbaca(),
             'total' => $complaints->count(),
             'resolved' => $resolved->count(),
             'overdue' => $complaints->filter->isOverdue()->count(),

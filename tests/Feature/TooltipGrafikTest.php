@@ -59,19 +59,24 @@ class TooltipGrafikTest extends TestCase
         return $complaint;
     }
 
-    /** @param  list<array{label:string,nilai:float|null,teks:string}>  $titik */
+    /** @param  list<array{label:string,judul:string,nilai:float|null,teks:string}>  $titik */
     private function garis(array $titik): Garis
     {
         return new Garis(judul: 'Uji', catatan: 'Uji', titik: $titik);
     }
 
-    /** @return list<array{label:string,nilai:float|null,teks:string}> */
+    /** @return list<array{label:string,judul:string,nilai:float|null,teks:string}> */
     private function titikSebanyak(int $n): array
     {
         $titik = [];
 
         for ($i = 0; $i < $n; $i++) {
-            $titik[] = ['label' => 'T'.$i, 'nilai' => (float) ($i + 1), 'teks' => ($i + 1).' kasus'];
+            $titik[] = [
+                'label' => 'T'.$i,
+                'judul' => 'Periode T'.$i,
+                'nilai' => (float) ($i + 1),
+                'teks' => ($i + 1).' kasus',
+            ];
         }
 
         return $titik;
@@ -122,15 +127,22 @@ class TooltipGrafikTest extends TestCase
     public function test_label_dan_angkanya_tertulis_terpisah_di_tooltip(): void
     {
         $garis = $this->garis([
-            ['label' => 'Agu 26', 'nilai' => 1.2, 'teks' => '1,2 per outlet (13 complaint, 11 outlet)'],
+            [
+                'label' => 'Agu 26',
+                'judul' => 'Agustus 2026',
+                'nilai' => 1.2,
+                'teks' => '1,2 per outlet (13 complaint, 11 outlet)',
+            ],
         ]);
 
         $simpul = $garis->simpul();
 
-        $this->assertSame('Agu 26', $simpul[0]['label']);
+        // Yang masuk kotak keterangan label PANJANGNYA, bukan label sumbunya:
+        // label sumbu harus muat berdampingan, kotak keterangan tidak.
+        $this->assertSame('Agustus 2026', $simpul[0]['label']);
         $this->assertSame('1,2 per outlet (13 complaint, 11 outlet)', $simpul[0]['nilai']);
         // Baris gabungan tetap ada untuk <title>.
-        $this->assertSame('Agu 26 · 1,2 per outlet (13 complaint, 11 outlet)', $simpul[0]['teks']);
+        $this->assertSame('Agustus 2026 · 1,2 per outlet (13 complaint, 11 outlet)', $simpul[0]['teks']);
     }
 
     /* ---------- Sasaran ≥28px DI LAYAR, di 1440px maupun 390px ---------- */

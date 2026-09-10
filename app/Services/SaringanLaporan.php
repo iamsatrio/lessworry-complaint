@@ -30,6 +30,9 @@ final class SaringanLaporan
         public readonly Carbon $dari,
         public readonly Carbon $sampai,
         public readonly ?Outlet $outlet,
+        public readonly SatuanWaktu $satuan,
+        /** Satuan waktunya dipilih orang, bukan disimpulkan dari rentangnya. */
+        public readonly bool $satuanDipilih,
     ) {}
 
     public static function dariPermintaan(LaporanFilterRequest $request): self
@@ -37,12 +40,93 @@ final class SaringanLaporan
         /** @var User $user */
         $user = $request->user();
 
+        $dari = $request->date('from') ?? now()->subDays(30)->startOfDay();
+        $sampai = $request->date('to') ?? now()->endOfDay();
+
+        // Satuan waktunya ditentukan rentang tanggalnya sendiri KECUALI
+        // orangnya memilih lain. Pilihan yang tidak dikenali diperlakukan
+        // sebagai tidak memilih — bukan galat: ini saringan tampilan, bukan
+        // data yang disimpan. (API-62 nomor 2)
+        $diminta = SatuanWaktu::dariNilai($request->input('satuan'));
+
         return new self(
             user: $user,
-            dari: $request->date('from') ?? now()->subDays(30)->startOfDay(),
-            sampai: $request->date('to') ?? now()->endOfDay(),
+            dari: $dari,
+            sampai: $sampai,
             outlet: $request->outletDiminta(),
+            satuan: $diminta ?? SatuanWaktu::bawaanUntuk($dari, $sampai),
+            satuanDipilih: $diminta !== null,
         );
+    }
+
+    /**
+     * Rentang terpilih ditulis dengan kata: "11 Agustus 2026 – 10 September
+     * 2026". Orang membuka laporan untuk menjawab "bagaimana bulan ini", dan
+     * dua kotak `yyyy-mm-dd` tidak menjawab pertanyaan itu sampai dibaca
+     * dua kali. (API-62 nomor 5)
+     */
+    public function rentangTerbaca(): string
+    {
+        return $this->dari->translatedFormat('j F Y').' – '.$this->sampai->translatedFormat('j F Y');
+    }
+
+    /**
+     * Pintasan rentang tanggal. Tanggalnya dihitung di sini dan ditulis utuh
+     * ke dalam tautannya, bukan disimpan sebagai kata kunci seperti
+     * `?rentang=bulan_ini`: tautan yang menyebut tanggalnya sendiri tetap
+     * berarti sama kalau disalin ke orang lain atau dibuka besok.
+     *
+     * "Semua" mencakup seluruh data YANG BOLEH DILIHAT pengguna ini — kasir
+     * mendapat awal sejarah outletnya, bukan awal sejarah jaringan.
+     *
+     * @return list<array{nama:string,dari:string,sampai:string,aktif:bool}>
+     */
+    public function pintasan(): array
+    {
+        $hariIni = now()->startOfDay();
+
+        $rentang = [
+            'Hari Ini' => [$hariIni, $hariIni],
+            'Kemarin' => [$hariIni->copy()->subDay(), $hariIni->copy()->subDay()],
+            'Minggu Ini' => [$hariIni->copy()->startOfWeek(), $hariIni],
+            '7 Hari Terakhir' => [$hariIni->copy()->subDays(6), $hariIni],
+            'Minggu Lalu' => [
+                $hariIni->copy()->subWeek()->startOfWeek(),
+                $hariIni->copy()->subWeek()->endOfWeek()->startOfDay(),
+            ],
+            'Bulan Ini' => [$hariIni->copy()->startOfMonth(), $hariIni],
+            'Bulan Lalu' => [
+                $hariIni->copy()->subMonthNoOverflow()->startOfMonth(),
+                $hariIni->copy()->subMonthNoOverflow()->endOfMonth()->startOfDay(),
+            ],
+            'Semua' => [$this->awalData(), $hariIni],
+        ];
+
+        $pintasan = [];
+
+        foreach ($rentang as $nama => [$dari, $sampai]) {
+            $pintasan[] = [
+                'nama' => $nama,
+                'dari' => $dari->format('Y-m-d'),
+                'sampai' => $sampai->format('Y-m-d'),
+                'aktif' => $this->dari->format('Y-m-d') === $dari->format('Y-m-d')
+                    && $this->sampai->format('Y-m-d') === $sampai->format('Y-m-d'),
+            ];
+        }
+
+        return $pintasan;
+    }
+
+    /**
+     * Tanggal complaint paling awal yang boleh dilihat pengguna ini, atau hari
+     * ini kalau belum ada satu pun. Lewat `visibleTo()`: awal sejarah jaringan
+     * bukan sesuatu yang boleh disimpulkan kasir dari sebuah tombol.
+     */
+    private function awalData(): Carbon
+    {
+        $awal = Complaint::query()->visibleTo($this->user)->min('created_at');
+
+        return blank($awal) ? now()->startOfDay() : Carbon::parse((string) $awal)->startOfDay();
     }
 
     /**
