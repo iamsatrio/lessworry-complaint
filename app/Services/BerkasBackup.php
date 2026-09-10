@@ -33,13 +33,30 @@ class BerkasBackup
         // perlu disebut bukan apa yang ia tulis, melainkan di mana nilai itu
         // jatuh dan apa yang menghalanginya. (API-60)
         if (! is_dir($dir) && ! @mkdir($dir, 0750, true) && ! is_dir($dir)) {
+            // Tujuannya ternyata BERKAS, bukan direktori — dan itu harus
+            // disebut lebih dulu, sebelum menyalahkan induknya. Di cPanel ini
+            // kejadian nyata: File Manager "New File" alih-alih "New Folder",
+            // atau tarball lama yang kebetulan bernama sama. Diagnosis lama
+            // berbunyi "induknya tidak bisa ditulis" padahal induknya
+            // baik-baik saja, dan orangnya lalu meng-chmod direktori yang
+            // sudah benar lalu tetap gagal. (Tinjauan PR #24)
+            if (is_file($dir)) {
+                throw new RuntimeException(
+                    'Direktori backup tidak bisa dibuat: '.$dir.' sudah ada, tapi itu BERKAS, bukan direktori. '
+                    .'Induknya tidak bermasalah. Pindahkan atau ganti nama berkas itu, atau arahkan '
+                    .'BACKUP_PATH ke tempat lain. Nilai ini dari config backup.path (BACKUP_PATH).'
+                );
+            }
+
             $induk = dirname($dir);
 
             throw new RuntimeException(
                 'Direktori backup tidak bisa dibuat: '.$dir.'. '
                 .(is_dir($induk)
                     ? 'Induknya '.$induk.' ada tapi tidak bisa ditulis.'
-                    : 'Induknya '.$induk.' juga tidak ada.')
+                    : (is_file($induk)
+                        ? 'Induknya '.$induk.' ada tapi itu berkas, bukan direktori.'
+                        : 'Induknya '.$induk.' juga tidak ada.'))
                 .' Nilai ini dari config backup.path (BACKUP_PATH).'
             );
         }

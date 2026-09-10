@@ -118,7 +118,12 @@ class BackupDatabase extends Command
 
         @chmod($tujuan, 0640);
 
+        // Direktorinya ikut disebut. BACKUP_PATH yang kosong atau salah ketik
+        // jatuh ke bawaan storage/app/backups, dan barisnya tetap berbunyi
+        // sukses — orang yang memeriksa ~/backup-care menemukannya kosong dan
+        // tidak punya petunjuk ke mana backupnya pergi. (Tinjauan PR #24)
         $this->info('Backup dibuat: '.basename($tujuan).' ('.$this->ukuran($tujuan).')');
+        $this->line('Di direktori : '.dirname($tujuan));
 
         $this->rotasi($berkas);
 

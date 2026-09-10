@@ -57,7 +57,11 @@ class VerifyBackup extends Command
                 ? $this->pulihkanSqlite($path)
                 : $this->pulihkanMysql($path, $berkas);
         } catch (Throwable $e) {
-            return $this->gagal($e->getMessage());
+            // Yang ini kerusakan sistem — dump rusak, atau pemulihannya
+            // berhenti di tengah. Jejaknya ditinggalkan supaya kejadiannya
+            // bisa ditelusuri waktunya, tapi tanpa nama berkas: nama berkas
+            // pun bisa memuat nama pelanggan.
+            return $this->gagal($e->getMessage(), 'Verifikasi backup gagal saat memulihkan dump.');
         }
 
         $hidup = (int) DB::table('complaints')->count();
@@ -341,9 +345,29 @@ class VerifyBackup extends Command
         }
     }
 
-    private function gagal(string $pesan): int
+    /**
+     * Pesannya untuk LAYAR, tidak pernah untuk log.
+     *
+     * $pesan memuat path yang diketik orang, izin berkas, pemilik, dan uid
+     * pelaksananya. Nama berkas yang diketik petugas rutin memuat nama
+     * pelanggan — "DATA COMPLAINT Budi Santoso 0812.csv" adalah bentuk yang
+     * benar-benar dipakai. Menulisnya ke storage/logs/laravel.log berarti
+     * nama itu mengendap permanen, tanpa rotasi khusus, terbaca siapa pun
+     * yang membuka log untuk urusan lain, dan ikut tersalin setiap kali log
+     * dilampirkan ke laporan masalah.
+     *
+     * Perlakuan yang sama sudah dipakai `complaint:import`: ia hanya memakai
+     * error()/line() dan tidak pernah menyentuh Log. (Tinjauan PR #24)
+     *
+     * $jejak — kalau diisi — adalah kalimat TETAP tanpa satu pun nilai yang
+     * disisipkan, dipakai hanya untuk kegagalan yang memang kerusakan sistem.
+     * Salah ketik path bukan kerusakan sistem dan tidak meninggalkan jejak.
+     */
+    private function gagal(string $pesan, ?string $jejak = null): int
     {
-        Log::error('Verifikasi backup gagal: '.$pesan);
+        if ($jejak !== null) {
+            Log::error($jejak);
+        }
 
         // Keterangannya dicetak sebagai baris tersendiri, bukan satu blok
         // merah: yang salah adalah judulnya, sisanya keterangan yang dibaca.
