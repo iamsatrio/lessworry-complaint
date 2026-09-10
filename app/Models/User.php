@@ -312,6 +312,31 @@ class User extends Authenticatable
         };
     }
 
+    /**
+     * Outlet yang boleh dipilih sebagai saringan laporan. (API-62 nomor 3)
+     *
+     * Kasir hanya outletnya sendiri: daftar pilihannya pun hanya berisi outlet
+     * itu, bukan seluruh sebelas dengan yang lain ditolak saat dipilih. Yang
+     * disembunyikan bukan hanya datanya — JUMLAH OUTLET jaringan itu sendiri
+     * informasi, dan daftar pilihan yang lengkap membocorkannya tanpa satu
+     * baris data pun ikut keluar.
+     *
+     * Divisi melihat complaint yang diteruskan ke divisinya dari outlet mana
+     * pun, jadi nama outlet memang sudah terlihat olehnya di halaman ini —
+     * membatasi pilihannya tidak menyembunyikan apa-apa.
+     *
+     * Pasangannya ada di Outlet::scopeVisibleTo, yang menuliskan aturan yang
+     * SAMA sebagai kueri. Keduanya dijaga sepakat oleh
+     * tests/Feature/SaringanOutletTest.php.
+     */
+    public function canViewOutlet(Outlet $outlet): bool
+    {
+        return match ($this->role) {
+            'kasir' => $this->outlet_id !== null && $outlet->id === $this->outlet_id,
+            default => true,
+        };
+    }
+
     public function roleLabel(): string
     {
         return match ($this->role) {
