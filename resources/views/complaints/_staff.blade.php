@@ -87,10 +87,15 @@
         {{ $pelaku->set_at?->translatedFormat('d M Y, H:i') }}
       </div>
 
-      <details class="link-editor" style="margin-top:10px">
+      {{-- Alasan wajib di sini juga, jadi lipatannya punya jalur gagal yang
+           sama dengan form "Tetapkan pelaku" di bawah. Penandanya memuat id
+           pelakunya supaya yang terbuka kembali hanya baris yang memang
+           ditolak, bukan seluruh daftar. (Tinjauan PR #13) --}}
+      <details class="link-editor" @if(old('_form') === 'ubah-pelaku-'.$pelaku->id) open @endif style="margin-top:10px">
         <summary>Ubah atau cabut</summary>
         <form method="POST" action="{{ route('complaints.responsibles.update',[$complaint,$pelaku]) }}" style="margin-top:12px">
           @csrf @method('PUT')
+          <input type="hidden" name="_form" value="ubah-pelaku-{{ $pelaku->id }}">
           <label for="peran-{{ $pelaku->id }}">Peran dalam kejadian ini</label>
           <select id="peran-{{ $pelaku->id }}" name="peran">
             @foreach(config('complaint.responsible_roles') as $k=>$v)
@@ -114,11 +119,29 @@
     </p>
   @endforelse
 
-  <details class="link-editor" @if($complaint->responsibles->isEmpty()) open @endif style="margin-top:10px">
-    <summary>Tambah pelaku</summary>
+  {{-- Sengaja TIDAK terbuka sendiri. Daftar kandidat memuat satu baris
+       centang dan satu select peran per pengguna sistem — sekitar 1500px di
+       390px — sementara penetapan pelaku adalah tindakan jarang. Selama blok
+       ini terbuka bawaan, semua orang yang hanya ingin memperbarui status
+       harus menggulirinya lebih dulu. Membukanya tetap satu ketukan.
+       (API-38 #6)
+
+       KECUALI saat kesalahan validasinya berasal dari form ini. `alasan`
+       wajib; petugas yang mencentang orang lalu lupa alasannya dikembalikan
+       ke halaman ini dengan spanduk "Periksa lagi sebelum lanjut" di atas —
+       tapi kolom yang dimaksud terlipat kembali, dan ia harus menebak bahwa
+       yang diminta ada di balik lipatan. (Tinjauan PR #13)
+
+       Ditandai lewat `_form`, bukan lewat nama kolomnya: `alasan` dipakai
+       juga oleh form "Ubah atau cabut" di setiap pelaku yang sudah ada, jadi
+       memeriksa $errors->has('alasan') akan membuka form yang salah. --}}
+  <details class="link-editor" id="form-tambah-pelaku"
+           @if(old('_form') === 'tambah-pelaku') open @endif style="margin-top:10px">
+    <summary>Tetapkan pelaku complaint ini</summary>
 
     <form method="POST" action="{{ route('complaints.responsibles.store',$complaint) }}" style="margin-top:12px">
       @csrf
+      <input type="hidden" name="_form" value="tambah-pelaku">
 
       @foreach($kandidat->groups() as $grup)
         @if($grup['collapsed'])
