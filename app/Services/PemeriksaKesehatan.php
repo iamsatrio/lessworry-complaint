@@ -40,6 +40,7 @@ class PemeriksaKesehatan
             'database' => $this->database(),
             'nevira' => $this->nevira(),
             'storage' => $this->storage(),
+            'mail' => $this->mail(),
         ];
 
         // "disabled" bukan kerusakan: itu pilihan yang ditulis di .env
@@ -53,6 +54,52 @@ class PemeriksaKesehatan
             'status' => $rusak ? 'error' : 'ok',
             'checks' => $checks,
         ];
+    }
+
+    /**
+     * Produksi tanpa pengiriman surat = seluruh tim terkunci di login pertama.
+     *
+     * Gerbang verifikasi email berdiri sebelum gerbang ganti password, jadi
+     * `.env` produksi yang terpasang dengan MAIL_MAILER=log tidak menahan satu
+     * orang, ia menahan semua — dan satu-satunya jalan keluarnya menuntut akses
+     * shell ke server. Ini satu-satunya cara mengetahuinya dari luar sebelum
+     * ada yang terkunci lebih dulu. (API-47)
+     *
+     * Di luar produksi, mailer yang hanya mencatat adalah keadaan wajar saat
+     * pengembangan: dilaporkan "disabled", bukan kerusakan, jadi /health tetap
+     * 200 — sama seperti NEVIRA yang sengaja dimatikan.
+     *
+     * config('app.env') dibaca langsung, bukan app()->environment(): nilai yang
+     * terakhir disebut dikunci saat bootstrap dan tidak ikut berubah kalau
+     * konfigurasinya diganti setelahnya.
+     */
+    private function mail(): string
+    {
+        // Diperiksa lebih dulu, dan berlaku di lingkungan mana pun: mailer
+        // yang terpasang tapi tidak bisa dihubungi mengunci setiap akun di
+        // login pertama, dan itu tidak terbaca dari .env mana pun. Penandanya
+        // ditulis PengirimVerifikasiEmail dari HASIL kirim(), lalu dihapus
+        // oleh pengiriman berikutnya yang berhasil. (Tinjauan PR #17 nomor 2)
+        try {
+            $gagalTerakhir = Cache::store(config('health.cache_store'))
+                ->get(PengirimVerifikasiEmail::CACHE_GAGAL);
+        } catch (Throwable) {
+            // Penandanya sendiri tidak terbaca, jadi keadaan mailernya tidak
+            // diketahui — bukan "baik-baik saja". "unknown" tidak dihitung
+            // sebagai kerusakan karena cache yang rusak sudah punya barisnya
+            // sendiri di jawaban ini.
+            return 'unknown';
+        }
+
+        if ($gagalTerakhir) {
+            return 'error';
+        }
+
+        if (! PengirimVerifikasiEmail::hanyaMencatat()) {
+            return 'ok';
+        }
+
+        return config('app.env') === 'production' ? 'error' : 'disabled';
     }
 
     /** Satu query paling ringan yang tetap membuktikan koneksinya hidup. */
