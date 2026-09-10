@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Complaint;
+use App\Services\BerkasMasukan;
 use App\Services\JejakComplaint;
 use App\Services\LaporanImpor;
 use App\Services\PemetaBarisImpor;
@@ -72,9 +73,10 @@ class ImporComplaint extends Command
     public function handle(PemetaBarisImpor $pemeta, JejakComplaint $jejak): int
     {
         $berkas = (string) $this->argument('berkas');
+        $galat = $this->periksaBerkas(new BerkasMasukan($berkas));
 
-        if (! is_readable($berkas)) {
-            $this->error('Berkas tidak terbaca: '.$berkas);
+        if ($galat !== []) {
+            $this->laporkanGalatBerkas($galat);
 
             return self::FAILURE;
         }
@@ -125,13 +127,80 @@ class ImporComplaint extends Command
         $tujuan = $this->simpanLaporan($laporan);
 
         $this->line($laporan->render(now()->format('Y-m-d H:i:s')));
-        $this->info('Laporan disimpan: '.$tujuan);
+
+        if ($tujuan !== null) {
+            $this->info('Laporan disimpan: '.$tujuan);
+        }
 
         if ($kering) {
             $this->warn('Mode hitung saja — tidak ada baris yang ditulis. Tambahkan --tulis untuk menyimpan.');
         }
 
         return $laporan->gagal === [] ? self::SUCCESS : self::FAILURE;
+    }
+
+    /* ---------- berkas masukan ---------- */
+
+    /**
+     * Kenapa berkas ini tidak bisa dipakai — atau kosong kalau bisa. (API-60)
+     *
+     * Tiga keadaan yang dulu bertemu di satu kalimat ("Berkas tidak terbaca")
+     * dipisah, karena tindakannya berbeda: yang tidak ada dicari, yang izinnya
+     * tertutup di-chmod, yang .xlsx diekspor dulu. Pesan yang mengulang apa
+     * yang baru saja diketik tidak menyuruh orangnya melakukan apa pun.
+     *
+     * @return array<int,string> baris pertama judulnya, sisanya keterangan
+     */
+    private function periksaBerkas(BerkasMasukan $berkas): array
+    {
+        if (! $berkas->ada()) {
+            return [
+                'Berkas tidak ditemukan.',
+                'Dicari di: '.$berkas->absolut,
+                ...$berkas->catatanResolusi(),
+                'Kalau berkasnya ada di tempat lain, tulis path lengkapnya. Contoh:',
+                '  php artisan complaint:import ~/Downloads/nama-berkas.csv',
+            ];
+        }
+
+        if ($berkas->direktori()) {
+            return [
+                'Yang ditunjuk direktori, bukan berkas: '.$berkas->absolut,
+                'Sebutkan berkas CSV-nya, bukan folder tempatnya.',
+            ];
+        }
+
+        if (! $berkas->bisaDibaca()) {
+            return [
+                'Berkas ada, tapi izinnya tidak mengizinkan perintah ini membacanya.',
+                'Berkas: '.$berkas->absolut.' (izin '.$berkas->izin().', pemilik '.$berkas->pemilik().')',
+                'Dijalankan sebagai: '.$berkas->penggunaSekarang(),
+                'Perbaiki izinnya, atau jalankan sebagai pemilik berkasnya. Contoh:',
+                '  chmod u+r '.escapeshellarg($berkas->absolut),
+            ];
+        }
+
+        $biner = $berkas->spreadsheetBiner();
+
+        if ($biner !== null) {
+            return [
+                'Berkas ini .'.$biner.', bukan CSV. Perintah ini hanya membaca CSV.',
+                'Berkas: '.$berkas->absolut,
+                'Buka di aplikasi spreadsheet, ekspor jadi CSV (menu File > Save as, atau Download > Comma-separated values), lalu jalankan lagi dengan berkas .csv itu.',
+            ];
+        }
+
+        return [];
+    }
+
+    /** @param  array<int,string>  $galat */
+    private function laporkanGalatBerkas(array $galat): void
+    {
+        $this->error(array_shift($galat) ?? '');
+
+        foreach ($galat as $baris) {
+            $this->line($baris);
+        }
     }
 
     /* ---------- baca ---------- */
@@ -472,20 +541,45 @@ class ImporComplaint extends Command
         return $sebaran;
     }
 
-    private function simpanLaporan(LaporanImpor $laporan): string
+    /**
+     * Simpan laporan, atau katakan kenapa tidak bisa. (API-60)
+     *
+     * Dulu kegagalan menulis lewat tanpa suara dan barisnya tetap berbunyi
+     * "Laporan disimpan: ..." — path yang isinya tidak pernah ada. Setelah
+     * jalan `--tulis`, itu pesan yang paling mahal untuk salah.
+     */
+    private function simpanLaporan(LaporanImpor $laporan): ?string
     {
         $tujuan = (string) ($this->option('laporan') ?: storage_path(
             'app/impor/'.now()->format('Ymd-His').'-'.($laporan->kering ? 'dry-run' : 'tulis').'.md'
         ));
 
-        $folder = dirname($tujuan);
+        $folder = new BerkasMasukan(dirname($tujuan));
 
-        if (! is_dir($folder)) {
-            mkdir($folder, 0755, true);
+        if (! is_dir($folder->absolut) && ! @mkdir($folder->absolut, 0755, true) && ! is_dir($folder->absolut)) {
+            $this->gagalMenyimpanLaporan($tujuan, 'direktorinya tidak ada dan tidak bisa dibuat: '.$folder->absolut);
+
+            return null;
         }
 
-        file_put_contents($tujuan, $laporan->render(now()->format('Y-m-d H:i:s')));
+        $isi = $laporan->render(now()->format('Y-m-d H:i:s'));
+
+        if (@file_put_contents($tujuan, $isi) !== mb_strlen($isi, '8bit')) {
+            $this->gagalMenyimpanLaporan(
+                $tujuan,
+                'direktori '.$folder->absolut.' tidak bisa ditulis (izin '.$folder->izin()
+                .', pemilik '.$folder->pemilik().'; dijalankan sebagai '.$folder->penggunaSekarang().')'
+            );
+
+            return null;
+        }
 
         return $tujuan;
+    }
+
+    private function gagalMenyimpanLaporan(string $tujuan, string $sebab): void
+    {
+        $this->warn('Laporan TIDAK tersimpan ke '.$tujuan.' — '.$sebab.'.');
+        $this->warn('Isi laporannya tetap dicetak di bawah ini. Salin dari layar, atau ulangi dengan --laporan=<path lain>.');
     }
 }

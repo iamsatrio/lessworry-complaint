@@ -32,7 +32,18 @@ class HapusImporComplaint extends Command
         $jumlah = $query->count();
 
         if ($jumlah === 0) {
-            $this->warn('Tidak ada complaint dengan import_source '.$sumber.'. Tidak ada yang dihapus.');
+            // Mengulang label yang baru saja diketik tidak memberi tahu apa
+            // pun. Yang menolong adalah daftar label yang BENAR-BENAR ada —
+            // dibaca dari basis data, bukan ditebak. (API-60)
+            $this->warn('Tidak ada complaint dengan import_source "'.$sumber.'". Tidak ada yang dihapus.');
+
+            $ada = $this->penandaYangAda();
+
+            if ($ada === []) {
+                $this->line('Belum ada satu pun complaint hasil impor di basis data.');
+            } else {
+                $this->line('Penanda yang ada: '.implode(', ', $ada));
+            }
 
             return self::SUCCESS;
         }
@@ -50,5 +61,24 @@ class HapusImporComplaint extends Command
         $this->info($jumlah.' complaint hasil impor '.$sumber.' dihapus.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Penanda impor yang ada beserta jumlah barisnya, terbanyak lebih dulu.
+     *
+     * @return array<int,string>
+     */
+    private function penandaYangAda(): array
+    {
+        return Complaint::query()
+            ->whereNotNull('import_source')
+            ->where('import_source', '!=', '')
+            ->selectRaw('import_source, count(*) as jumlah')
+            ->groupBy('import_source')
+            ->orderByDesc('jumlah')
+            ->limit(20)
+            ->get()
+            ->map(fn (Complaint $baris) => (string) $baris->import_source.' ('.$baris->getAttribute('jumlah').' baris)')
+            ->all();
     }
 }

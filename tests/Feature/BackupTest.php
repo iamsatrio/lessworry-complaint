@@ -129,8 +129,11 @@ class BackupTest extends TestCase
         file_put_contents($luar, gzencode('apa saja'));
 
         try {
+            // Sebabnya disebut sebagai sebab, bukan sebagai pengulangan nama
+            // berkas yang baru saja diketik. (API-60)
             $this->artisan('backup:verify', ['file' => $luar])
-                ->expectsOutputToContain('bukan backup di direktori backup')
+                ->expectsOutputToContain('di luar direktori backup')
+                ->expectsOutputToContain('Direktori backup: '.$this->dir)
                 ->assertFailed();
         } finally {
             @unlink($luar);

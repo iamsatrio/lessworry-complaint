@@ -26,17 +26,28 @@ class BerkasBackup
         $dir = (string) config('backup.path');
 
         if ($dir === '') {
-            throw new RuntimeException('backup.path kosong.');
+            throw new RuntimeException('backup.path kosong — isi BACKUP_PATH di .env, atau bawaannya di config/backup.php.');
         }
 
+        // Nilainya datang dari config, bukan dari yang mengetik — jadi yang
+        // perlu disebut bukan apa yang ia tulis, melainkan di mana nilai itu
+        // jatuh dan apa yang menghalanginya. (API-60)
         if (! is_dir($dir) && ! @mkdir($dir, 0750, true) && ! is_dir($dir)) {
-            throw new RuntimeException('Direktori backup tidak bisa dibuat: '.$dir);
+            $induk = dirname($dir);
+
+            throw new RuntimeException(
+                'Direktori backup tidak bisa dibuat: '.$dir.'. '
+                .(is_dir($induk)
+                    ? 'Induknya '.$induk.' ada tapi tidak bisa ditulis.'
+                    : 'Induknya '.$induk.' juga tidak ada.')
+                .' Nilai ini dari config backup.path (BACKUP_PATH).'
+            );
         }
 
         $nyata = realpath($dir);
 
         if ($nyata === false) {
-            throw new RuntimeException('Direktori backup tidak bisa dibaca: '.$dir);
+            throw new RuntimeException('Direktori backup tidak bisa dibaca: '.$dir.'. Nilai ini dari config backup.path (BACKUP_PATH).');
         }
 
         return $nyata;
@@ -82,12 +93,27 @@ class BerkasBackup
     {
         $nyata = realpath($path);
 
-        if ($nyata === false) {
-            return false;
-        }
+        return $nyata !== false && $this->didalamDirektori($nyata) && $this->berpolaBackup($nyata);
+    }
 
-        return str_starts_with($nyata, $this->direktori().DIRECTORY_SEPARATOR)
-            && preg_match(self::POLA, basename($nyata)) === 1;
+    /**
+     * Dua syarat `didalam()` dipisah supaya bisa DITANYAI satu per satu.
+     *
+     * Bukan kenyamanan: "bukan backup di direktori backup" menutup dua sebab
+     * yang tindakannya berbeda — berkas di folder lain (pindahkan atau tulis
+     * path aslinya) dan berkas di folder yang benar dengan nama yang tidak
+     * berpola (bukan dump buatan sistem ini). (API-60)
+     */
+    public function didalamDirektori(string $path): bool
+    {
+        $nyata = realpath($path);
+
+        return $nyata !== false && str_starts_with($nyata, $this->direktori().DIRECTORY_SEPARATOR);
+    }
+
+    public function berpolaBackup(string $path): bool
+    {
+        return preg_match(self::POLA, basename($path)) === 1;
     }
 
     /**

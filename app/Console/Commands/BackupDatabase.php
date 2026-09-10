@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\BerkasBackup;
+use App\Services\BerkasMasukan;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -53,7 +54,14 @@ class BackupDatabase extends Command
         $kunci = fopen($dir.'/.lock', 'c');
 
         if ($kunci === false) {
-            return $this->gagal('Kunci backup tidak bisa dibuat di '.$dir);
+            // Sebabnya hampir selalu izin direktori, dan itulah yang perlu
+            // dibaca — bukan pengulangan path yang sudah ada di config. (API-60)
+            $folder = new BerkasMasukan($dir);
+
+            return $this->gagal(
+                'kunci backup tidak bisa dibuat di '.$dir.'. Direktori itu berizin '.$folder->izin()
+                .', pemilik '.$folder->pemilik().'; perintah dijalankan sebagai '.$folder->penggunaSekarang().'.'
+            );
         }
 
         if (! flock($kunci, LOCK_EX | LOCK_NB)) {
