@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Mail\VerifikasiEmail;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
@@ -30,6 +31,38 @@ class PengirimVerifikasiEmail
     public const BATAS = 3;
 
     public const JENDELA_DETIK = 600;
+
+    /**
+     * Penanda "pengiriman terakhir gagal", dibaca /health.
+     *
+     * Tanpa ini /health menyimpulkan keberhasilan dari konfigurasi: ia membalas
+     * `mail: ok` begitu mailernya bukan log/array, tanpa pernah tahu apakah
+     * mailer itu bisa dihubungi. Produksi dengan SMTP terpasang tapi mati —
+     * kredensial kedaluwarsa, host pindah, port ditutup firewall — mengunci
+     * SETIAP akun di login pertama sementara pemantauannya tetap hijau. Itu
+     * keadaan yang paling mungkin terjadi setelah deploy pertama berhasil.
+     * (Tinjauan PR #17 nomor 2)
+     *
+     * Yang dicatat hasilnya, bukan SMTP-nya yang ditanya: memanggil SMTP dari
+     * /health membuat setiap ketukan pemantau jadi satu koneksi keluar —
+     * kesalahan yang sudah dihindari pemeriksaan NEVIRA.
+     *
+     * Disimpan di store khusus /health (config/health.php), bukan store
+     * bawaan, dengan alasan yang sama seperti hasil pemeriksaan NEVIRA: store
+     * bawaan produksi adalah `database`, dan penandanya harus tetap terbaca
+     * justru saat database yang mati.
+     */
+    public const CACHE_GAGAL = 'health:mail:gagal';
+
+    /**
+     * Penandanya kedaluwarsa sendiri setelah 24 jam.
+     *
+     * Bukan supaya papannya cepat hijau lagi: selama SMTP-nya benar-benar
+     * mati, setiap percobaan login memperbarui penanda ini, jadi /health tetap
+     * merah. Yang dihindari adalah satu kegagalan sesaat berbulan-bulan lalu
+     * mengunci papan pada sistem yang sejak itu tidak pernah mengirim apa pun.
+     */
+    public const CACHE_GAGAL_DETIK = 86400;
 
     /**
      * Mailer yang menerima surat lalu tidak mengantarkannya ke mana pun.
@@ -91,10 +124,38 @@ class PengirimVerifikasiEmail
                 'error' => $e->getMessage(),
             ]);
 
+            $this->catatHasil(gagal: true);
+
             return self::GAGAL;
         }
 
+        // Satu pengiriman yang berhasil membuktikan mailernya hidup — itu yang
+        // membersihkan penandanya, bukan lewatnya waktu.
+        $this->catatHasil(gagal: false);
+
         return self::TERKIRIM;
+    }
+
+    /**
+     * Catat hasil pengiriman terakhir untuk dibaca /health.
+     *
+     * Kegagalan menulis penanda tidak boleh menggagalkan pengiriman: cache
+     * yang tidak bisa ditulis adalah kerusakan tersendiri, dan /health sudah
+     * punya barisnya sendiri untuk itu. Yang tidak boleh terjadi adalah surat
+     * yang sudah terkirim dilaporkan gagal hanya karena catatannya tidak bisa
+     * ditulis.
+     */
+    private function catatHasil(bool $gagal): void
+    {
+        try {
+            $cache = Cache::store(config('health.cache_store'));
+
+            $gagal
+                ? $cache->put(self::CACHE_GAGAL, true, self::CACHE_GAGAL_DETIK)
+                : $cache->forget(self::CACHE_GAGAL);
+        } catch (Throwable) {
+            // Sengaja diam.
+        }
     }
 
     /**

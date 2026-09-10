@@ -25,7 +25,22 @@
          tidak akan pernah datang, lalu mencari kesalahan di tempat yang salah.
          Tautannya SENGAJA tidak ditampilkan: sekali pola itu ada di kode, ia
          akan sampai ke produksi dan gerbang verifikasinya lenyap. (API-47) --}}
-    @if(\App\Services\PengirimVerifikasiEmail::hanyaMencatat())
+    @if($gagalKirim)
+      {{-- Pengiriman terakhir gagal. Halaman ini tidak boleh menyebut alamat
+           email dan tidak boleh menyuruh menunggu — tidak ada yang sedang
+           dalam perjalanan. Yang berguna hanya: jangan menunggu, coba lagi,
+           lalu hubungi Admin. --}}
+      <p style="margin:0 0 14px">
+        <b>Suratnya tidak jadi terkirim.</b>
+        Tidak ada tautan yang sedang dalam perjalanan, jadi menunggu di kotak
+        suratmu tidak ada gunanya.
+      </p>
+      <p class="hint" style="margin:0 0 18px">
+        Ini masalah di sisi sistem, bukan di akunmu. Coba tombol di bawah sekali
+        lagi; kalau tetap gagal, hubungi Admin — dia bisa menandai akunmu
+        terverifikasi secara manual.
+      </p>
+    @elseif(\App\Services\PengirimVerifikasiEmail::hanyaMencatat())
       <p style="margin:0 0 14px">
         <b>Surat tidak dikirim ke mana pun.</b>
         Sistem ini sedang berjalan tanpa pengiriman email, jadi tidak ada surat

@@ -22,7 +22,22 @@ class EmailVerificationController extends Controller
             return redirect()->to($this->tujuan($user));
         }
 
-        return view('auth.verifikasi', ['user' => $user]);
+        return view('auth.verifikasi', [
+            'user' => $user,
+            // Yang menentukan kalimat di kartu adalah HASIL pengiriman, bukan
+            // nilai mail.default. Sebelumnya viewnya bercabang pada bentuk
+            // mailernya saja, jadi SMTP yang terpasang tapi gagal terkirim
+            // tetap mencetak "Tautan verifikasi dikirim ke …" — di layar yang
+            // sama dengan spanduk "Surat gagal dikirim". Orang membaca kalimat
+            // yang menyebut alamatnya sendiri, lalu menunggu surat yang tidak
+            // akan datang. Itu jalur yang terjadi di produksi; log/array hanya
+            // ada di mesin pengembang. (Tinjauan PR #17)
+            //
+            // Datanya sudah ada di tangan: AuthController menitipkannya saat
+            // login, resend() saat kirim ulang, dan EnsureEmailVerified
+            // me-reflash supaya selamat melewati pantulan.
+            'gagalKirim' => (bool) session('kirim_gagal'),
+        ]);
     }
 
     public function resend(Request $request)
@@ -55,7 +70,10 @@ class EmailVerificationController extends Controller
                     .' kali dalam 10 menit terakhir. Tunggu sebentar lalu coba lagi, '
                     .'atau hubungi Admin kalau suratnya tidak pernah sampai.',
             ]),
-            default => back()->withErrors([
+            // Spanduk galat saja tidak cukup: tanpa penanda ini badan kartunya
+            // tetap bilang tautannya sudah dikirim, dan halaman yang sama
+            // membantah dirinya sendiri.
+            default => back()->with('kirim_gagal', true)->withErrors([
                 'kirim' => 'Surat gagal dikirim. Ini masalah di sisi sistem, bukan di akunmu — hubungi Admin.',
             ]),
         };

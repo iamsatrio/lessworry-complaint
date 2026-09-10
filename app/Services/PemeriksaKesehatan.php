@@ -75,6 +75,26 @@ class PemeriksaKesehatan
      */
     private function mail(): string
     {
+        // Diperiksa lebih dulu, dan berlaku di lingkungan mana pun: mailer
+        // yang terpasang tapi tidak bisa dihubungi mengunci setiap akun di
+        // login pertama, dan itu tidak terbaca dari .env mana pun. Penandanya
+        // ditulis PengirimVerifikasiEmail dari HASIL kirim(), lalu dihapus
+        // oleh pengiriman berikutnya yang berhasil. (Tinjauan PR #17 nomor 2)
+        try {
+            $gagalTerakhir = Cache::store(config('health.cache_store'))
+                ->get(PengirimVerifikasiEmail::CACHE_GAGAL);
+        } catch (Throwable) {
+            // Penandanya sendiri tidak terbaca, jadi keadaan mailernya tidak
+            // diketahui — bukan "baik-baik saja". "unknown" tidak dihitung
+            // sebagai kerusakan karena cache yang rusak sudah punya barisnya
+            // sendiri di jawaban ini.
+            return 'unknown';
+        }
+
+        if ($gagalTerakhir) {
+            return 'error';
+        }
+
         if (! PengirimVerifikasiEmail::hanyaMencatat()) {
             return 'ok';
         }
