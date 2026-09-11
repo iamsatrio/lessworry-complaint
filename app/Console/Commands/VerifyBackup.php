@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\BerkasBackup;
+use App\Services\BerkasMasukan;
 use App\Services\PemindaiDumpSql;
 use App\Services\PemulihSqliteTerkurung;
 use Illuminate\Console\Command;
@@ -56,7 +57,11 @@ class VerifyBackup extends Command
                 ? $this->pulihkanSqlite($path)
                 : $this->pulihkanMysql($path, $berkas);
         } catch (Throwable $e) {
-            return $this->gagal($e->getMessage());
+            // Yang ini kerusakan sistem — dump rusak, atau pemulihannya
+            // berhenti di tengah. Jejaknya ditinggalkan supaya kejadiannya
+            // bisa ditelusuri waktunya, tapi tanpa nama berkas: nama berkas
+            // pun bisa memuat nama pelanggan.
+            return $this->gagal($e->getMessage(), 'Verifikasi backup gagal saat memulihkan dump.');
         }
 
         $hidup = (int) DB::table('complaints')->count();
@@ -77,17 +82,71 @@ class VerifyBackup extends Command
         return self::SUCCESS;
     }
 
+    /**
+     * Berkas yang diminta, atau alasan yang bisa ditindaklanjuti. (API-60)
+     *
+     * Dulu empat keadaan berbeda keluar sebagai satu kalimat yang mengulang
+     * nama berkas yang baru saja diketik: tidak ada, direktori, izinnya
+     * tertutup, dan ada tapi bukan dump sistem ini. Yang terakhir pun dua hal
+     * — folder lain, atau nama yang tidak berpola.
+     */
     private function pilih(BerkasBackup $berkas, string $file): string
     {
-        $path = str_contains($file, DIRECTORY_SEPARATOR)
-            ? $file
-            : rtrim($berkas->direktori(), '/').'/'.$file;
+        // Nama polos diukur dari direktori backup; path yang memuat pemisah
+        // diukur dari direktori kerja, seperti path lain di terminal.
+        $masukan = new BerkasMasukan(
+            $file,
+            str_contains($file, DIRECTORY_SEPARATOR) ? null : $berkas->direktori()
+        );
 
-        if (! $berkas->didalam($path)) {
-            throw new \RuntimeException('Berkas itu bukan backup di direktori backup: '.$file);
+        if (! $masukan->ada()) {
+            throw new \RuntimeException($this->rangkai([
+                'berkas backup tidak ditemukan.',
+                'Dicari di: '.$masukan->absolut,
+                ...$masukan->catatanResolusi(),
+                'Direktori backup: '.$berkas->direktori(),
+                'Tanpa argumen, perintah ini memakai dump terbaru di direktori itu: php artisan backup:verify',
+            ]));
         }
 
-        return (string) realpath($path);
+        if ($masukan->direktori()) {
+            throw new \RuntimeException($this->rangkai([
+                'yang ditunjuk direktori, bukan berkas: '.$masukan->absolut,
+                'Sebutkan satu berkas dump, atau jalankan tanpa argumen untuk memakai yang terbaru.',
+            ]));
+        }
+
+        if (! $masukan->bisaDibaca()) {
+            throw new \RuntimeException($this->rangkai([
+                'berkas ada, tapi izinnya tidak mengizinkan perintah ini membacanya.',
+                'Berkas: '.$masukan->absolut.' (izin '.$masukan->izin().', pemilik '.$masukan->pemilik().')',
+                'Dijalankan sebagai: '.$masukan->penggunaSekarang(),
+            ]));
+        }
+
+        if (! $berkas->didalamDirektori($masukan->absolut)) {
+            throw new \RuntimeException($this->rangkai([
+                'berkas itu ada, tapi di luar direktori backup — perintah ini hanya memulihkan dump miliknya sendiri.',
+                'Berkas: '.$masukan->absolut,
+                'Direktori backup: '.$berkas->direktori(),
+            ]));
+        }
+
+        if (! $berkas->berpolaBackup($masukan->absolut)) {
+            throw new \RuntimeException($this->rangkai([
+                'berkas itu ada di direktori backup, tapi namanya tidak berpola dump sistem ini, jadi ia bukan backup yang dibuat `backup:database`.',
+                'Berkas: '.$masukan->absolut,
+                'Pola namanya: db-YYYY-MM-DD-HHMMSS.sql.gz',
+            ]));
+        }
+
+        return $masukan->absolut;
+    }
+
+    /** @param  array<int,string>  $baris */
+    private function rangkai(array $baris): string
+    {
+        return implode(PHP_EOL.'  ', $baris);
     }
 
     /**
@@ -286,10 +345,39 @@ class VerifyBackup extends Command
         }
     }
 
-    private function gagal(string $pesan): int
+    /**
+     * Pesannya untuk LAYAR, tidak pernah untuk log.
+     *
+     * $pesan memuat path yang diketik orang, izin berkas, pemilik, dan uid
+     * pelaksananya. Nama berkas yang diketik petugas rutin memuat nama
+     * pelanggan — "DATA COMPLAINT Budi Santoso 0812.csv" adalah bentuk yang
+     * benar-benar dipakai. Menulisnya ke storage/logs/laravel.log berarti
+     * nama itu mengendap permanen, tanpa rotasi khusus, terbaca siapa pun
+     * yang membuka log untuk urusan lain, dan ikut tersalin setiap kali log
+     * dilampirkan ke laporan masalah.
+     *
+     * Perlakuan yang sama sudah dipakai `complaint:import`: ia hanya memakai
+     * error()/line() dan tidak pernah menyentuh Log. (Tinjauan PR #24)
+     *
+     * $jejak — kalau diisi — adalah kalimat TETAP tanpa satu pun nilai yang
+     * disisipkan, dipakai hanya untuk kegagalan yang memang kerusakan sistem.
+     * Salah ketik path bukan kerusakan sistem dan tidak meninggalkan jejak.
+     */
+    private function gagal(string $pesan, ?string $jejak = null): int
     {
-        Log::error('Verifikasi backup gagal: '.$pesan);
-        $this->error('Verifikasi gagal: '.$pesan);
+        if ($jejak !== null) {
+            Log::error($jejak);
+        }
+
+        // Keterangannya dicetak sebagai baris tersendiri, bukan satu blok
+        // merah: yang salah adalah judulnya, sisanya keterangan yang dibaca.
+        $baris = explode(PHP_EOL, $pesan);
+
+        $this->error('Verifikasi gagal: '.array_shift($baris));
+
+        foreach ($baris as $keterangan) {
+            $this->line($keterangan);
+        }
 
         return self::FAILURE;
     }

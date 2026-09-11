@@ -27,6 +27,37 @@ unik di tingkat basis data) — bukan `--sumber`. Jadi berkas yang sama yang
 diimpor dua kali dengan label berbeda tetap dikenali, dan tidak menggandakan
 apa pun.
 
+### Path berkasnya dibaca dari akar proyek
+
+Path yang tidak diawali `/` **diukur dari direktori kerja**, dan direktori
+kerjanya adalah akar proyek — bukan folder tempat berkasnya diunduh. Berkas
+hasil unduhan biasanya ada di `~/Downloads`, jadi menuliskan namanya saja
+membuat perintah mencari di tempat yang salah:
+
+```bash
+php artisan complaint:import "DATA COMPLAINT.csv"          # dicari di <akar proyek>/DATA COMPLAINT.csv
+php artisan complaint:import ~/Downloads/"DATA COMPLAINT.csv"   # yang dimaksud
+```
+
+**Tulis path lengkapnya.** Kalau path-nya berada di dalam tanda kutip, tanda
+`~` tidak diperluas — shell hanya memperluasnya di luar kutip — jadi tulis
+`/Users/nama/Downloads/berkas.csv` utuh.
+
+Kalau berkasnya tidak ketemu, pesannya menyebut **path absolut yang tadi
+dicari** berikut hasil resolusi path relatifnya. Perintah ini tidak menyisir
+folder mana pun mencari berkas yang namanya mirip; yang dikatakannya hanya di
+mana ia mencari.
+
+Tiga keadaan dibedakan, karena tindakannya berbeda:
+
+| Yang dikatakan | Artinya |
+|---|---|
+| `Berkas tidak ditemukan.` | Path-nya salah. Cocokkan dengan baris `Dicari di:`. |
+| `Berkas ada, tapi izinnya tidak mengizinkan…` | Berkasnya benar; izin aksesnya yang menutup. Pesannya menyebut izin, pemilik, dan sebagai siapa perintah dijalankan. |
+| `Berkas ini .xlsx, bukan CSV.` | Berkasnya belum diekspor. Buka di aplikasi spreadsheet, ekspor jadi CSV, jalankan lagi dengan berkas `.csv`-nya. |
+
+### Bendera
+
 | Bendera | Arti |
 |---|---|
 | `--tulis` | Benar-benar menyimpan. Tanpa ini hanya menghitung. |
@@ -98,6 +129,10 @@ php artisan complaint:import-hapus spreadsheet-2026-08
 Ini satu-satunya penghapusan complaint yang diizinkan di sistem ini, dan hanya
 mengenai baris yang punya `import_source`. Complaint yang dicatat orang tidak
 bisa disentuh dari sini.
+
+Penanda yang salah ketik tidak menghapus apa pun, dan perintahnya menjawab
+dengan **daftar penanda yang benar-benar ada** di basis data beserta jumlah
+barisnya — bukan dengan mengulang penanda yang baru saja diketik.
 
 ## Yang perlu diketahui tentang datanya
 
