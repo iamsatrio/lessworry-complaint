@@ -57,6 +57,13 @@ class UserController extends Controller
             'division' => ['nullable', Rule::in(array_keys(config('complaint.divisions')))],
         ]);
 
+        // Alamat disimpan huruf kecil, sama seperti di update(). (API-37 #2)
+        // `Rule::unique` peka huruf besar-kecil di SQLite, jadi tanpa ini
+        // `Budi@lessworry.id` dan `budi@lessworry.id` bisa berdiri sebagai dua
+        // akun untuk satu kotak surat yang sama — dan verifikasi email hanya
+        // membuktikan satu di antaranya.
+        $data['email'] = mb_strtolower(trim($data['email']));
+
         // Password sementara dibuat sistem, bukan diketik admin —
         // supaya tidak jatuh ke pola yang mudah ditebak seluruh outlet.
         $temporary = Str::password(12, symbols: false);
@@ -109,9 +116,22 @@ class UserController extends Controller
             'is_active' => ['nullable', 'boolean'],
         ]);
 
+        // Dinormalkan SEKALI, lalu nilai yang sama itu yang dibandingkan dan
+        // yang disimpan. (API-37 nomor 2)
+        //
+        // Sebelumnya perbandingannya memakai bentuk yang dinormalkan sementara
+        // fill() menulis nilai MENTAH. Admin yang mengubah `Satrio@` jadi
+        // `satrio@` menghasilkan $emailBerubah === false — benar, verifikasinya
+        // memang tidak perlu direset — tapi kolomnya tetap berubah, jadi tidak
+        // ada baris jejak audit, dan `sha1($user->email)` bergeser sehingga
+        // setiap tautan verifikasi yang sudah beredar mati tanpa ada yang tahu
+        // kenapa.
+        if (isset($data['email'])) {
+            $data['email'] = mb_strtolower(trim($data['email']));
+        }
+
         $emailLama = $user->email;
-        $emailBerubah = isset($data['email'])
-            && mb_strtolower(trim($data['email'])) !== mb_strtolower($emailLama);
+        $emailBerubah = isset($data['email']) && $data['email'] !== mb_strtolower($emailLama);
 
         // Kolom yang tidak dikirim berarti "jangan diubah", bukan "matikan".
         // $request->boolean() memperlakukan kolom absen sebagai false, jadi
@@ -226,6 +246,14 @@ class UserController extends Controller
     {
         $this->authorizeAdmin($request);
 
+        // Penjagaan lebih dulu, validasi sesudahnya. (API-37 nomor 5)
+        // Urutan sebaliknya membalas "Tulis alasannya" kepada admin yang
+        // menandai akun yang sudah terverifikasi — menyuruh mengerjakan
+        // sesuatu yang tidak ada gunanya dikerjakan, lalu menolaknya juga.
+        if ($user->hasVerifiedEmail()) {
+            return back()->with('warning', 'Akun '.$user->name.' sudah terverifikasi.');
+        }
+
         $data = $request->validate([
             'reason' => ['required', 'string', 'min:5', 'max:500'],
         ], [
@@ -233,10 +261,6 @@ class UserController extends Controller
         ], [
             'reason' => 'alasan',
         ]);
-
-        if ($user->hasVerifiedEmail()) {
-            return back()->with('warning', 'Akun '.$user->name.' sudah terverifikasi.');
-        }
 
         $user->markEmailAsVerified();
         $jejak->emailDiverifikasiManual($user, $request->user(), $data['reason']);
