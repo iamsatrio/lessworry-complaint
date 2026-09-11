@@ -89,6 +89,36 @@ class User extends Authenticatable
         return $domain === '' ? $samar : $samar.'@'.$domain;
     }
 
+    /**
+     * Gerbang yang masih menahan akun ini, atau null kalau sudah bebas.
+     *
+     * Dua gerbang berdiri antara login dan memakai sistem: verifikasi email
+     * (API-35) dan penggantian password sementara (API-14). Keduanya
+     * memantulkan balik setiap halaman lain, dan menu yang seluruh tautannya
+     * memantul balik terbaca sebagai sistem yang rusak — pada login pertama
+     * pegawai baru, itu kesan pertamanya. (API-38 #12)
+     *
+     * URUTANNYA BAGIAN DARI JAWABANNYA, bukan selera penulisan. Verifikasi
+     * berdiri di depan: `/password` sendiri memantulkan akun yang emailnya
+     * belum terverifikasi ke `/verifikasi-email`. Kalau `must_change_password`
+     * diperiksa lebih dulu, akun yang belum terverifikasi membaca "ganti
+     * password dulu" — kalimat yang menyuruh mengerjakan hal yang belum bisa
+     * dikerjakan, dan kesan "sistem rusak" kembali dengan bunyi yang lebih
+     * meyakinkan.
+     *
+     * Satu tempat yang tahu, dua pemanggil yang bertanya: navigasi dan tombol
+     * melayang. Menumpuk dua @if di tampilan membuat urutan itu bisa terbalik
+     * diam-diam saat salah satunya diubah. (Tinjauan PR #14)
+     */
+    public function gerbangTertunda(): ?string
+    {
+        return match (true) {
+            ! $this->hasVerifiedEmail() => 'verifikasi',
+            $this->must_change_password => 'password',
+            default => null,
+        };
+    }
+
     /* ---------- Peran (API-13) ---------- */
 
     /**

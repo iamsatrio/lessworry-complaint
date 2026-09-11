@@ -804,6 +804,58 @@ class Complaint extends Model
     }
 
     /**
+     * Tautan WhatsApp ke pelapor, lengkap dengan pembuka pesan.
+     *
+     * Mengabari pelanggan adalah langkah terakhir yang wajib pada setiap
+     * penutupan, dan dua dari tiga kanal masuk memang WhatsApp. (API-38 #10)
+     *
+     * Nomor Indonesia ditulis tim dalam beberapa bentuk: 08xx, 8xx, 62xx,
+     * +62xx, 0062xx, dengan spasi atau tanda hubung. wa.me hanya menerima
+     * angka berformat internasional tanpa tanda apa pun. Yang tidak bisa
+     * dinormalkan dengan yakin dibalas null, dan halaman jatuh ke tautan
+     * `tel:` alih-alih menebak.
+     *
+     * Kolom ini TIDAK divalidasi bentuknya di mana pun — StoreComplaintRequest
+     * hanya menuntut string maksimal 30 karakter, dan importir mengambil kolom
+     * "No HP" apa adanya. 545 nomor hasil ketik tangan bertahun-tahun masuk
+     * lewat jalan itu. Jadi yang menentukan benar-tidaknya sebuah tautan wa.me
+     * hanya fungsi ini. (Tinjauan PR #14 nomor 2)
+     */
+    public function waLink(?string $pesan = null): ?string
+    {
+        $angka = preg_replace('/\D+/', '', (string) $this->reporter_phone) ?? '';
+
+        // `00` adalah awalan panggilan internasional, bentuk lain dari `+`.
+        // Dibuang LEBIH DULU: tanpa ini, aturan "diawali 0 → ganti 62" di
+        // bawah mengubah 0062812345678 jadi 62062812345678 — nomor yang lolos
+        // pemeriksaan panjang dan berakhir sebagai pesan ke orang lain.
+        if (str_starts_with($angka, '00')) {
+            $angka = substr($angka, 2);
+        }
+
+        if (str_starts_with($angka, '0')) {
+            $angka = '62'.substr($angka, 1);
+        } elseif (str_starts_with($angka, '8')) {
+            // Ditulis tanpa nol depan, mis. 81234567890.
+            $angka = '62'.$angka;
+        }
+
+        // Yang dituntut `628`, bukan `62`. Komentar lama menulis "nomor seluler
+        // Indonesia terpendek", tapi kodenya tidak pernah memeriksa nomornya
+        // seluler: 0211234567 (telepon rumah Jakarta) jadi 62211234567, lolos,
+        // dan WhatsApp dikirim ke nomor yang tidak punya WhatsApp. Seluruh
+        // nomor seluler Indonesia diawali 08 / 628.
+        //
+        // 628 + 8 digit adalah yang terpendek yang masuk akal.
+        if (! str_starts_with($angka, '628') || strlen($angka) < 11 || strlen($angka) > 15) {
+            return null;
+        }
+
+        return 'https://wa.me/'.$angka
+            .(filled($pesan) ? '?text='.rawurlencode($pesan) : '');
+    }
+
+    /**
      * Complaint dari era sebelum NEVIRA dipakai. (API-28)
      *
      * DITURUNKAN dari tanggalnya, bukan disimpan sebagai kolom boolean, dan
