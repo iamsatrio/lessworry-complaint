@@ -36,11 +36,20 @@ final class GrafikLaporan
     private ?array $bulanan = null;
 
     /**
-     * @param  EloquentCollection<int,Complaint>  $complaints  sudah disaring wewenang dan rentang tanggal
+     * @param  EloquentCollection<int,Complaint>  $complaints  sudah disaring wewenang, rentang tanggal, dan outlet
+     * @param  int|null  $outletId  outlet yang sedang disaring, null berarti semua
+     *
+     * $outletId WAJIB ditulis, tanpa nilai bawaan: lupa mengisinya tidak
+     * membocorkan data apa pun — koleksi complaint-nya sudah disaring — tapi
+     * membuat pembagi grafik pertama tetap sebelas outlet padahal yang
+     * digambar satu. Angkanya jadi sebelas kali lebih kecil dan tetap terlihat
+     * masuk akal. Itu persis kelas kesalahan yang berkas ini ada untuk
+     * mencegahnya.
      */
     public function __construct(
         private readonly User $user,
         private readonly EloquentCollection $complaints,
+        private readonly ?int $outletId,
     ) {}
 
     /* ---------- Grafik 1 dan 3: per outlet per bulan ---------- */
@@ -127,6 +136,11 @@ final class GrafikLaporan
         $baris = Complaint::query()
             ->visibleTo($this->user)
             ->whereNotNull('outlet_id')
+            // Saringan outlet halaman ikut ke pembagi. Kalau tidak, memilih
+            // satu outlet menggambar complaint outlet itu dibagi sebelas —
+            // garis yang turun drastis tanpa satu pun angkanya salah.
+            // (API-62 nomor 3)
+            ->when($this->outletId !== null, fn ($q) => $q->where('outlet_id', $this->outletId))
             ->selectRaw('outlet_id, MIN(created_at) as mulai')
             ->groupBy('outlet_id')
             ->get();

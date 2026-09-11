@@ -129,12 +129,90 @@ class BackupTest extends TestCase
         file_put_contents($luar, gzencode('apa saja'));
 
         try {
+            // Sebabnya disebut sebagai sebab, bukan sebagai pengulangan nama
+            // berkas yang baru saja diketik. (API-60)
             $this->artisan('backup:verify', ['file' => $luar])
-                ->expectsOutputToContain('bukan backup di direktori backup')
+                ->expectsOutputToContain('di luar direktori backup')
+                ->expectsOutputToContain('Direktori backup: '.$this->dir)
                 ->assertFailed();
         } finally {
             @unlink($luar);
         }
+    }
+
+    /**
+     * Path yang diketik orang tidak boleh mengendap di log aplikasi.
+     *
+     * Nama berkas yang diketik petugas rutin memuat nama pelanggan — bentuk
+     * "DATA COMPLAINT <nama> <telepon>.csv" benar-benar dipakai. Log aplikasi
+     * tidak punya rotasi khusus, terbaca siapa pun yang membukanya untuk
+     * urusan lain, dan ikut tersalin saat dilampirkan ke laporan masalah.
+     * Perlakuan yang benar sudah dipakai `complaint:import`. (Tinjauan PR #24)
+     */
+    public function test_verify_tidak_menulis_path_yang_diketik_ke_log(): void
+    {
+        Log::spy();
+
+        $luar = storage_path('app/DATA COMPLAINT Uji Pelapor 0812.sql.gz');
+        file_put_contents($luar, gzencode('apa saja'));
+
+        try {
+            $this->artisan('backup:verify', ['file' => $luar])->assertFailed();
+        } finally {
+            @unlink($luar);
+        }
+
+        // Salah ketik path adalah galat orang, bukan kerusakan sistem: tidak
+        // ada yang perlu ditinggalkan sebagai jejak sama sekali.
+        Log::shouldNotHaveReceived('error');
+    }
+
+    public function test_jejak_dump_rusak_tidak_memuat_nama_berkas_maupun_path(): void
+    {
+        Log::spy();
+
+        // Bernama benar, isinya bukan database — kegagalannya baru terlihat
+        // saat dipulihkan, dan itu memang kerusakan sistem.
+        file_put_contents($this->dir.'/db-2030-01-01-020000.sql.gz', gzencode(str_repeat('bukan database', 500)));
+
+        $this->artisan('backup:verify')->assertFailed();
+
+        // Jejaknya ditinggalkan, tapi kalimatnya TETAP — tanpa satu pun nilai
+        // yang disisipkan. Nama berkas pun bisa memuat nama pelanggan.
+        Log::shouldHaveReceived('error')
+            ->withArgs(fn (string $pesan) => ! str_contains($pesan, 'db-2030-01-01-020000')
+                && ! str_contains($pesan, $this->dir))
+            ->atLeast()->once();
+    }
+
+    /**
+     * BACKUP_PATH yang menunjuk BERKAS harus disebut apa adanya.
+     *
+     * Cabangnya dulu cuma dua — induk ada atau tidak — jadi tujuannya yang
+     * ternyata berkas didiagnosis sebagai "induknya tidak bisa ditulis",
+     * padahal induknya baik-baik saja. Orangnya lalu meng-chmod direktori yang
+     * sudah benar dan tetap gagal. (Tinjauan PR #24)
+     */
+    public function test_backup_path_yang_menunjuk_berkas_menyebut_sebab_yang_benar(): void
+    {
+        $bukanDir = $this->dir.'/bukandir';
+        file_put_contents($bukanDir, 'x');
+        config(['backup.path' => $bukanDir]);
+
+        $this->artisan('backup:database')
+            ->expectsOutputToContain('itu BERKAS, bukan direktori')
+            ->doesntExpectOutputToContain('Induknya '.$this->dir.' ada tapi tidak bisa ditulis')
+            ->assertFailed();
+
+        @unlink($bukanDir);
+    }
+
+    /** Baris suksesnya menyebut ke mana backupnya jatuh. */
+    public function test_baris_sukses_menyebut_direktorinya(): void
+    {
+        $this->artisan('backup:database')
+            ->expectsOutputToContain('Di direktori : '.$this->dir)
+            ->assertSuccessful();
     }
 
     public function test_verify_menolak_backup_yang_isinya_rusak(): void

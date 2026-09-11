@@ -6,52 +6,74 @@
      query yang dibangun di sana. Judul harus menyebut apa yang benar-benar
      ditampilkan — kata "terbuka" hanya berlaku saat papan kerja ditampilkan
      apa adanya. (API-38 #1) --}}
-<h1>{{ $complaints->total() }} complaint{{ request('status') || $mencari ? '' : ' terbuka' }}</h1>
+<h1>{{ $complaints->total() }} complaint{{ isset($saringan['status']) || $mencari ? '' : ' terbuka' }}</h1>
 <p class="lede">
-  @if(request('status')) Berstatus "{{ config('complaint.statuses.'.request('status')) }}".
-  @elseif($mencari) Hasil pencarian "{{ request('q') }}" — mencakup complaint yang sudah ditutup.
+  @if(isset($saringan['status'])) Berstatus "{{ config('complaint.statuses.'.$saringan['status'], $saringan['status']) }}".
+  @elseif($mencari) Hasil pencarian "{{ $q }}" — mencakup complaint yang sudah ditutup.
   @else Yang paling dekat tenggat tampil paling atas. @endif
   @if(auth()->user()->isKasir()) Dibatasi outlet {{ auth()->user()->outlet?->name }}. @endif
 </p>
 
-<details class="filters" @if(request()->hasAny(['q','status','category','bobot','layanan','outlet_id'])) open @endif>
-  <summary>Saring &amp; cari</summary>
+{{-- Cari adalah tindakan utama supervisor di halaman ini, bukan tindakan
+     lanjutan: kotaknya berdiri sendiri di atas, tidak di balik panel yang
+     tertutup. Saringan sisanya tetap boleh terlipat. (API-38 #13) --}}
+{{-- Saringan yang ikut terbawa datang dari $saringan — sudah dipastikan
+     skalar dan terisi oleh controller. Sebelumnya blok ini memanggil
+     request() sendiri, dan `?category[]=x` membuat htmlspecialchars()
+     melempar: papan kerja jadi HTTP 500 pada tautan yang disunting tangan.
+     (Tinjauan PR #14 nomor 1) --}}
+<form method="GET" class="card searchbar">
+  @foreach($saringan as $kunci => $nilai)
+    <input type="hidden" name="{{ $kunci }}" value="{{ $nilai }}">
+  @endforeach
+  <label for="q" class="sr-only">Cari complaint</label>
+  <input id="q" name="q" value="{{ $q }}" placeholder="Cari nomor tiket, nama, telepon, atau nomor nota">
+  <button class="shrink">Cari</button>
+  @if($mencari)
+    <a class="btn ghost shrink" href="{{ route('complaints.index', $saringan) }}">Hapus</a>
+  @endif
+</form>
+
+<details class="filters" @if(filled($saringan)) open @endif>
+  <summary>Saringan lain</summary>
   <form method="GET" class="row body">
-    <div style="flex:2.4"><label for="q">Cari</label>
-      <input id="q" name="q" value="{{ request('q') }}" placeholder="Nomor tiket, nama, telepon, atau ID transaksi">
-    </div>
+    @if($mencari)<input type="hidden" name="q" value="{{ $q }}">@endif
+    {{-- Kanal disaring controller tapi belum punya kolomnya sendiri di sini;
+         dibawa sebagai hidden supaya tidak hilang saat saringan lain
+         diterapkan. (Tinjauan PR #14 nomor 4) --}}
+    @isset($saringan['channel'])<input type="hidden" name="channel" value="{{ $saringan['channel'] }}">@endisset
     <div><label for="fs">Status</label>
       <select id="fs" name="status"><option value="">Semua yang terbuka</option>
         @foreach(config('complaint.statuses') as $k=>$v)
-          <option value="{{ $k }}" @selected(request('status')===$k)>{{ $v }}</option>
+          <option value="{{ $k }}" @selected(($saringan['status'] ?? null)===$k)>{{ $v }}</option>
         @endforeach
       </select>
     </div>
     <div><label for="fc">Kategori</label>
       <select id="fc" name="category"><option value="">Semua</option>
         @foreach(config('complaint.categories') as $k=>$v)
-          <option value="{{ $k }}" @selected(request('category')===$k)>{{ $v['label'] }}</option>
+          <option value="{{ $k }}" @selected(($saringan['category'] ?? null)===$k)>{{ $v['label'] }}</option>
         @endforeach
       </select>
     </div>
     <div><label for="fb">Bobot</label>
       <select id="fb" name="bobot"><option value="">Semua</option>
         @foreach(config('complaint.bobot') as $k=>$v)
-          <option value="{{ $k }}" @selected(request('bobot')===$k)>{{ $v }}</option>
+          <option value="{{ $k }}" @selected(($saringan['bobot'] ?? null)===$k)>{{ $v }}</option>
         @endforeach
       </select>
     </div>
     <div><label for="fl">Layanan</label>
       <select id="fl" name="layanan"><option value="">Semua</option>
         @foreach(config('complaint.layanan') as $k=>$v)
-          <option value="{{ $k }}" @selected(request('layanan')===$k)>{{ $v }}</option>
+          <option value="{{ $k }}" @selected(($saringan['layanan'] ?? null)===$k)>{{ $v }}</option>
         @endforeach
       </select>
     </div>
     @if(auth()->user()->seesAllOutlets())
     <div><label for="fo">Outlet</label>
       <select id="fo" name="outlet_id"><option value="">Semua</option>
-        @foreach($outlets as $o)<option value="{{ $o->id }}" @selected(request('outlet_id')==$o->id)>{{ $o->name }}</option>@endforeach
+        @foreach($outlets as $o)<option value="{{ $o->id }}" @selected(($saringan['outlet_id'] ?? null)==$o->id)>{{ $o->name }}</option>@endforeach
       </select>
     </div>
     @endif
@@ -65,7 +87,7 @@
       <div class="mark">🧺</div>
       <h3>Tidak ada complaint yang cocok</h3>
       @if($mencari)
-        <p>Tidak ada complaint dengan "{{ request('q') }}" — pencarian ini sudah mencakup tiket yang
+        <p>Tidak ada complaint dengan "{{ $q }}" — pencarian ini sudah mencakup tiket yang
           sudah ditutup. Periksa lagi ejaan nomor tiket atau nomor notanya.</p>
         <a class="btn ghost" href="{{ route('complaints.index') }}">Kembali ke papan kerja</a>
       @else
