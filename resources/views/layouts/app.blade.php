@@ -391,6 +391,9 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
 <main>
   @if(session('status'))<div class="flash">{{ session('status') }}</div>@endif
   @if(session('warning'))<div class="flash warn">{{ session('warning') }}</div>@endif
+  {{-- Kenapa tiketnya belum tertutup padahal kasir sudah menanganinya. Punya
+       kunci sendiri supaya tidak saling menimpa dengan peringatan nota kembar. --}}
+  @if(session('penutupan_ditolak'))<div class="flash warn" id="penutupan-ditolak">{{ session('penutupan_ditolak') }}</div>@endif
   @if($errors->any())
     <div class="err"><b>Periksa lagi sebelum lanjut</b><ul>@foreach($errors->all() as $e)<li>{{ $e }}</li>@endforeach</ul></div>
   @endif

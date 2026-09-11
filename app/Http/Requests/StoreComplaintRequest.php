@@ -49,6 +49,21 @@ class StoreComplaintRequest extends FormRequest
             // ikut termuat di papan kerja maupun halaman detail. (API-8 T8)
             'description' => ['required', 'string', 'max:5000'],
             'attachments.*' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120', new GambarSungguhan],
+
+            // Token webstruk dari nota WhatsApp — rujukan manusia saat pola
+            // INV/… tidak ketemu di tempelan. Bentuknya dikunci supaya kolom
+            // ini tidak bisa dipakai menitipkan potongan teks tempelan; di
+            // situ ada alamat dan saldo deposit pelanggan. (API-26)
+            'nevira_webstruk_token' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9]+$/'],
+
+            /* ---------- Sudah saya tangani di tempat (API-26) ---------- */
+            'tangani_di_tempat' => ['nullable', 'boolean'],
+            // Wajib kalau centangnya dipakai: tiket yang mengaku sudah
+            // ditangani tanpa menyebut tindakannya tidak menolong siapa pun
+            // saat kasusnya ditelusuri.
+            'resolution' => ['required_if:tangani_di_tempat,1,true,on', 'nullable', 'string', 'max:5000'],
+            'tindak_lanjut' => ['required_if:tangani_di_tempat,1,true,on', 'nullable', Rule::in(array_keys(config('complaint.tindak_lanjut')))],
+            'compensation_amount' => ['nullable', 'integer', 'min:0', 'max:1000000000'],
         ];
     }
 
@@ -57,6 +72,8 @@ class StoreComplaintRequest extends FormRequest
         return [
             'nevira_transaction_number.required_without' => 'Isi nomor nota NEVIRA, atau pilih alasan kenapa complaint ini tidak punya nota.',
             'nota_exemption.required_without' => 'Pilih alasan kenapa complaint ini tidak punya nomor nota.',
+            'resolution.required_if' => 'Tulis apa yang sudah kamu lakukan untuk menyelesaikannya.',
+            'tindak_lanjut.required_if' => 'Pilih tindak lanjut yang kamu ambil.',
         ];
     }
 
@@ -66,6 +83,9 @@ class StoreComplaintRequest extends FormRequest
             'nevira_transaction_number' => 'nomor nota',
             'nota_exemption' => 'alasan tanpa nota',
             'nevira_service_index' => 'barang yang dikeluhkan',
+            'resolution' => 'tindakan penyelesaian',
+            'tindak_lanjut' => 'tindak lanjut',
+            'compensation_amount' => 'nilai kompensasi',
         ];
     }
 }
