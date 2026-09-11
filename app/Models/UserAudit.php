@@ -48,6 +48,7 @@ class UserAudit extends Model
             'email_diverifikasi_manual' => 'Ditandai terverifikasi oleh admin',
             'email_diverifikasi_konsol' => 'Ditandai terverifikasi lewat perintah shell',
             'email_diubah' => 'Alamat email diubah',
+            'peran_disetel_ulang_seeder' => 'Peran dikembalikan oleh seeder',
             default => $this->action,
         };
     }
@@ -55,8 +56,12 @@ class UserAudit extends Model
     /** Siapa pelakunya — perintah shell tidak punya akun, jadi actor_id kosong. */
     public function actorLabel(): string
     {
-        return $this->actor_id === null
-            ? 'Perintah shell (lessworry:pulihkan-admin)'
-            : $this->actor->name;
+        if ($this->actor_id !== null) {
+            return $this->actor->name;
+        }
+
+        return $this->action === 'peran_disetel_ulang_seeder'
+            ? 'Seeder (php artisan db:seed)'
+            : 'Perintah shell (lessworry:pulihkan-admin)';
     }
 }

@@ -63,10 +63,24 @@ di bawah ini menahan rilis — bukan menahan pembangunan:
       satu.** Alamat yang salah ketik berarti akun yang tidak bisa dipakai.
       Periksa terutama akun Admin: tanpa Admin yang bisa masuk, tidak ada yang
       bisa memperbaiki akun siapa pun.
-- [ ] **Keputusan untuk akun bersama** (`kasir@`, `produksi@`, `kurir@`) sudah
-      diambil: diberi kotak surat sendiri, atau ditandai terverifikasi manual
-      oleh Admin lewat halaman Ubah Pengguna (alasannya wajib dan tercatat di
-      jejak audit akun).
+- [ ] **Tidak ada akun bersama yang menunggu keputusan.** Kotak ini dulu
+      menawarkan dua jalan untuk `kasir@`, `produksi@`, dan `kurir@`: kotak
+      surat sendiri, atau ditandai terverifikasi manual oleh Admin. **Keduanya
+      sudah tidak berlaku** — API-50 membuang ketiga akun itu dari seeder, dan
+      tidak ada akun bersama yang tersisa.
+
+      Kelima akun yang diseed beralamat `@lessworry.id` di Google Workspace
+      Less Worry, jadi tautan verifikasi ke sana membuktikan kepemilikan dan
+      **tidak ada satu pun yang perlu pengecualian.**
+
+      Akun kasir dan divisi sungguhan dibuat Admin lewat halaman Pengguna,
+      dengan alamat kerja perorangan. Ketiga alamat `kasir@`, `produksi@`, dan
+      `kurir@` di `lessworry.id` **diblokir permanen** — seeder mematikannya
+      tiap kali jalan. Peringatan lengkapnya di README.
+
+      Penandaan manual lewat halaman Ubah Pengguna tetap ada untuk alamat yang
+      ternyata tidak ada atau SMTP yang gagal, alasannya wajib dan tercatat di
+      jejak audit akun. Itu jalan pemulihan, bukan jalan bagi sekelompok akun.
 
 ### Kalau semua orang terkunci di luar
 

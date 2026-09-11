@@ -48,6 +48,31 @@ class JejakPengguna
     }
 
     /**
+     * Seeder menyetel ulang peran satu akun yang sudah ada, karena peran itu
+     * berbeda dari daftar akun yang ditetapkan. (Keputusan API-57 nomor 1)
+     *
+     * Daftar akun adalah deklarasi, jadi seeder memang berhak menulis ulang
+     * perannya. Yang tidak boleh adalah melakukannya diam-diam: yang
+     * dikembalikan bisa berupa peran tertinggi di sistem, dan sebelum ini
+     * tidak ada satu jejak pun bahwa itu terjadi.
+     *
+     * `actor_id` kosong seperti jalur konsol lainnya — seeder tidak punya
+     * akun, dan mengarang satu akan lebih buruk daripada mengosongkannya.
+     */
+    public function peranDisetelUlangSeeder(User $user, string $peranLama): UserAudit
+    {
+        return UserAudit::create([
+            'user_id' => $user->id,
+            'actor_id' => null,
+            'action' => 'peran_disetel_ulang_seeder',
+            'reason' => 'Peran akun berbeda dari daftar akun yang ditetapkan di seeder.',
+            'detail' => 'Peran dikembalikan dari '.$peranLama.' ke '.$user->role
+                .' saat seeder dijalankan. Untuk membuat perubahan peran bertahan, '
+                .'ubah daftarnya di DatabaseSeeder, bukan lewat halaman Pengguna.',
+        ]);
+    }
+
+    /**
      * Alamat email diganti admin. Alamat lama ikut dicatat: kalau akun
      * dibajak lewat pergantian alamat, satu-satunya cara menelusurinya
      * adalah tahu ke mana ia tadinya menunjuk.
