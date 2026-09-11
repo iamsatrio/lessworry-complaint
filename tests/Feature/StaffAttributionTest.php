@@ -5,12 +5,25 @@ namespace Tests\Feature;
 use App\Models\Complaint;
 use App\Models\Outlet;
 use App\Models\User;
+use App\Services\KandidatPelaku;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class StaffAttributionTest extends TestCase
 {
     use RefreshDatabase;
+
+    /**
+     * Kunci kandidat sebagaimana peramban melihatnya. Sejak API-58 nomor 1
+     * yang dirender bukan `staff:<id_staff>` melainkan HMAC-nya — id NEVIRA
+     * tidak boleh sampai ke DOM. Test ini memanggil helper yang sama dengan
+     * yang dipakai halaman, bukan menyalin heksanya, supaya ia tetap menuntut
+     * perilaku dan bukan menghafal nilai.
+     */
+    private function kunci(string $staffId): string
+    {
+        return KandidatPelaku::kunciPublik('staff:'.$staffId);
+    }
 
     private function userAs(string $role, ?Outlet $outlet = null): User
     {
@@ -142,7 +155,7 @@ class StaffAttributionTest extends TestCase
         $c = $this->withTrail();
 
         $this->actingAs($cc)->post('/complaints/'.$c->id.'/pelaku', [
-            'pelaku' => ['staff:244'],
+            'pelaku' => [$this->kunci('244')],
             'alasan' => 'Noda kerah masih ada setelah tahap cuci.',
         ])->assertRedirect();
 
@@ -160,7 +173,7 @@ class StaffAttributionTest extends TestCase
         $c = $this->withTrail();
 
         $this->actingAs($cc)->post('/complaints/'.$c->id.'/pelaku', [
-            'pelaku' => ['staff:244'],
+            'pelaku' => [$this->kunci('244')],
             'alasan' => 'Noda kerah masih ada.',
         ])->assertSessionHasNoErrors();
 
@@ -177,7 +190,7 @@ class StaffAttributionTest extends TestCase
         $c = $this->withTrail();
 
         $this->actingAs($cc)->post('/complaints/'.$c->id.'/pelaku', [
-            'pelaku' => ['staff:244'], 'alasan' => 'Awal.',
+            'pelaku' => [$this->kunci('244')], 'alasan' => 'Awal.',
         ]);
 
         $pelaku = $c->responsibles()->sole();

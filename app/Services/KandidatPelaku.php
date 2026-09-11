@@ -22,6 +22,10 @@ use App\Models\User;
  *
  * Kunci kandidat sengaja tidak membawa nama: yang dikirim browser hanya
  * kuncinya, dan identitas karyawannya dibaca server dari daftarnya sendiri.
+ *
+ * Kunci yang DIRENDER bukan identitas itu sendiri melainkan HMAC-nya, karena
+ * identitasnya berbentuk `staff:<id_staff NEVIRA>` dan id itu tidak boleh
+ * sampai ke browser. Lihat kunciPublik(). (API-58 nomor 1)
  */
 class KandidatPelaku
 {
@@ -75,6 +79,37 @@ class KandidatPelaku
     public function find(string $key): ?array
     {
         return $this->kandidat[$key] ?? null;
+    }
+
+    /**
+     * Kunci yang boleh dilihat browser. (API-58 nomor 1)
+     *
+     * Identitas kandidat berbentuk `staff:<id_staff>` kalau orangnya dikenal
+     * NEVIRA, dan `id_staff` adalah pengenal internal sistem lain — aturan
+     * repositori ini melarangnya sampai ke browser, sama seperti
+     * `nevira_transaction_id`. Sebelum ini ia terkirim apa adanya sebagai
+     * `value` checkbox dan sebagai nama `peran[...]`.
+     *
+     * Kuncinya TIDAK boleh sekadar dibuang: rancangan API-19 berdiri di atas
+     * browser mengirim kunci dan server membaca nama/NIP/id dari daftarnya
+     * sendiri — itu yang membuat nama karyawan tidak bisa disuntikkan lewat
+     * form. Jadi bentuknya yang diganti, bukan perannya.
+     *
+     * HMAC dengan APP_KEY, bukan indeks posisi di daftar: indeks berubah
+     * artinya kalau daftar kandidat berubah antara halaman dirender dan form
+     * dikirim — NEVIRA mati di antara keduanya sudah cukup — dan pergeseran
+     * satu posisi berarti pelaku yang salah tercatat tanpa satu pun galat.
+     * HMAC terikat pada orangnya, bukan pada urutannya: kalau orangnya hilang
+     * dari daftar, kuncinya tidak ketemu dan form-nya ditolak dengan terang.
+     *
+     * Bukan rahasia yang dijaga kerahasiaannya, melainkan penyamaran satu
+     * arah: tanpa APP_KEY, `staff:...` tidak bisa dipulihkan dari 32 heksa
+     * ini, dan nilainya tetap sama antar permintaan sehingga old() dan
+     * `peran[<kunci>]` tetap bekerja.
+     */
+    public static function kunciPublik(string $identity): string
+    {
+        return substr(hash_hmac('sha256', $identity, (string) config('app.key')), 0, 32);
     }
 
     public function isEmpty(): bool
@@ -169,15 +204,20 @@ class KandidatPelaku
                 continue;
             }
 
-            $key = ComplaintResponsible::identityFor(
+            // Identitas internal tetap bentuk lamanya — ia yang dipakai
+            // menyamakan orang dengan baris pelaku yang sudah tersimpan.
+            // Yang dirender kunci publiknya.
+            $key = self::kunciPublik(ComplaintResponsible::identityFor(
                 $item['staff_id'] ?? null,
                 $item['nip'] ?? null,
                 $item['name']
-            );
+            ));
 
             // Orang yang sama bisa muncul di beberapa sumber — kasir nota
             // ini juga ada di daftar karyawan outletnya. Yang pertama
             // menang, karena grup pertama membawa perannya sekalian.
+            // Identitas yang sama menghasilkan HMAC yang sama, jadi
+            // penyaringan ganda ini tidak berubah perilakunya.
             if (isset($this->kandidat[$key])) {
                 continue;
             }
