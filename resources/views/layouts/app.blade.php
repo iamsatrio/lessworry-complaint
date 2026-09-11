@@ -218,6 +218,30 @@ details.link-editor[open]>summary::before{content:"–"}
 .searchbar input{flex:1;min-width:180px}
 .searchbar .shrink{flex:0 0 auto}
 
+/* ---------- Alarm (Dashboard Operations, API-72) ---------- */
+.alarm{border-color:#f3c4c4}
+.alarm .card-h.alarm-h{background:var(--danger-soft);border-color:#f3c4c4;
+  display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.alarm .card-h h2{color:var(--danger)}
+.alarm .alarm-h .n{font-family:var(--display);font-size:34px;font-weight:800;line-height:1;
+  letter-spacing:-.03em;color:var(--danger);flex:none}
+.alarm .alarm-b{padding:18px 22px 4px}
+.alarm .tindakan{font-family:var(--display);font-weight:600;font-size:14.5px;margin:0 0 14px}
+.alarm table{margin:0 -22px}
+.alarm .alarm-f{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:16px 22px;border-top:1px solid var(--line);background:var(--mint)}
+.alarm .held{font-size:14px;color:var(--ink)}
+.alarm .held b{font-family:var(--display)}
+/* Sudah dipegang: tetap tampil, tapi berhenti berteriak. Yang membedakan
+   "ada yang memegangnya" dari "beres" adalah warnanya, bukan hilangnya. */
+.alarm.redup{border-color:var(--line)}
+.alarm.redup .card-h.alarm-h{background:var(--mint);border-color:var(--line)}
+.alarm.redup .card-h h2,.alarm.redup .alarm-h .n{color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px}
+.chip{background:var(--mint);border:1px solid var(--line);border-radius:var(--r-pill);
+  padding:6px 13px;font-size:13px;color:var(--muted)}
+.chip b{font-family:var(--display);color:var(--ink)}
+
 /* ---------- Navigasi halaman ---------- */
 .pager{margin-top:20px}
 .pager-nums{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -366,7 +390,20 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
       @elseif($gerbang === 'password')
         <span class="wajib-ganti">Ganti password dulu sebelum memakai sistem</span>
       @else
-        <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">Dashboard</a>
+        {{-- Kata "Dashboard" milik Dashboard Operations, dan hanya dirender
+             untuk yang berwewenang `dashboard.view` — kasir dan Customer Care
+             tidak melihat menunya sama sekali, bukan melihat menu yang
+             membalas 403. (API-72, alur 4 di API-71)
+
+             Halaman lama di /dashboard tinggal ringkasan complaint milik
+             semua peran, jadi labelnya ikut pindah ke "Ringkasan". Rutenya
+             SENGAJA tidak diganti nama: ia tujuan pendaratan setelah login
+             dan disebut di belasan tempat, dan mengubahnya di PR yang sama
+             mencampur dua alasan berubah. --}}
+        @if(auth()->user()->canViewDashboard())
+          <a href="{{ route('operasional') }}" class="{{ request()->routeIs('operasional') ? 'active' : '' }}">Dashboard</a>
+        @endif
+        <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">Ringkasan</a>
         <a href="{{ route('complaints.index') }}" class="{{ request()->routeIs('complaints.index') ? 'active' : '' }}">Papan Kerja</a>
         <a href="{{ route('reports.index') }}" class="{{ request()->routeIs('reports.*') ? 'active' : '' }}">Laporan</a>
         @if(auth()->user()->canManageUsers())

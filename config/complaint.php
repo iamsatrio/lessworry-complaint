@@ -1,5 +1,8 @@
 <?php
 
+use App\Alarms\ComplaintBelumDipegang;
+use App\Alarms\ComplaintLewatSla;
+
 return [
 
     /*
@@ -268,5 +271,58 @@ return [
         'customer_care' => 200000,
         'divisi' => 0,
         'supervisor' => PHP_INT_MAX,
+    ],
+
+    /*
+    | Peran yang melihat Dashboard Operations — wewenang `dashboard.view`.
+    | (API-72, alur 4 di API-71)
+    |
+    | Kasir dan Customer Care TIDAK ada di sini, dan akibatnya bukan menu yang
+    | membalas 403: menu Dashboard tidak dirender sama sekali untuk mereka.
+    | Menu yang setiap ketukannya ditolak terbaca sebagai sistem yang rusak.
+    |
+    | Supervisor diberi wewenangnya meski belum ada satu pun akun supervisor di
+    | sistem. Yang memutuskan akhirnya satrio lewat halaman peran; daftar ini
+    | tempat keputusan itu ditulis, bukan tempat menebaknya.
+    |
+    | Cakupan outlet TETAP berlaku kalau kelak peran ber-outlet masuk daftar
+    | ini: alarm mengambil datanya lewat App\Alarms\Lingkup — yang memanggil
+    | Complaint::visibleTo — dan AlarmFilterRequest menolak saringan outlet di
+    | luar cakupan pemintanya.
+    */
+    'dashboard_roles' => ['admin', 'supervisor'],
+
+    /*
+    | Alarm Dashboard Operations. (API-72)
+    */
+    'alarms' => [
+
+        /*
+        | SELURUH alarm yang dipasang di papan, dalam urutan tampil.
+        |
+        | Jenis alarm berikutnya — tagihan bulanan, saldo koin NEVIRA, nota
+        | terlambat — masuk dengan menambah satu baris di sini dan satu kelas
+        | yang mengimplementasikan App\Alarms\Alarm. Bukan dengan menulis ulang
+        | papannya.
+        */
+        'terdaftar' => [
+            ComplaintBelumDipegang::class,
+            ComplaintLewatSla::class,
+        ],
+
+        /*
+        | Umur minimum complaint tanpa pemilik sebelum alarmnya menyala, dalam
+        | jam. Empat jam itu TEBAKAN — dipilih supaya keluhan yang masuk pagi
+        | dan dipegang sebelum makan siang tidak menyalakan apa pun. Uji coba
+        | lapangan (API-10) yang akan memperbaiki angkanya, dan karena itu ia
+        | setelan env, bukan angka yang tertanam di kode.
+        */
+        'belum_dipegang_jam' => (int) env('ALARM_BELUM_DIPEGANG_JAM', 4),
+
+        /*
+        | Zona waktu yang menentukan kapan "besok" mulai — lihat
+        | PapanAlarm::tanggalOperasional() untuk alasannya.
+        */
+        'zona_waktu' => env('ALARM_ZONA_WAKTU', 'Asia/Jakarta'),
     ],
 ];

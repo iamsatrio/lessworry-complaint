@@ -10,7 +10,9 @@ use App\Http\Controllers\ComplaintStatusController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\NeviraLookupController;
+use App\Http\Controllers\OperasionalController;
 use App\Http\Controllers\PasswordController;
+use App\Http\Controllers\PenandaAlarmController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -50,6 +52,24 @@ Route::middleware(['auth', 'auth.session', 'active', 'email.verified'])->group(f
 Route::middleware(['auth', 'auth.session', 'active', 'email.verified', 'password.changed'])->group(function () {
 
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+
+    /*
+    | Dashboard Operations. (API-72)
+    |
+    | `dashboard.view` — kasir dan Customer Care tidak memilikinya, dan menunya
+    | juga tidak dirender untuk mereka (layouts/app.blade.php). Gerbangnya di
+    | sini yang menegakkan; menu yang disembunyikan hanya membuat kebocoran
+    | lebih sulit ditemukan.
+    |
+    | Cakupan outlet tetap berlaku DI DALAM halaman: alarm mengambil datanya
+    | lewat App\Alarms\Lingkup, dan AlarmFilterRequest menolak saringan outlet
+    | di luar cakupan pemintanya.
+    */
+    Route::middleware('can:dashboard.view')->group(function () {
+        Route::get('/operasional', OperasionalController::class)->name('operasional');
+        Route::post('/operasional/alarm/{alarm}/tangani', [PenandaAlarmController::class, 'store'])
+            ->name('operasional.alarm.tangani');
+    });
 
     Route::get('/complaints', [ComplaintController::class, 'index'])->name('complaints.index');
     Route::get('/complaints/create', [ComplaintController::class, 'create'])->name('complaints.create');

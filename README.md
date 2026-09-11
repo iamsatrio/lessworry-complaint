@@ -122,6 +122,7 @@ atau saat migrasi lokal sudah kadung berantakan dan lebih cepat mulai ulang.
 
 ## Dokumentasi
 
+- `docs/alarm.md` — kerangka alarm Dashboard Operations: cara menambah jenis alarm baru
 - `docs/nevira-api.md` — kontrak integrasi NEVIRA, termasuk jebakan header `Bearer`
 - `docs/deploy.md` — daftar periksa sebelum produksi
 - `docs/deploy-care-lessworry.md` — rujukan produksi: langkah deploy dan pembaruan di `care.lessworry.id`

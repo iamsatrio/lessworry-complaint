@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Outlet;
+use App\Http\Requests\Concerns\MenyaringOutlet;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -14,38 +14,15 @@ use Illuminate\Foundation\Http\FormRequest;
 class LaporanFilterRequest extends FormRequest
 {
     /**
-     * Saringan outlet ditegakkan DI SINI, sebelum controller berjalan —
-     * bukan dengan menyembunyikan pilihannya di halaman.
-     *
-     * Outlet yang tidak ada dan outlet yang tidak boleh dilihat dijawab
-     * SAMA: ditolak. Membedakan keduanya membuat kasir bisa menghitung ada
-     * berapa outlet di jaringan dengan mencoba id satu per satu — dan jumlah
-     * outlet itu sendiri informasi yang tidak boleh disimpulkan dari halaman
-     * ini (lihat GrafikLaporan).
-     *
-     * Ditolak, bukan diam-diam dikosongkan: permintaan yang dibiarkan lewat
-     * lalu dikembalikan "semua outlet" memperlihatkan lebih banyak daripada
-     * yang diminta, dan tidak ada satu pun tanda bahwa saringannya diabaikan.
+     * Aturan saringan outlet — termasuk alasan ia ditolak dan tidak
+     * dikosongkan — ada di trait-nya, dipakai bersama Dashboard Operations
+     * (API-72). Yang di sini tinggal rentang tanggalnya.
      */
+    use MenyaringOutlet;
+
     public function authorize(): bool
     {
-        $id = $this->input('outlet');
-
-        // Tidak menyaring outlet sama sekali — cakupan bawaannya sudah dijaga
-        // Complaint::scopeVisibleTo.
-        if ($id === null || $id === '') {
-            return true;
-        }
-
-        // Bukan angka: itu bentuk yang salah, bukan wewenang yang kurang.
-        // Dibiarkan lewat supaya rules() yang menjawabnya sebagai 422.
-        if (! is_numeric($id)) {
-            return true;
-        }
-
-        $outlet = Outlet::find((int) $id);
-
-        return $outlet !== null && $this->user()->can('view', $outlet);
+        return $this->outletDalamWewenang();
     }
 
     public function rules(): array
@@ -56,20 +33,8 @@ class LaporanFilterRequest extends FormRequest
             // Keberadaannya TIDAK diperiksa di sini: `exists` akan membalas
             // 422 untuk id yang tidak ada dan 403 untuk id outlet orang lain,
             // dan selisih dua kode itu sudah cukup untuk memetakan jaringan.
-            // authorize() di atas menolak keduanya dengan jawaban yang sama.
+            // outletDalamWewenang() menolak keduanya dengan jawaban yang sama.
             'outlet' => ['nullable', 'integer'],
         ];
-    }
-
-    /** Outlet yang diminta, atau null kalau saringannya "semua outlet". */
-    public function outletDiminta(): ?Outlet
-    {
-        $id = $this->input('outlet');
-
-        if ($id === null || $id === '' || ! is_numeric($id)) {
-            return null;
-        }
-
-        return Outlet::find((int) $id);
     }
 }

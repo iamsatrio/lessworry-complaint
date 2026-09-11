@@ -30,7 +30,7 @@
     <div style="margin-top:18px">
       @auth
         <a href="{{ $kembali ? route('complaints.create') : route('dashboard') }}" class="btn">
-          {{ $kembali ? 'Kembali ke form' : 'Kembali ke Dashboard' }}
+          {{ $kembali ? 'Kembali ke form' : 'Kembali ke Ringkasan' }}
         </a>
       @else
         <a href="{{ route('login') }}" class="btn">Masuk lagi</a>
