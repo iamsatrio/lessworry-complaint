@@ -424,16 +424,17 @@ sekaligus. Membagikan password sementara lebih dulu berarti seluruh tim
 memegang password untuk akun yang tidak bisa mereka buka, dan satu-satunya
 jalan keluarnya menuntut akses shell ke server ini.
 
-Pertama, pastikan mailernya memang mengirim. Nginx belum tentu hidup di titik
-ini, jadi dibaca langsung dari aplikasinya:
+Pertama, pastikan mailernya memang mengirim. Domain dan Document Root belum
+tentu sudah diarahkan di titik ini, jadi dibaca langsung dari aplikasinya lewat
+CLI, bukan lewat web:
 
 ```bash
-cd /var/www/care
-php artisan tinker --execute="echo config('mail.default');"    # harus 'smtp'
+cd ~/care
+$PHP artisan tinker --execute="echo config('mail.default');"    # harus 'smtp'
 ```
 
 Kalau yang keluar `log` atau `array`, surat tidak dikirim ke mana pun. Perbaiki
-`.env`, jalankan `php artisan config:cache`, lalu ulangi.
+`.env`, jalankan `$PHP artisan config:cache`, lalu ulangi.
 
 `smtp` yang tertulis benar **belum** berarti SMTP-nya bisa dihubungi — itu yang
 dibuktikan langkah berikutnya, dan itu sebabnya langkah ini tidak cukup sendiri.
@@ -441,7 +442,7 @@ dibuktikan langkah berikutnya, dan itu sebabnya langkah ini tidak cukup sendiri.
 Lalu kirim satu verifikasi sungguhan ke satu alamat dan tunggu suratnya sampai:
 
 ```bash
-php artisan tinker
+$PHP artisan tinker
 ```
 
 ```php
