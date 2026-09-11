@@ -46,6 +46,20 @@ perannya**: `kasir`, `divisi`, dan `supervisor` tetap bisa dipilih di halaman
 Pengguna, dan akun sungguhannya dibuat Admin dari sana dengan alamat kerja
 masing-masing.
 
+> **Jangan memakai `kasir@lessworry.id`, `produksi@lessworry.id`, atau
+> `kurir@lessworry.id` untuk akun sungguhan itu.** Ketiga alamat tersebut
+> diblokir permanen: seeder menonaktifkannya dan membuang passwordnya
+> **setiap kali dijalankan**. Akun yang dibuat di salah satunya akan mati
+> pada deploy berikutnya, dan satu-satunya jejaknya adalah sebaris peringatan
+> di keluaran deploy — kasirnya baru tahu pagi berikutnya saat tidak bisa
+> masuk.
+>
+> Alasannya: ketiganya pernah jadi akun bersama seeder lama dan pernah
+> memegang password yang ada di riwayat commit publik. Alamat yang pernah
+> begitu tidak dipulihkan, ia diganti. Pakai alamat kerja perorangan —
+> `budi@lessworry.id`, bukan `kasir@lessworry.id` — yang juga membuat jejak
+> audit complaint bisa menjawab "siapa", bukan cuma "kasir yang mana pun".
+
 `care@lessworry.id` adalah akun peran, bukan akun perorangan: riwayat complaint
 mencatat "Customer Care" yang menutup tiket, bukan siapa orangnya. Begitu peran
 ini dipegang dua orang atau lebih, akun perorangan jadi perlu (dicatat di
