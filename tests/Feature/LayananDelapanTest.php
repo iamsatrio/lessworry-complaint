@@ -370,4 +370,57 @@ class LayananDelapanTest extends TestCase
 
         $this->assertSame(3, ComplaintActivity::where('note', 'like', JejakComplaint::TANDA_LAYANAN_BATAL.'%')->count());
     }
+
+    /**
+     * Jalan mundur berhenti di keputusan orang.
+     *
+     * Reproduksi yang dilaporkan di PR #22: perintah memindahkan baris ke
+     * Sepatu & Tas, petugas membacanya lalu memindahkannya lagi ke Karpet &
+     * Gorden — keputusan yang hanya bisa diambil orang yang tahu barangnya.
+     * `--balikkan --tulis` sesudah itu menariknya ke Satuan Non Cloth: bukan
+     * membatalkan perintah ini, tapi membuang penilaian orang, dan di tabel
+     * riwayat hasilnya tidak bisa dibedakan dari baris yang memang otomatis.
+     *
+     * Pembandingnya catatan riwayat perintah ini sendiri: yang ditulis
+     * `sepatu_tas`, yang ada sekarang `karpet_gorden`, jadi ada yang
+     * memindahkannya setelah perintah lewat.
+     */
+    public function test_jalan_mundur_tidak_menimpa_pembetulan_orang(): void
+    {
+        $benih = $this->benih();
+
+        $this->artisan('complaint:betulkan-layanan --tulis')->assertSuccessful();
+        $this->assertSame('sepatu_tas', $benih['sepatu']->fresh()->layanan);
+
+        // Petugas memindahkannya lagi. Riwayat pembetulannya tetap ada —
+        // itu justru yang dulu membuat baris ini ikut tertarik mundur.
+        $benih['sepatu']->fresh()->update(['layanan' => 'karpet_gorden']);
+
+        $this->artisan('complaint:betulkan-layanan --balikkan --tulis')
+            ->expectsOutputToContain('1 baris DILEWATI')
+            ->assertSuccessful();
+
+        $this->assertSame('karpet_gorden', $benih['sepatu']->fresh()->layanan,
+            'Baris yang dipindah orang ikut ditimpa jalan mundur.');
+
+        // Yang tidak disentuh orang tetap mundur seperti biasa.
+        foreach (['koper', 'gorden'] as $nama) {
+            $this->assertSame('satuan_non_cloth', $benih[$nama]->fresh()->layanan);
+        }
+
+        $this->assertSame(2, ComplaintActivity::where('note', 'like', JejakComplaint::TANDA_LAYANAN_BATAL.'%')->count(),
+            'Baris yang dilewati tidak boleh menulis catatan pembatalan.');
+    }
+
+    /** Angka nol pun disebut — yang dilewati harus selalu terbaca, bukan hanya saat ada. */
+    public function test_jalan_mundur_menyebut_berapa_baris_yang_dilewati(): void
+    {
+        $this->benih();
+
+        $this->artisan('complaint:betulkan-layanan --tulis')->assertSuccessful();
+
+        $this->artisan('complaint:betulkan-layanan --balikkan')
+            ->expectsOutputToContain('Dilewati karena sudah dipindah orang: 0 baris.')
+            ->assertSuccessful();
+    }
 }

@@ -6,6 +6,7 @@ use App\Models\Complaint;
 use App\Services\JejakComplaint;
 use App\Services\LayananDariUraian;
 use Illuminate\Console\Command;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -28,9 +29,14 @@ use Illuminate\Support\Facades\DB;
  *    cucian datang dan pulang — tasnya milik pelanggan, tapi bukan tasnya
  *    yang dicuci. Kolom `layanan` mencatat jasa yang DIBELI, bukan barang
  *    yang disebut keluhannya, dan yang dibeli di keempat baris itu Kiloan.
- * 3. **Ada jalan mundur.** `--balikkan` mengembalikan baris yang pernah
- *    dipindah ke `satuan_non_cloth`, dikenali dari baris riwayat yang ditulis
- *    saat memindahkannya.
+ * 3. **Ada jalan mundur, dan ia berhenti di keputusan orang.** `--balikkan`
+ *    mengembalikan baris yang pernah dipindah ke `satuan_non_cloth`, dikenali
+ *    dari baris riwayat yang ditulis saat memindahkannya. Baris yang SESUDAH
+ *    itu dipindahkan lagi oleh petugas tidak ikut mundur: catatan riwayatnya
+ *    menyebut tujuan yang ditulis perintah ini, dan kalau kolom `layanan`
+ *    sekarang berisi nilai lain, yang menaruhnya di sana bukan perintah ini.
+ *    Jalan mundur yang menimpa penilaian orang bukan jalan mundur, itu
+ *    kerusakan kedua.
  *
  * Kata kuncinya tidak ada di kelas ini. `LayananDariUraian` yang memilikinya,
  * dan `PemetaBarisImpor` memanggil kelas yang sama — itu yang membuat impor
@@ -153,34 +159,41 @@ class BetulkanLayanan extends Command
         // dikembalikan harus PERSIS baris yang pernah dipindah perintah ini.
         // Complaint yang layanannya diisi Sepatu & Tas oleh kasir sendiri
         // tidak pernah punya baris riwayat itu, dan tidak boleh ikut mundur.
-        $complaints = Complaint::query()
+        $calon = Complaint::query()
             ->whereIn('layanan', LayananDariUraian::tujuan())
             ->whereHas('activities', fn ($q) => $q->where('note', 'like', JejakComplaint::TANDA_LAYANAN.'%'))
+            ->with(['activities' => fn ($q) => $q->where('note', 'like', JejakComplaint::TANDA_LAYANAN.'%')])
             ->orderBy('id')
             ->get();
+
+        [$complaints, $dilewati] = $this->saringYangDisentuhOrang($calon);
 
         $this->info('Mengembalikan pembetulan layanan (API-59) — '
             .($kering ? 'MODE HITUNG, tidak menulis apa pun' : 'MENULIS'));
         $this->newLine();
 
-        if ($complaints->isEmpty()) {
-            $this->line('Tidak ada baris yang pernah dipindah dan masih berada di nilai barunya.');
+        $this->cetakDilewati($dilewati);
+
+        if ($complaints === []) {
+            $this->line($dilewati === []
+                ? 'Tidak ada baris yang pernah dipindah dan masih berada di nilai barunya.'
+                : 'Tidak ada baris yang bisa dikembalikan — semuanya sudah dipindah orang.');
 
             return self::SUCCESS;
         }
 
         $this->table(
             ['ID', 'Tiket', 'Sekarang', 'Dikembalikan ke'],
-            $complaints->map(fn (Complaint $c) => [
+            array_map(fn (Complaint $c) => [
                 $c->id,
                 $c->ticket_number,
                 $this->label((string) $c->layanan),
                 $this->label(LayananDariUraian::ASAL),
-            ])->all(),
+            ], $complaints),
         );
 
         if ($kering) {
-            $this->warn($complaints->count().' baris akan dikembalikan. '
+            $this->warn(count($complaints).' baris akan dikembalikan. '
                 .'Mode hitung saja — tambahkan --tulis untuk menyimpan.');
 
             return self::SUCCESS;
@@ -195,9 +208,111 @@ class BetulkanLayanan extends Command
             }
         });
 
-        $this->info($complaints->count().' baris dikembalikan ke '.$this->label(LayananDariUraian::ASAL).'.');
+        $this->info(count($complaints).' baris dikembalikan ke '.$this->label(LayananDariUraian::ASAL).'.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Pisahkan baris yang masih berada di nilai yang DITULIS perintah ini dari
+     * baris yang sesudah itu dipindahkan orang.
+     *
+     * Pembandingnya catatan riwayat perintah ini sendiri — `Layanan dibetulkan
+     * (API-59): X → Y`. Kalau kolom `layanan` sekarang tidak sama dengan Y,
+     * ada yang memindahkannya setelah perintah ini lewat, dan satu-satunya
+     * pihak yang bisa melakukan itu adalah orang. Nilai orang menang.
+     *
+     * Catatan yang tidak terbaca juga dilewati, bukan dianggap cocok: perintah
+     * ini menulis, dan yang menulis tanpa bisa membaca lebih baik berhenti.
+     *
+     * @param  Collection<int,Complaint>  $calon
+     * @return array{0:list<Complaint>, 1:list<array{complaint:Complaint,tujuan:?string}>}
+     */
+    private function saringYangDisentuhOrang($calon): array
+    {
+        $balik = [];
+        $dilewati = [];
+
+        foreach ($calon as $complaint) {
+            $tujuan = $this->tujuanDariRiwayat($complaint);
+
+            if ($tujuan !== null && $tujuan === (string) $complaint->layanan) {
+                $balik[] = $complaint;
+
+                continue;
+            }
+
+            $dilewati[] = ['complaint' => $complaint, 'tujuan' => $tujuan];
+        }
+
+        return [$balik, $dilewati];
+    }
+
+    /**
+     * Nilai layanan yang ditulis perintah ini menurut baris riwayat TERAKHIR,
+     * atau null kalau catatannya tidak bisa dibaca.
+     *
+     * Yang terakhir, bukan yang pertama: satu complaint bisa dipindah,
+     * dikembalikan, lalu dipindah lagi, dan yang berlaku selalu yang paling
+     * belakang. Labelnya dipetakan balik ke kunci enum lewat config yang sama
+     * yang dipakai menulisnya.
+     */
+    private function tujuanDariRiwayat(Complaint $complaint): ?string
+    {
+        $catatan = $complaint->activities
+            ->filter(fn ($a) => str_starts_with((string) $a->note, JejakComplaint::TANDA_LAYANAN.':'))
+            ->sortByDesc('id')
+            ->first();
+
+        if ($catatan === null) {
+            return null;
+        }
+
+        $sisa = substr((string) $catatan->note, strlen(JejakComplaint::TANDA_LAYANAN.':'));
+        $potong = explode('→', $sisa);
+
+        if (count($potong) < 2) {
+            return null;
+        }
+
+        $label = trim(rtrim(trim(end($potong)), '.'));
+        $kunci = array_search($label, (array) config('complaint.layanan', []), true);
+
+        return is_string($kunci) ? $kunci : null;
+    }
+
+    /**
+     * Baris yang TIDAK ikut mundur, dicetak sebagai angka lebih dulu.
+     *
+     * Tabelnya menyebut kedua nilai berdampingan supaya yang membaca melihat
+     * apa yang ditulis perintah ini dan apa yang diputuskan orang sesudahnya —
+     * itu seluruh alasan barisnya dilewati.
+     *
+     * @param  list<array{complaint:Complaint,tujuan:?string}>  $dilewati
+     */
+    private function cetakDilewati(array $dilewati): void
+    {
+        if ($dilewati === []) {
+            $this->line('Dilewati karena sudah dipindah orang: 0 baris.');
+            $this->newLine();
+
+            return;
+        }
+
+        $this->warn(count($dilewati).' baris DILEWATI — sesudah pembetulan ini, '
+            .'orang memindahkannya lagi. Nilai yang dipilih orang tidak ditimpa:');
+
+        $this->table(
+            ['ID', 'Tiket', 'Ditulis perintah ini', 'Sekarang (keputusan orang)'],
+            array_map(fn (array $d) => [
+                $d['complaint']->id,
+                $d['complaint']->ticket_number,
+                $d['tujuan'] === null ? '— catatan tidak terbaca' : $this->label($d['tujuan']),
+                $this->label((string) $d['complaint']->layanan),
+            ], $dilewati),
+        );
+
+        $this->newLine();
     }
 
     /* ---------- alat ---------- */
