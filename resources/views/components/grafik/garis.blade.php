@@ -70,6 +70,16 @@
       @endforeach
     </svg>
     </div>
+
+    {{-- Keterangan, bukan larangan: satuan waktu yang dipilih sendiri tetap
+         digambar apa adanya, yang ditambahkan cuma kalimat yang menjelaskan
+         apa yang sedang dilihat. (API-62 nomor 2) --}}
+    @if($catatanBawah)
+      <p class="fig-bawah">{{ $catatanBawah }}</p>
+    @endif
+    @unless($sasaranCukup())
+      <p class="fig-bawah">Titiknya terlalu rapat untuk ditunjuk satu per satu pada satuan waktu ini. Angka lengkapnya ada di tabel di bawah.</p>
+    @endunless
   @endif
 
   @isset($tabel)

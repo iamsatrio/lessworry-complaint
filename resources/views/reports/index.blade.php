@@ -1,10 +1,11 @@
 @extends('layouts.app')
 @section('title','Laporan')
 @section('content')
-{{-- Outlet yang sedang disaring ikut tertulis di sini: halaman yang menyaring
-     tanpa mengatakannya membuat angka satu outlet dibaca sebagai angka
-     jaringan. (API-62 nomor 3) --}}
-<div class="eyebrow">{{ $from->translatedFormat('d M Y') }} — {{ $to->translatedFormat('d M Y') }}@if($outlet) · {{ $outlet->name }}@endif</div>
+{{-- Rentang terpilih ditulis dengan kata, bukan dua kotak yyyy-mm-dd
+     (API-62 nomor 5). Outlet yang sedang disaring ikut tertulis: halaman yang
+     menyaring tanpa mengatakannya membuat angka satu outlet dibaca sebagai
+     angka jaringan. (API-62 nomor 3) --}}
+<div class="eyebrow">{{ $rentangTerbaca }}@if($outlet) · {{ $outlet->name }}@endif</div>
 <h1>Laporan complaint</h1>
 <p class="lede">
   {{-- Dihitung dari yang TIDAK lagi terbuka, bukan dari resolved_at. Seluruh
@@ -19,6 +20,29 @@
 </p>
 
 <div class="card">
+  {{-- Pintasan rentang tanggal. Orang membuka laporan untuk menjawab
+       "bagaimana bulan ini" — dan sebelum ini itu menuntut mengetik dua
+       tanggal. Tautan biasa, bukan kalender: aplikasi ini belum memuat satu
+       pun paket JavaScript di antarmuka, dan sederet pintasan bukan alasan
+       yang cukup untuk memulainya. Isian tanggal bebas di bawahnya tetap
+       ada. (API-62 nomor 5) --}}
+  <div class="pintasan" role="group" aria-label="Pintasan rentang tanggal">
+    @foreach($pintasan as $p)
+      <a class="chip {{ $p['aktif'] ? 'aktif' : '' }}"
+         href="{{ route('reports.index', array_merge(request()->query(), ['from' => $p['dari'], 'to' => $p['sampai']])) }}"
+         @if($p['aktif']) aria-current="true" @endif>{{ $p['nama'] }}</a>
+    @endforeach
+  </div>
+
+  {{-- Satuan grafiknya ikut tertulis di sini: kalau tidak, satu-satunya
+       tanda bahwa sumbunya mingguan ada di judul grafik yang jauh di bawah,
+       dan pilihan "Otomatis" jadi pilihan yang tidak mengatakan apa yang
+       dipilihnya. (API-62 nomor 2) --}}
+  <p class="rentang-terpilih">
+    <span>Rentang terpilih</span><b>{{ $rentangTerbaca }}</b>
+    <span class="muted small">grafik {{ mb_strtolower($satuan->label()) }}@unless($satuanDipilih) (otomatis)@endunless</span>
+  </p>
+
   <form method="GET" class="row">
     <div><label for="from">Dari tanggal</label><input id="from" type="date" name="from" value="{{ $from->format('Y-m-d') }}"></div>
     <div><label for="to">Sampai tanggal</label><input id="to" type="date" name="to" value="{{ $to->format('Y-m-d') }}"></div>
@@ -38,8 +62,30 @@
       </select>
     </div>
     @endif
+    {{-- Keempat satuan tersedia, tapi yang dipakai ditentukan rentang
+         tanggalnya sendiri kecuali orangnya memilih lain — itulah arti opsi
+         "Otomatis", dan itu yang membuat mengubah rentang tanggal tidak
+         meninggalkan satuan lama yang sudah tidak cocok. Tahunan bisa
+         dipilih, tidak pernah jadi bawaan. (API-62 nomor 2) --}}
+    <div>
+      <label for="satuan">Satuan waktu grafik</label>
+      <select id="satuan" name="satuan">
+        {{-- Satuan yang sedang dipakai ditulis di baris "Rentang terpilih"
+             di atas, bukan di dalam opsi ini: teks opsi yang panjang dipotong
+             sendiri oleh select bawaan peramban, dan "Otomatis — Mingguar"
+             lebih buruk daripada tidak menulisnya sama sekali. --}}
+        <option value="">Otomatis</option>
+        @foreach(\App\Services\SatuanWaktu::cases() as $pilihan)
+          <option value="{{ $pilihan->value }}" @selected($satuanDipilih && $satuan === $pilihan)>{{ $pilihan->label() }}</option>
+        @endforeach
+      </select>
+    </div>
     <div class="shrink"><button>Terapkan</button></div>
+    {{-- Dua format berdampingan. CSV lebih dulu: ia yang dipakai alat lain.
+         `.xlsx` di sebelahnya karena CSV yang dibuka Excel wilayah Indonesia
+         bisa membaca ulang angka dan tanggalnya sendiri. (API-62 nomor 4) --}}
     <div class="shrink"><a class="btn ghost" href="{{ route('reports.export', request()->query()) }}">Unduh CSV</a></div>
+    <div class="shrink"><a class="btn ghost" href="{{ route('reports.export.xlsx', request()->query()) }}">Unduh Excel</a></div>
   </form>
 </div>
 
@@ -56,9 +102,10 @@
 {{-- Angka grafik dihitung sekali di sini; kartu statistik di bawah ikut
      memakainya supaya total biaya tidak pernah tampil tanpa cakupannya. --}}
 @php $cakupan = $grafik->cakupanBiaya(); @endphp
-@php $perBulan = $grafik->perBulan(); @endphp
+@php $perPeriode = $grafik->perPeriode(); @endphp
 @php $biayaKategori = $grafik->biayaPerKategori(); @endphp
 @php $median = $grafik->medianPenyelesaian(); @endphp
+@php $kolomPeriode = $grafik->satuan()->satuan(); @endphp
 @php $ambang = $grafik->ambangSla(); @endphp
 
 <div class="grid g4" style="margin-bottom:18px">
@@ -106,25 +153,28 @@
   // outlet aktif" jadi keterangan yang tidak menjelaskan apa pun, dan
   // pembacanya mengira angkanya sudah dinormalkan padahal itu jumlah mentah.
   $catatanTren = $outlet
-    ? 'Saringan sedang pada satu outlet, jadi pembaginya satu: yang digambar jumlah complaint '.$outlet->name.' per bulan. Lepas saringan outletnya untuk membandingkan antar outlet.'
-    : 'Jumlah mentah naik setiap kali outlet bertambah, jadi yang digambar adalah angka per outlet. Pembaginya jumlah outlet yang sudah aktif pada bulan itu — outlet yang belum pernah menerima complaint tidak ikut membagi bulan sebelumnya.';
+    ? 'Saringan sedang pada satu outlet, jadi pembaginya satu: yang digambar jumlah complaint '.$outlet->name.' '.$grafik->satuan()->perSatuan().'. Lepas saringan outletnya untuk membandingkan antar outlet.'
+    : 'Jumlah mentah naik setiap kali outlet bertambah, jadi yang digambar adalah angka per outlet. Pembaginya jumlah outlet yang sudah aktif pada periode itu — outlet yang belum pernah menerima complaint tidak ikut membagi periode sebelumnya.';
 @endphp
 @php $catatanTren .= $tanpaOutlet > 0 ? ' '.$tanpaOutlet.' complaint pada periode ini tidak punya outlet, jadi tidak bisa dibagi per outlet dan tidak masuk grafik ini.' : ''; @endphp
 
+@php $titikPerOutlet = $grafik->titikPerOutlet(); @endphp
+
 <x-grafik.garis
-  :judul="$outlet ? 'Complaint '.$outlet->name.' per bulan' : 'Complaint per outlet per bulan'"
+  :judul="($outlet ? 'Complaint '.$outlet->name : 'Complaint per outlet').' '.$grafik->satuan()->perSatuan()"
   :catatan="$catatanTren"
-  :titik="$grafik->titikPerOutlet()">
+  :titik="$titikPerOutlet"
+  :catatan-bawah="$grafik->keteranganPadatData($titikPerOutlet)">
   <x-slot:tabel>
     <table>
-      <thead><tr><th>Bulan</th><th class="num">Complaint</th><th class="num">Outlet aktif</th><th class="num">Per outlet</th></tr></thead>
+      <thead><tr><th>{{ $kolomPeriode }}</th><th class="num">Complaint</th><th class="num">Outlet aktif</th><th class="num">Per outlet</th></tr></thead>
       <tbody>
-        @foreach($perBulan as $bulan)
+        @foreach($perPeriode as $periode)
           <tr>
-            <td>{{ $bulan['label'] }}</td>
-            <td class="num">{{ $bulan['complaint'] }}</td>
-            <td class="num">{{ $bulan['outlet'] }}</td>
-            <td class="num">{{ $bulan['per'] === null ? '—' : $grafik->desimal($bulan['per']) }}</td>
+            <td>{{ $periode['judul'] }}</td>
+            <td class="num">{{ $periode['complaint'] }}</td>
+            <td class="num">{{ $periode['outlet'] }}</td>
+            <td class="num">{{ $periode['per'] === null ? '—' : $grafik->desimal($periode['per']) }}</td>
           </tr>
         @endforeach
       </tbody>
@@ -194,19 +244,22 @@
   }
 @endphp
 
+@php $titikRusak = $grafik->titikBarangRusak(); @endphp
+
 <x-grafik.garis
-  judul="Barang Rusak per bulan — jumlah kasus"
+  :judul="'Barang Rusak '.$grafik->satuan()->perSatuan().' — jumlah kasus'"
   :catatan="$catatanRusak"
-  :titik="$grafik->titikBarangRusak()"
+  :titik="$titikRusak"
+  :catatan-bawah="$grafik->keteranganPadatData($titikRusak)"
   warna="var(--danger)">
   <x-slot:tabel>
     <table>
-      <thead><tr><th>Bulan</th><th class="num">Kasus Barang Rusak</th></tr></thead>
+      <thead><tr><th>{{ $kolomPeriode }}</th><th class="num">Kasus Barang Rusak</th></tr></thead>
       <tbody>
-        @foreach($perBulan as $bulan)
+        @foreach($perPeriode as $periode)
           <tr>
-            <td>{{ $bulan['label'] }}</td>
-            <td class="num">{{ $bulan['rusak'] }}</td>
+            <td>{{ $periode['judul'] }}</td>
+            <td class="num">{{ $periode['rusak'] }}</td>
           </tr>
         @endforeach
       </tbody>
@@ -215,19 +268,19 @@
 </x-grafik.garis>
 
 <x-grafik.garis
-  judul="Median waktu penyelesaian per bulan, dalam hari"
-  catatan="Median, bukan rata-rata: satu kasus 41 hari menarik rata-rata dan membuat bulan yang baik terlihat buruk. Garis di bawah pita berarti bulan itu masih di dalam ambang SLA. Complaint yang belum selesai tidak ikut dihitung, dan waktu jeda menunggu pelanggan sudah dikurangi."
+  :judul="'Median waktu penyelesaian '.$grafik->satuan()->perSatuan().', dalam hari'"
+  :catatan="'Median, bukan rata-rata: satu kasus 41 hari menarik rata-rata dan membuat '.mb_strtolower($grafik->satuan()->satuan()).' yang baik terlihat buruk. Garis di bawah pita berarti '.mb_strtolower($grafik->satuan()->satuan()).' itu masih di dalam ambang SLA. Complaint yang belum selesai tidak ikut dihitung, dan waktu jeda menunggu pelanggan sudah dikurangi.'"
   :titik="$grafik->titikMedian()"
   :pita="['min' => $ambang['min'], 'max' => $ambang['max'], 'label' => 'Ambang SLA '.$ambang['min'].'–'.$ambang['max'].' hari, menurut bobot']">
   <x-slot:tabel>
     <table>
-      <thead><tr><th>Bulan</th><th class="num">Median (hari)</th><th class="num">Complaint selesai</th></tr></thead>
+      <thead><tr><th>{{ $kolomPeriode }}</th><th class="num">Median (hari)</th><th class="num">Complaint selesai</th></tr></thead>
       <tbody>
-        @foreach($median as $bulan)
+        @foreach($median as $periode)
           <tr>
-            <td>{{ $bulan['label'] }}</td>
-            <td class="num">{{ $bulan['median'] === null ? '—' : $grafik->desimal($bulan['median']) }}</td>
-            <td class="num">{{ $bulan['n'] }}</td>
+            <td>{{ $periode['judul'] }}</td>
+            <td class="num">{{ $periode['median'] === null ? '—' : $grafik->desimal($periode['median']) }}</td>
+            <td class="num">{{ $periode['n'] }}</td>
           </tr>
         @endforeach
       </tbody>
