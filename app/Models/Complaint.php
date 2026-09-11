@@ -74,7 +74,7 @@ class Complaint extends Model
      */
     protected $fillable = [
         'channel', 'reporter_name', 'reporter_phone',
-        'nevira_transaction_number', 'nevira_service_index', 'nota_exemption',
+        'nevira_transaction_number', 'nevira_webstruk_token', 'nevira_service_index', 'nota_exemption',
         'outlet_id', 'category', 'sub_category', 'bobot', 'layanan',
         'description', 'assigned_to', 'forwarded_division',
     ];

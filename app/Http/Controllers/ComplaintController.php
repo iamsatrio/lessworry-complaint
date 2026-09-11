@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\DaftarPetugas;
 use App\Services\JejakComplaint;
 use App\Services\KandidatPelaku;
+use App\Services\PenutupanDiTempat;
 use App\Services\PenyelarasNevira;
 use App\Services\PenyimpanFoto;
 use Illuminate\Database\QueryException;
@@ -25,6 +26,7 @@ class ComplaintController extends Controller
         private JejakComplaint $jejak,
         private DaftarPetugas $petugas,
         private PenyelarasNevira $penyelaras,
+        private PenutupanDiTempat $penutupan,
     ) {}
 
     /**
@@ -165,6 +167,12 @@ class ComplaintController extends Controller
         $user = $request->user();
         $data = $this->kunciKeWewenang($request->validated(), $user);
 
+        // Kolom penyelesaian dipisahkan dari kolom model SEBELUM apa pun
+        // disimpan. Tanpa pemisahan ini, permintaan yang dirakit tangan bisa
+        // menitipkan resolusi dan kompensasi ke tiket biasa tanpa pernah
+        // melewati wewenang penutupan. (API-26)
+        [$data, $penanganan] = $this->pisahkanPenangananDiTempat($data, $request->boolean('tangani_di_tempat'));
+
         // Berkas ditulis SEBELUM transaksi, jadi nomor complaint-nya belum
         // ada dan berkasnya masuk ke folder intake. Itu disengaja: percobaan
         // ulang saat nomor tiket bentrok tidak boleh menulis unggahan yang
@@ -176,8 +184,19 @@ class ComplaintController extends Controller
         // ponsel membawa koordinat GPS di mana pun ia diunggah. (API-20)
         [$berkas] = $this->foto->simpanBanyak($request->file('attachments', []), 'complaints/intake');
 
+        // Boleh-tidaknya menutup diputuskan DI SERVER dari peran dan bobotnya,
+        // bukan dari apa yang dikirim peramban — statusnya sendiri tidak
+        // pernah diterima sebagai masukan form. (API-26)
+        $tutup = $penanganan === null
+            ? ['boleh' => false, 'alasan' => null]
+            : $this->penutupan->putuskan(
+                $user,
+                new Complaint($data),
+                $penanganan['compensation_amount'],
+            );
+
         $complaint = $this->simpanMeskiNomorBentrok(
-            fn () => $this->simpanComplaint($data, $user, $berkas)
+            fn () => $this->simpanComplaint($data, $user, $berkas, $penanganan, $tutup['boleh'])
         );
 
         // Tarik data order NEVIRA kalau ID diisi. Kegagalan tidak boleh
@@ -186,7 +205,34 @@ class ComplaintController extends Controller
             $this->penyelaras->selaraskan($complaint, $user);
         }
 
-        return $this->keHalamanComplaintBaru($complaint, $user);
+        return $this->keHalamanComplaintBaru($complaint, $user, $tutup['alasan']);
+    }
+
+    /**
+     * Pisahkan kolom penanganan-di-tempat dari kolom yang boleh mass-assign.
+     *
+     * Keempatnya hanya berlaku kalau centangnya benar-benar dipakai. Kalau
+     * tidak, nilainya dibuang di sini — bukan diabaikan diam-diam di bawah.
+     *
+     * @param  array<string,mixed>  $data
+     * @return array{0:array<string,mixed>,1:?array{resolution:?string,tindak_lanjut:?string,compensation_amount:int}}
+     */
+    private function pisahkanPenangananDiTempat(array $data, bool $diTempat): array
+    {
+        $penanganan = $diTempat ? [
+            'resolution' => $data['resolution'] ?? null,
+            'tindak_lanjut' => $data['tindak_lanjut'] ?? null,
+            'compensation_amount' => (int) ($data['compensation_amount'] ?? 0),
+        ] : null;
+
+        unset(
+            $data['tangani_di_tempat'],
+            $data['resolution'],
+            $data['tindak_lanjut'],
+            $data['compensation_amount'],
+        );
+
+        return [$data, $penanganan];
     }
 
     /**
@@ -224,9 +270,14 @@ class ComplaintController extends Controller
      * @param  array<string,mixed>  $data
      * @param  array<int,array<string,mixed>>  $berkas
      */
-    private function simpanComplaint(array $data, User $user, array $berkas): Complaint
-    {
-        return DB::transaction(function () use ($data, $user, $berkas) {
+    private function simpanComplaint(
+        array $data,
+        User $user,
+        array $berkas,
+        ?array $penanganan = null,
+        bool $tutup = false,
+    ): Complaint {
+        return DB::transaction(function () use ($data, $user, $berkas, $penanganan, $tutup) {
             $complaint = new Complaint($data);
             $complaint->ticket_number = Complaint::nextTicketNumber();
             $complaint->status = 'open';
@@ -237,6 +288,10 @@ class ComplaintController extends Controller
 
             $this->jejak->dibuat($complaint, $user);
 
+            if ($penanganan !== null) {
+                $this->terapkanPenangananDiTempat($complaint, $user, $penanganan, $tutup);
+            }
+
             foreach ($berkas as $b) {
                 $complaint->attachments()->create($b);
             }
@@ -245,8 +300,48 @@ class ComplaintController extends Controller
         });
     }
 
-    private function keHalamanComplaintBaru(Complaint $complaint, User $user): RedirectResponse
-    {
+    /**
+     * Satu kali simpan, DUA kejadian di riwayat: dibuat, lalu berpindah.
+     *
+     * Diringkas jadi satu baris "lahir sudah tertutup" akan menghemat sebaris
+     * dan merusak laporan: waktu penyelesaian dihitung dari selisih stempel
+     * waktu kedua kejadian itu. Tiket yang ditangani di tempat memang
+     * berdurasi 0 hari — dan 0 hari adalah angka yang benar, bukan angka yang
+     * hilang. Median penyelesaian complaint Ringan 2026 juga 0 hari.
+     *
+     * @param  array{resolution:?string,tindak_lanjut:?string,compensation_amount:int}  $penanganan
+     */
+    private function terapkanPenangananDiTempat(
+        Complaint $complaint,
+        User $user,
+        array $penanganan,
+        bool $tutup,
+    ): void {
+        $complaint->resolution = $penanganan['resolution'];
+        $complaint->tindak_lanjut = $penanganan['tindak_lanjut'];
+        $complaint->compensation_amount = $penanganan['compensation_amount'];
+
+        // Keluhan yang sudah ditangani sudah pasti direspons. Tanpa ini SLA
+        // respon pertama tampak terlewat pada tiket yang justru paling cepat.
+        $complaint->first_response_at = now();
+
+        $ke = $tutup ? 'close' : 'handling';
+        $complaint->status = $ke;
+        $complaint->close_reason = $tutup ? 'selesai' : null;
+        $complaint->resolved_at = $tutup ? now() : null;
+        $complaint->save();
+
+        $this->jejak->statusBerubah($complaint, $user, 'open', $ke, $tutup
+            ? 'Ditangani dan ditutup di tempat saat complaint dicatat.'
+            : 'Ditangani di tempat, tapi penutupannya di luar wewenang pencatat — '
+                .'menunggu yang berwenang menutup.');
+    }
+
+    private function keHalamanComplaintBaru(
+        Complaint $complaint,
+        User $user,
+        ?string $alasanTidakDitutup = null,
+    ): RedirectResponse {
         $redirect = redirect()
             ->route('complaints.show', $complaint)
             ->with('status', 'Complaint '.$complaint->ticket_number.' tercatat.')
@@ -254,6 +349,15 @@ class ComplaintController extends Controller
             // sudah punya nomor tiket. Draft yang dihapus saat form dikirim
             // ikut hilang justru ketika simpannya gagal.
             ->with('bersihkan_draft', true);
+
+        // Kenapa tiketnya TIDAK tertutup padahal centangnya dipakai. Kuncinya
+        // sendiri, bukan menumpang 'warning': peringatan nota kembar di bawah
+        // bisa muncul pada complaint yang sama, dan yang belakangan menimpa
+        // yang duluan — kasir kehilangan justru kalimat yang menjelaskan
+        // kenapa pekerjaannya belum selesai. (API-26)
+        if ($alasanTidakDitutup !== null) {
+            $redirect->with('penutupan_ditolak', $alasanTidakDitutup);
+        }
 
         // Peringatan, bukan larangan: satu nota boleh punya dua keluhan
         // berbeda. Yang tidak boleh adalah petugas tidak tahu. (API-8 T7)
