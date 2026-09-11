@@ -27,10 +27,18 @@ class LayananNota
         $cari = mb_strtolower($nama);
 
         foreach ((array) config('complaint.layanan_dari_nevira') as $potongan => $layanan) {
-            if (str_contains($cari, (string) $potongan)) {
-                return array_key_exists($layanan, (array) config('complaint.layanan'))
-                    ? (string) $layanan
-                    : null;
+            if (! str_contains($cari, (string) $potongan)) {
+                continue;
+            }
+
+            // Potongan yang menunjuk kunci yang tidak ada di
+            // config('complaint.layanan') dilewati, bukan dipakai untuk
+            // menghentikan pencarian. Dulu ia membalas null seketika: satu
+            // salah tulis di config mematikan setiap potongan sesudahnya
+            // untuk nama yang sama, dan tidak ada jejaknya di mana pun.
+            // (API-58, catatan kecil)
+            if (array_key_exists($layanan, (array) config('complaint.layanan'))) {
+                return (string) $layanan;
             }
         }
 
