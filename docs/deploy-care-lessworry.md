@@ -397,7 +397,7 @@ memeriksa wewenang. Symlink publik ke `storage` pernah jadi celahnya.
 **Jangan menjalankan `--seed` di produksi** kecuali pada urutan reset di
 bagian 10, yang memang disengaja.
 
-Buat supervisor pertama:
+Buat admin pertama:
 
 ```bash
 $PHP artisan tinker
@@ -408,11 +408,23 @@ $u = new App\Models\User();
 $u->name = 'Satrio Wibowo';
 $u->email = 'satrio@lessworry.id';
 $u->password = 'password_sementara_yang_kuat';
-$u->role = 'supervisor';
+$u->role = 'admin';
 $u->is_active = true;
 $u->must_change_password = true;
 $u->save();
 exit
+```
+
+**`admin`, bukan `supervisor`.** Pengelolaan pengguna dijaga
+`User::canManageUsers()`, yang hanya mengizinkan `admin`, dan setiap rute
+`/users` memanggilnya. Akun pertama yang dibuat sebagai `supervisor` bisa
+masuk tapi **tidak bisa membuat akun siapa pun** — seluruh tim tertahan di
+satu akun, dan satu-satunya jalan keluarnya kembali ke shell ini.
+
+Kalau terlanjur, tidak perlu mengulang dari awal:
+
+```bash
+$PHP artisan lessworry:pulihkan-admin satrio@lessworry.id
 ```
 
 ### Buktikan surat benar-benar sampai — sebelum akun dibagikan
@@ -515,9 +527,12 @@ Kalau `.env` membalas 200, berhenti: document root salah — ia menunjuk ke
 `~/care`, bukan ke `~/care/public`. Ganti kredensial NEVIRA dan password
 database setelah memperbaikinya, karena keduanya sudah pernah terbuka.
 
-Lalu lewat browser: masuk sebagai supervisor → sistem memaksa ganti password →
+Lalu lewat browser: masuk sebagai admin → sistem memaksa ganti password →
 buat satu akun kasir → catat satu complaint uji → cek nomor nota NEVIRA
 tertarik.
+
+Langkah "buat satu akun kasir" itu sekalian membuktikan akun pertamanya memang
+`admin`: kalau ia `supervisor`, halaman Pengguna membalas 403 di sini.
 
 ---
 
