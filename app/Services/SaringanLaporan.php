@@ -40,8 +40,16 @@ final class SaringanLaporan
         /** @var User $user */
         $user = $request->user();
 
-        $dari = $request->date('from') ?? now()->subDays(30)->startOfDay();
-        $sampai = $request->date('to') ?? now()->endOfDay();
+        // Kedua ujungnya dipaksa ke batas harinya. Saringan ini bersatuan
+        // HARI — kotak tanggalnya mengirim `yyyy-mm-dd` — tapi `date()`
+        // menghasilkan pukul 00:00, jadi tanpa `endOfDay()` seluruh hari
+        // terakhir rentang jatuh di luar `whereBetween` di bawah. Lima dari
+        // delapan pintasan berakhir hari ini, dan "Hari Ini" tidak pernah
+        // bisa menampilkan apa pun. `startOfDay()` di sisi `from` menjaga
+        // ujung yang sama tetap benar kalau yang masuk berisi jam.
+        // (Tinjauan Maldini PR #27, dan API-56)
+        $dari = $request->date('from')?->startOfDay() ?? now()->subDays(30)->startOfDay();
+        $sampai = $request->date('to')?->endOfDay() ?? now()->endOfDay();
 
         // Satuan waktunya ditentukan rentang tanggalnya sendiri KECUALI
         // orangnya memilih lain. Pilihan yang tidak dikenali diperlakukan

@@ -168,6 +168,110 @@ class PintasanTanggalTest extends TestCase
         $this->assertStringContainsString('satuan=bulanan', $html);
     }
 
+    /* ---------- Hari terakhir rentang ikut terhitung ---------- */
+
+    /**
+     * Sebelum perbaikan ini `$sampai` bernilai pukul 00:00 hari itu, jadi
+     * `whereBetween` membuang seluruh hari terakhir rentang. Test pintasan
+     * yang lain menaruh datanya di tengah rentang dan berhenti sebelum hari
+     * terakhirnya — itu sebabnya delapan pintasan hijau sementara lima di
+     * antaranya mengembalikan nol di layar. (Tinjauan Maldini PR #27, API-56)
+     */
+    public function test_complaint_pada_hari_terakhir_rentang_ikut_terhitung(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-10 14:00:00'));
+
+        $this->complaint('2026-09-10 13:00:00');
+
+        $this->actingAs($this->userAs('supervisor'))
+            ->get('/reports?from=2026-09-10&to=2026-09-10')
+            ->assertOk()
+            ->assertViewHas('total', 1)
+            ->assertDontSee('Tidak ada data pada periode ini');
+
+        Carbon::setTestNow();
+    }
+
+    /**
+     * Kasus paling ekstremnya: satu hari yang sama untuk "dari" dan "sampai".
+     * Rentangnya dulu `[00:00, 00:00]`, jadi hanya complaint yang masuk tepat
+     * tengah malam yang terhitung.
+     */
+    public function test_pintasan_hari_ini_menampilkan_complaint_hari_ini(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-10 16:00:00'));
+
+        $this->complaint('2026-09-10 09:00:00');
+        $this->complaint('2026-09-10 13:00:00');
+        // Tepat tengah malam: satu-satunya yang terhitung sebelum perbaikan.
+        $this->complaint('2026-09-10 00:00:00');
+        $this->complaint('2026-09-10 23:59:00');
+        // Batas bawahnya tetap batas: kemarin tidak boleh ikut terseret masuk.
+        $this->complaint('2026-09-09 23:00:00');
+
+        $this->actingAs($this->userAs('supervisor'))
+            ->get('/reports?from=2026-09-10&to=2026-09-10')
+            ->assertOk()
+            ->assertViewHas('total', 4);
+
+        Carbon::setTestNow();
+    }
+
+    /**
+     * Ekspor CSV membaca saringan yang sama, tapi lewat baris kode yang
+     * berbeda — jadi ia dituntut sendiri, bukan diasumsikan ikut benar.
+     */
+    public function test_ekspor_csv_memuat_complaint_hari_terakhir_rentang(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-10 14:00:00'));
+
+        $complaint = $this->complaint('2026-09-10 13:00:00');
+
+        $response = $this->actingAs($this->userAs('supervisor'))
+            ->get('/reports/export?from=2026-09-10&to=2026-09-10')
+            ->assertOk();
+
+        $csv = $response->streamedContent();
+        $this->assertStringContainsString($complaint->ticket_number, $csv);
+
+        Carbon::setTestNow();
+    }
+
+    /**
+     * Lima dari delapan pintasan berakhir hari ini. Satu complaint hari ini
+     * harus muncul di kelimanya — kalau salah satunya nol, tombolnya berbohong.
+     */
+    public function test_kelima_pintasan_yang_berakhir_hari_ini_tidak_mengosongkan_hari_ini(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-10 14:00:00'));
+
+        $this->complaint('2026-09-10 13:00:00');
+        $user = $this->userAs('supervisor');
+
+        $pintasan = $this->actingAs($user)->get('/reports')->assertOk()
+            ->viewData('pintasan');
+
+        $hariIni = now()->format('Y-m-d');
+        $diuji = 0;
+
+        foreach ($pintasan as $p) {
+            if ($p['sampai'] !== $hariIni) {
+                continue;
+            }
+
+            $diuji++;
+
+            $this->actingAs($user)
+                ->get('/reports?from='.$p['dari'].'&to='.$p['sampai'])
+                ->assertOk()
+                ->assertViewHas('total', 1);
+        }
+
+        $this->assertSame(5, $diuji, 'Lima pintasan berakhir hari ini: Hari Ini, Minggu Ini, 7 Hari Terakhir, Bulan Ini, Semua.');
+
+        Carbon::setTestNow();
+    }
+
     /* ---------- Tanpa paket kalender pihak ketiga ---------- */
 
     public function test_tidak_ada_paket_kalender_javascript_yang_ditambahkan(): void
