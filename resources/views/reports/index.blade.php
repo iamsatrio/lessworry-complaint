@@ -1,7 +1,10 @@
 @extends('layouts.app')
 @section('title','Laporan')
 @section('content')
-<div class="eyebrow">{{ $from->translatedFormat('d M Y') }} — {{ $to->translatedFormat('d M Y') }}</div>
+{{-- Outlet yang sedang disaring ikut tertulis di sini: halaman yang menyaring
+     tanpa mengatakannya membuat angka satu outlet dibaca sebagai angka
+     jaringan. (API-62 nomor 3) --}}
+<div class="eyebrow">{{ $from->translatedFormat('d M Y') }} — {{ $to->translatedFormat('d M Y') }}@if($outlet) · {{ $outlet->name }}@endif</div>
 <h1>Laporan complaint</h1>
 <p class="lede">
   {{-- Dihitung dari yang TIDAK lagi terbuka, bukan dari resolved_at. Seluruh
@@ -19,6 +22,22 @@
   <form method="GET" class="row">
     <div><label for="from">Dari tanggal</label><input id="from" type="date" name="from" value="{{ $from->format('Y-m-d') }}"></div>
     <div><label for="to">Sampai tanggal</label><input id="to" type="date" name="to" value="{{ $to->format('Y-m-d') }}"></div>
+    {{-- Daftarnya hanya berisi outlet yang boleh dilihat pengguna ini: kasir
+         menemukan satu nama, bukan sebelas dengan sepuluh yang ditolak saat
+         dipilih. Yang menegakkannya tetap sisi server —
+         LaporanFilterRequest::authorize() menolak permintaan langsung dengan
+         outlet lain. (API-62 nomor 3) --}}
+    @if($pilihanOutlet->isNotEmpty())
+    <div>
+      <label for="outlet">Outlet</label>
+      <select id="outlet" name="outlet">
+        <option value="">Semua outlet</option>
+        @foreach($pilihanOutlet as $pilihan)
+          <option value="{{ $pilihan->id }}" @selected($outlet?->id === $pilihan->id)>{{ $pilihan->name }}</option>
+        @endforeach
+      </select>
+    </div>
+    @endif
     <div class="shrink"><button>Terapkan</button></div>
     <div class="shrink"><a class="btn ghost" href="{{ route('reports.export', request()->query()) }}">Unduh CSV</a></div>
   </form>
@@ -82,11 +101,18 @@
      --------------------------------------------------------------- --}}
 
 @php $tanpaOutlet = $grafik->tanpaOutlet(); @endphp
-@php $catatanTren = 'Jumlah mentah naik setiap kali outlet bertambah, jadi yang digambar adalah angka per outlet. Pembaginya jumlah outlet yang sudah aktif pada bulan itu — outlet yang belum pernah menerima complaint tidak ikut membagi bulan sebelumnya.'; @endphp
+@php
+  // Saat saringannya satu outlet, pembaginya satu — kalimat "dibagi jumlah
+  // outlet aktif" jadi keterangan yang tidak menjelaskan apa pun, dan
+  // pembacanya mengira angkanya sudah dinormalkan padahal itu jumlah mentah.
+  $catatanTren = $outlet
+    ? 'Saringan sedang pada satu outlet, jadi pembaginya satu: yang digambar jumlah complaint '.$outlet->name.' per bulan. Lepas saringan outletnya untuk membandingkan antar outlet.'
+    : 'Jumlah mentah naik setiap kali outlet bertambah, jadi yang digambar adalah angka per outlet. Pembaginya jumlah outlet yang sudah aktif pada bulan itu — outlet yang belum pernah menerima complaint tidak ikut membagi bulan sebelumnya.';
+@endphp
 @php $catatanTren .= $tanpaOutlet > 0 ? ' '.$tanpaOutlet.' complaint pada periode ini tidak punya outlet, jadi tidak bisa dibagi per outlet dan tidak masuk grafik ini.' : ''; @endphp
 
 <x-grafik.garis
-  judul="Complaint per outlet per bulan"
+  :judul="$outlet ? 'Complaint '.$outlet->name.' per bulan' : 'Complaint per outlet per bulan'"
   :catatan="$catatanTren"
   :titik="$grafik->titikPerOutlet()">
   <x-slot:tabel>

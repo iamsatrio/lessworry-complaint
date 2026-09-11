@@ -2,25 +2,19 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Complaint;
+use App\Http\Requests\LaporanFilterRequest;
 use App\Models\ComplaintResponsible;
 use App\Services\GrafikLaporan;
-use Illuminate\Http\Request;
+use App\Services\SaringanLaporan;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
-    public function index(Request $request)
+    public function index(LaporanFilterRequest $request)
     {
-        $user = $request->user();
-        $from = $request->date('from') ?? now()->subDays(30)->startOfDay();
-        $to = $request->date('to') ?? now()->endOfDay();
-
-        $complaints = Complaint::query()
-            ->visibleTo($user)
-            ->whereBetween('created_at', [$from, $to])
-            ->with('outlet')
-            ->get();
+        $saringan = SaringanLaporan::dariPermintaan($request);
+        $user = $saringan->user;
+        $complaints = $saringan->complaints();
 
         $resolved = $complaints->whereNotNull('resolved_at');
 
@@ -29,13 +23,17 @@ class ReportController extends Controller
             : collect();
 
         return view('reports.index', [
-            'from' => $from,
-            'to' => $to,
+            'from' => $saringan->dari,
+            'to' => $saringan->sampai,
+            // Saringan outlet: yang sedang dipilih, dan pilihan yang boleh
+            // ditawarkan kepada pengguna ini. (API-62 nomor 3)
+            'outlet' => $saringan->outlet,
+            'pilihanOutlet' => $saringan->pilihanOutlet(),
             // Grafik dihitung dari KOLEKSI YANG SAMA dengan tabel di bawahnya,
             // bukan lewat kueri sendiri: satu jalur data berarti satu jalur
             // wewenang. Kalau grafik mengambil datanya sendiri, kebocoran di
             // sana tidak akan terlihat karena tabelnya tetap benar. (API-52)
-            'grafik' => new GrafikLaporan($user, $complaints),
+            'grafik' => new GrafikLaporan($user, $complaints, $saringan->outletId()),
             'total' => $complaints->count(),
             'resolved' => $resolved->count(),
             'overdue' => $complaints->filter->isOverdue()->count(),
@@ -94,17 +92,11 @@ class ReportController extends Controller
         ]);
     }
 
-    public function export(Request $request): StreamedResponse
+    public function export(LaporanFilterRequest $request): StreamedResponse
     {
-        $user = $request->user();
-        $from = $request->date('from') ?? now()->subDays(30)->startOfDay();
-        $to = $request->date('to') ?? now()->endOfDay();
-
-        $complaints = Complaint::query()
-            ->visibleTo($user)
-            ->whereBetween('created_at', [$from, $to])
-            ->with(['outlet', 'assignee'])
-            ->get();
+        $saringan = SaringanLaporan::dariPermintaan($request);
+        $user = $saringan->user;
+        $complaints = $saringan->complaints(['outlet', 'assignee']);
 
         $showStaff = $user->canSeeStaffAttribution();
 

@@ -56,13 +56,14 @@ class GrafikLaporanTest extends TestCase
         return $complaint;
     }
 
-    private function grafik(User $user, string $dari, string $sampai): GrafikLaporan
+    private function grafik(User $user, string $dari, string $sampai, ?int $outletId = null): GrafikLaporan
     {
         return new GrafikLaporan($user, Complaint::query()
             ->visibleTo($user)
             ->whereBetween('created_at', [Carbon::parse($dari), Carbon::parse($sampai)])
+            ->when($outletId !== null, fn ($q) => $q->where('outlet_id', $outletId))
             ->with('outlet')
-            ->get());
+            ->get(), $outletId);
     }
 
     private function laporan(User $user, string $dari, string $sampai): string
