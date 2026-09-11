@@ -7,6 +7,7 @@ use App\Models\Outlet;
 use App\Models\User;
 use App\Support\PolaNota;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -374,8 +375,8 @@ class IntakeSatuLangkahTest extends TestCase
             'nevira_webstruk_token' => 'f3379aef701b',
         ]))->assertRedirect();
 
-        $baris = \Illuminate\Support\Facades\DB::table('complaints')->get()
-            ->concat(\Illuminate\Support\Facades\DB::table('complaint_activities')->get());
+        $baris = DB::table('complaints')->get()
+            ->concat(DB::table('complaint_activities')->get());
         $isi = $baris->map(fn ($r) => json_encode($r))->implode(' ');
 
         foreach (['55.226', '32.726', 'Saldo', 'Jl. Raya Ragunan', '021-7890123'] as $rahasia) {
