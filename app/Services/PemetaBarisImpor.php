@@ -373,10 +373,10 @@ class PemetaBarisImpor
      * pelanggan, bukan barang yang disebut keluhannya: tas laundry itu wadah
      * tempat cucian datang dan pulang, dan yang dibeli tetap Kiloan.
      *
-     * Baris ambigu — kata kuncinya baru muncul setelah klausa pertama —
-     * ditahan di `satuan_non_cloth`, sama seperti di perintah pembetulan,
-     * karena penyaringnya tinggal di `LayananDariUraian` dan bukan di
-     * pemanggilnya. Bedanya di sini ia tidak bisa dicetak ke layar siapa pun,
+     * Baris yang DITAHAN — kata kuncinya di luar klausa pertama, atau
+     * uraiannya tentang tas laundry — tetap di `satuan_non_cloth`, sama
+     * seperti di perintah pembetulan, karena penyaringnya tinggal di
+     * `LayananDariUraian` dan bukan di pemanggilnya. Bedanya di sini ia tidak bisa dicetak ke layar siapa pun,
      * jadi ia dicatat sebagai ANOMALI: impor yang menahan baris tanpa
      * mengatakannya adalah impor yang menyembunyikan keputusannya sendiri,
      * dan laporan impor justru tempat hal begitu harus muncul.
@@ -410,7 +410,8 @@ class PemetaBarisImpor
             $anomali[] = [
                 'kolom' => 'Layanan',
                 'alasan' => 'uraiannya menyebut '.config('complaint.layanan.'.$temu['layanan'], $temu['layanan'])
-                    .' tapi tidak di klausa pertama — ditahan di Satuan Non Cloth, perlu dibaca orang',
+                    .' tapi ditahan di Satuan Non Cloth ('
+                    .LayananDariUraian::alasanTahan((string) $temu['tahan']).') — perlu dibaca orang',
             ];
         }
 

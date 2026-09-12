@@ -29,6 +29,11 @@ use Illuminate\Support\Facades\DB;
  *    cucian datang dan pulang — tasnya milik pelanggan, tapi bukan tasnya
  *    yang dicuci. Kolom `layanan` mencatat jasa yang DIBELI, bukan barang
  *    yang disebut keluhannya, dan yang dibeli di keempat baris itu Kiloan.
+ *
+ *    Pagar kedua untuk hal yang sama ada di `LayananDariUraian`: uraian yang
+ *    menyebut tas laundry menahan SELURUH BARISNYA, walau layanannya
+ *    `satuan_non_cloth`. Penyaring `ASAL` saja tidak menolong baris yang
+ *    masuk lewat impor berikutnya.
  * 3. **Ada jalan mundur, dan ia berhenti di keputusan orang.** `--balikkan`
  *    mengembalikan baris yang pernah dipindah ke `satuan_non_cloth`, dikenali
  *    dari baris riwayat yang ditulis saat memindahkannya. Baris yang SESUDAH
@@ -90,7 +95,7 @@ class BetulkanLayanan extends Command
         }
 
         if ($pindah === []) {
-            $this->line('Tidak ada baris yang dipindah — semua yang cocok tertahan sebagai ambigu.');
+            $this->line('Tidak ada baris yang dipindah — semua yang cocok ditahan.');
         } else {
             $this->cetakBaris($pindah);
             $this->cetakRingkasan($pindah);
@@ -124,14 +129,15 @@ class BetulkanLayanan extends Command
      * Dua pertanyaan, dua sumber, dan bedanya disengaja:
      *
      * - **Boleh dipindah?** dijawab `tebak()`. Perintah ini TIDAK memutuskan
-     *   sendiri. Kalau kelak ada alasan penahanan kedua, ia lahir di
-     *   `LayananDariUraian` dan perintah ini mengikutinya tanpa disunting —
-     *   itulah gunanya keputusannya tidak disalin ke sini.
+     *   sendiri. Alasan penahanan sudah dua — kata kunci di luar klausa
+     *   pertama, dan uraian yang bicara tentang wadah cucian — dan keduanya
+     *   lahir di `LayananDariUraian`. Yang ketiga akan diikuti perintah ini
+     *   tanpa disunting; itulah gunanya keputusannya tidak disalin ke sini.
      * - **Kenapa?** dijawab `periksa()`, yang tetap membawa barisnya beserta
-     *   kata yang cocok dan tanda `ambigu`. Dipakai untuk MENCETAK, tidak
+     *   kata yang cocok dan kode `tahan`. Dipakai untuk MENCETAK, tidak
      *   pernah untuk memutuskan.
      *
-     * @return list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool,ditahan:bool}>
+     * @return list<array{complaint:Complaint,ke:string,kata:string,tahan:?string,ditahan:bool}>
      */
     private function kandidat(): array
     {
@@ -152,7 +158,7 @@ class BetulkanLayanan extends Command
                     'complaint' => $complaint,
                     'ke' => $temu['layanan'],
                     'kata' => $temu['kata'],
-                    'ambigu' => $temu['ambigu'],
+                    'tahan' => $temu['tahan'],
                     'ditahan' => LayananDariUraian::tebak($uraian) === null,
                 ];
             });
@@ -160,7 +166,7 @@ class BetulkanLayanan extends Command
         return $hasil;
     }
 
-    /** @param list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool,ditahan:bool}> $pindah */
+    /** @param list<array{complaint:Complaint,ke:string,kata:string,tahan:?string,ditahan:bool}> $pindah */
     private function tulis(array $pindah, JejakComplaint $jejak): void
     {
         DB::transaction(function () use ($pindah, $jejak) {
@@ -367,7 +373,7 @@ class BetulkanLayanan extends Command
      * sini — ia punya bloknya sendiri di bawah, supaya tidak ada pembaca yang
      * menghitung tabel ini lalu mendapat angka yang berbeda dari yang ditulis.
      *
-     * @param  list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool,ditahan:bool}>  $pindah
+     * @param  list<array{complaint:Complaint,ke:string,kata:string,tahan:?string,ditahan:bool}>  $pindah
      */
     private function cetakBaris(array $pindah): void
     {
@@ -386,7 +392,7 @@ class BetulkanLayanan extends Command
         );
     }
 
-    /** @param list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool,ditahan:bool}> $pindah */
+    /** @param list<array{complaint:Complaint,ke:string,kata:string,tahan:?string,ditahan:bool}> $pindah */
     private function cetakRingkasan(array $pindah): void
     {
         $per = [];
@@ -406,30 +412,35 @@ class BetulkanLayanan extends Command
     }
 
     /**
-     * Baris yang cocok kata kunci tapi DITAHAN, karena kata kuncinya baru
-     * muncul setelah klausa pertama.
+     * Baris yang cocok kata kunci tapi DITAHAN, lengkap dengan alasannya.
      *
      * Dicetak selalu, termasuk saat nol. Angka nol di sini bukan ruang
      * terbuang: pembaca laporan perlu tahu bahwa penyaringnya dijalankan dan
      * tidak menahan apa pun, bukan menebak apakah baginya memang tidak ada
      * atau bagian itu lupa dicetak.
      *
-     * @param  list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool,ditahan:bool}>  $ditahan
+     * Alasannya datang dari `LayananDariUraian::alasanTahan()`, bukan ditulis
+     * di sini. Alasan penahanan ketiga akan muncul di laporan ini tanpa
+     * perintah ini disunting — dan itu bukan kerapian belaka: penahanan yang
+     * tidak punya kalimat di laporan akan terbaca sebagai baris yang hilang.
+     *
+     * @param  list<array{complaint:Complaint,ke:string,kata:string,tahan:?string,ditahan:bool}>  $ditahan
      */
     private function cetakDitahan(array $ditahan): void
     {
         $this->newLine();
-        $this->line('Ditahan karena kata kuncinya di luar klausa pertama: '.count($ditahan).' baris.');
+        $this->line('Ditahan, tidak dipindah: '.count($ditahan).' baris.');
 
         if ($ditahan === []) {
             return;
         }
 
-        $this->warn('  Perlu dibaca — keluhannya mungkin bukan tentang barang itu:');
+        $this->warn('  Perlu dibaca — jasanya mungkin bukan yang disebut kata kuncinya:');
 
         foreach ($ditahan as $b) {
             $this->line('  #'.$b['complaint']->id.' (cocok '.$b['kata'].' -> '.$this->label($b['ke'])
                 .', TETAP di '.$this->label((string) $b['complaint']->layanan).')');
+            $this->line('    alasan: '.LayananDariUraian::alasanTahan((string) $b['tahan']));
             $this->line('    '.$b['complaint']->description);
         }
 

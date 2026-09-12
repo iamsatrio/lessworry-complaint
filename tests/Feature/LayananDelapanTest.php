@@ -296,12 +296,12 @@ class LayananDelapanTest extends TestCase
         $temu = LayananDariUraian::periksa(self::AMBIGU);
         $this->assertNotNull($temu);
         $this->assertSame('karpet_gorden', $temu['layanan']);
-        $this->assertTrue($temu['ambigu']);
+        $this->assertSame(LayananDariUraian::TAHAN_AMBIGU, $temu['tahan']);
 
         // Baris yang menyebut barangnya lebih dulu tidak ikut tertahan.
         $jelas = LayananDariUraian::periksa('Karpet bau apek');
         $this->assertNotNull($jelas);
-        $this->assertFalse($jelas['ambigu']);
+        $this->assertNull($jelas['tahan']);
         $this->assertSame('karpet_gorden', LayananDariUraian::tebak('Karpet bau apek'));
     }
 
@@ -312,7 +312,8 @@ class LayananDelapanTest extends TestCase
         $jelas = $this->buat('Karpet bau apek', 'satuan_non_cloth');
 
         $this->artisan('complaint:betulkan-layanan')
-            ->expectsOutputToContain('Ditahan karena kata kuncinya di luar klausa pertama: 1 baris.')
+            ->expectsOutputToContain('Ditahan, tidak dipindah: 1 baris.')
+            ->expectsOutputToContain('kata kuncinya di luar klausa pertama')
             ->expectsOutputToContain('TIDAK dipindah')
             ->assertSuccessful();
 
@@ -334,7 +335,7 @@ class LayananDelapanTest extends TestCase
         $this->buat('Karpet bau apek', 'satuan_non_cloth');
 
         $this->artisan('complaint:betulkan-layanan')
-            ->expectsOutputToContain('Ditahan karena kata kuncinya di luar klausa pertama: 0 baris.')
+            ->expectsOutputToContain('Ditahan, tidak dipindah: 0 baris.')
             ->assertSuccessful();
     }
 
@@ -364,8 +365,67 @@ class LayananDelapanTest extends TestCase
         $this->assertSame('satuan_non_cloth', Complaint::where('description', self::AMBIGU)->value('layanan'));
         $this->assertSame('karpet_gorden', Complaint::where('description', 'Karpet bau apek')->value('layanan'));
 
-        $this->assertStringContainsString('tidak di klausa pertama', $isi,
+        $this->assertStringContainsString('kata kuncinya di luar klausa pertama', $isi,
             'Impor menahan barisnya tanpa mengatakannya. Laporan impor justru tempat keputusan begitu harus muncul.');
+    }
+
+    /* ---------- 4c. Tas laundry menahan SELURUH baris, bukan satu kata ---------- */
+
+    /**
+     * Kalimat yang menyebut `tas` dua kali: sekali sebagai wadah, sekali
+     * telanjang.
+     *
+     * Bentuk lookahead per-kemunculan memindahkan keduanya ke `sepatu_tas`,
+     * karena `tas` yang kedua adalah kemunculan `\btas\b` yang sah — bukan
+     * sisa lookahead. Menulis ulang pengecualiannya tidak menutup apa pun,
+     * termasuk bentuk "buang dulu frasanya, cocokkan sisanya" yang tercatat
+     * di API-76 nomor 1 dan sudah diukur tidak mengubah hasilnya. Yang harus
+     * ditahan barisnya, bukan katanya.
+     */
+    public function test_uraian_bertas_dua_kali_ditahan_seluruh_barisnya(): void
+    {
+        foreach ([
+            'Tas laundry gak dikembalikan, tas nya hilang',
+            'Tas laundry dan tas customer tertukar',
+        ] as $uraian) {
+            $this->assertNull(LayananDariUraian::tebak($uraian),
+                "'$uraian' berpindah. Keluhannya tentang wadah; jasa yang dibeli tetap Kiloan.");
+
+            $temu = LayananDariUraian::periksa($uraian);
+            $this->assertNotNull($temu, 'Baris yang ditahan harus tetap bisa dicetak.');
+            $this->assertSame(LayananDariUraian::TAHAN_WADAH, $temu['tahan']);
+        }
+    }
+
+    /**
+     * Barang yang disebut EKSPLISIT menang atas wadahnya. Kalau tidak,
+     * penahan wadah akan menelan keluhan sepatu yang kebetulan menyebut
+     * kantongnya — arah gagal yang salah, dan 47 baris yang sudah benar ikut
+     * terseret.
+     */
+    public function test_barang_eksplisit_menang_atas_wadahnya(): void
+    {
+        $this->assertSame('sepatu_tas', LayananDariUraian::tebak('Sepatu kotor, tas laundry juga hilang'));
+        $this->assertSame('karpet_gorden', LayananDariUraian::tebak('Karpet bau, tas laundry ikut basah'));
+
+        // Dan yang memang tasnya yang dicuci tetap pindah.
+        foreach (['Tas belum bersih', 'tas carrer kurang bersih dibagian dalam', 'Tas Gucci terlipat'] as $uraian) {
+            $this->assertSame('sepatu_tas', LayananDariUraian::tebak($uraian), "'$uraian' harus pindah.");
+        }
+    }
+
+    /** Bentuk berakhiran tetap tertahan — "tas laundrynya", "Tas cucian", "tas cucinya". */
+    public function test_wadah_berakhiran_tetap_tertahan(): void
+    {
+        foreach ([
+            'Tas laundry belum kembali',
+            'Tas laundrynya belum kembali',
+            'Tas cucian belum kembali',
+            'tas cucinya sobek',
+            'tas laundry hilang, tas nya juga',
+        ] as $uraian) {
+            $this->assertNull(LayananDariUraian::tebak($uraian), "'$uraian' tidak boleh pindah.");
+        }
     }
 
     /* ---------- 5. Impor ulang menghasilkan pemetaan yang sama ---------- */
