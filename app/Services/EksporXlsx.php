@@ -84,6 +84,11 @@ final class EksporXlsx
      * sebagai rumus adalah lubang penyuntikan rumus yang sudah dikenal, dan
      * di berkas yang dikirim ke ponsel orang lain itu bukan risiko teoretis.
      * Kolom teks di sini selalu jadi teks, apa pun huruf pertamanya.
+     *
+     * Awalan mana yang memicu rumus ditulis sekali saja, di PerisaiRumus.
+     * Di sini tidak ada nilai yang perlu ditandai — tipe selnya sudah
+     * menjawab pertanyaannya. Di CSV tidak ada tipe sel, jadi jawabannya
+     * berbentuk penanda; aturannya tetap satu (API-77).
      */
     private function sel(mixed $nilai, string $tipe, Style $rupiah, Style $tanggal): Cell
     {
