@@ -6,6 +6,7 @@ use App\Models\Complaint;
 use App\Models\ComplaintResponsible;
 use App\Models\Outlet;
 use App\Models\User;
+use App\Services\PerisaiRumus;
 use DateTimeInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -271,6 +272,49 @@ class EksporXlsxTest extends TestCase
         $nilai = $baris[1][$kolom['Pelapor']];
 
         $this->assertSame('=1+1', $nilai, 'Nama pelapor terbaca sebagai rumus, bukan sebagai teks.');
+    }
+
+    /**
+     * Daftar awalan pemicunya dibaca dari PerisaiRumus, sumber yang sama
+     * dipakai jalur CSV (API-77). Awalan yang ditambahkan ke daftar itu nanti
+     * langsung teruji di kedua jalur, jadi keduanya tidak bisa menyimpang
+     * diam-diam.
+     */
+    public function test_semua_awalan_pemicu_tetap_teks(): void
+    {
+        $outlet = Outlet::create(['name' => 'Cipete']);
+        $nama = [];
+
+        foreach (PerisaiRumus::AWALAN_RUMUS as $awalan) {
+            $n = $awalan.'SUM(A1:A9)';
+            $nama[] = $n;
+            $this->complaint($outlet, ['reporter_name' => $n]);
+        }
+
+        $baris = $this->unduh($this->userAs('supervisor'));
+        $kolom = array_flip($baris[0]);
+        $sel = array_map(fn (array $b) => $b[$kolom['Pelapor']], array_slice($baris, 1));
+
+        // Di `.xlsx` nilainya tersimpan sebagai teks tanpa penanda apa pun —
+        // tipe selnya yang menjawab, jadi tidak ada yang perlu ditambahkan.
+        //
+        // Dibandingkan per sifat, bukan per byte: XML menormalkan carriage
+        // return jadi line feed, sehingga nilai berawalan "\r" kembali
+        // berawalan "\n". Itu aturan penyimpanan XML, bukan rumus — yang
+        // dijaga di sini adalah selnya tetap tulisan dan isinya tidak hilang.
+        foreach (PerisaiRumus::AWALAN_RUMUS as $awalan) {
+            $harap = $awalan === "\r" ? "\n" : $awalan;
+
+            $cocok = array_filter($sel, fn ($s) => is_string($s)
+                && $s !== ''
+                && $s[0] === $harap
+                && str_ends_with($s, 'SUM(A1:A9)'));
+
+            $this->assertNotEmpty($cocok, 'Awalan '.json_encode($awalan).' tidak tersimpan utuh sebagai teks.');
+        }
+
+        // Dan tidak satu pun sel yang berisi hasil hitungan.
+        $this->assertNotContains('SUM(A1:A9)', $sel);
     }
 
     /* ---------- CSV tetap ada dan tidak berubah ---------- */
