@@ -65,8 +65,11 @@ class SaringanOutletTest extends TestCase
         $this->complaint('2026-08-04 09:00', $lebakBulus, ['reporter_name' => 'Pelapor Lebak']);
         $this->complaint('2026-08-05 09:00', $lebakBulus, ['reporter_name' => 'Pelapor Lebak Dua']);
 
+        // Satuan bulanan disebut eksplisit: yang diuji di sini saringan
+        // outletnya, bukan satuan waktu bawaannya — dan rentang sebulan
+        // digambar harian kalau dibiarkan. (API-62 nomor 2)
         $semua = $this->actingAs($this->userAs('supervisor'))
-            ->get('/reports?from=2026-08-01&to=2026-08-31')
+            ->get('/reports?from=2026-08-01&to=2026-08-31&satuan=bulanan')
             ->assertOk();
 
         $semua->assertSee('3 complaint masuk');
@@ -76,7 +79,7 @@ class SaringanOutletTest extends TestCase
         $semua->assertSee('<span>Lebak Bulus</span>', false);
 
         $disaring = $this->actingAs($this->userAs('supervisor'))
-            ->get('/reports?from=2026-08-01&to=2026-08-31&outlet='.$cipete->id)
+            ->get('/reports?from=2026-08-01&to=2026-08-31&outlet='.$cipete->id.'&satuan=bulanan')
             ->assertOk();
 
         // Kartu angka dan blok "Per outlet" — keduanya dari koleksi yang sama.
@@ -103,7 +106,7 @@ class SaringanOutletTest extends TestCase
         $this->complaint('2026-08-04 09:00', $cipete);
 
         $html = $this->actingAs($this->userAs('supervisor'))
-            ->get('/reports?from=2026-08-01&to=2026-08-31&outlet='.$cipete->id)
+            ->get('/reports?from=2026-08-01&to=2026-08-31&outlet='.$cipete->id.'&satuan=bulanan')
             ->assertOk()->getContent();
 
         // Pembaginya satu outlet, bukan dua: 2 complaint per 1 outlet.

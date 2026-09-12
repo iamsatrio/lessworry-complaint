@@ -21,19 +21,24 @@ use Illuminate\Support\Carbon;
  */
 final class GrafikLaporan
 {
-    private const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-
     /** Kategori yang menanggung sebagian besar biaya dan punya grafiknya sendiri. */
     private const KATEGORI_SOROTAN = 'barang_rusak';
+
+    /**
+     * Ambang keterangan "sebagian besar periode kosong". Di atas ini satu
+     * baris keterangan muncul di bawah grafiknya — KETERANGAN, bukan
+     * larangan: satuan yang dipilih sendiri tetap digambar. (API-62 nomor 2)
+     */
+    private const AMBANG_NOL = 0.4;
 
     /** @var list<string>|null */
     private ?array $sumbu = null;
 
-    /** @var list<string>|null bulan complaint pertama tiap outlet, 'Y-m' */
+    /** @var list<string>|null tanggal complaint pertama tiap outlet, 'Y-m-d' */
     private ?array $mulaiOutlet = null;
 
-    /** @var list<array{bulan:string,label:string,complaint:int,rusak:int,outlet:int,per:float|null}>|null */
-    private ?array $bulanan = null;
+    /** @var list<array{periode:string,label:string,judul:string,complaint:int,rusak:int,outlet:int,per:float|null}>|null */
+    private ?array $periodik = null;
 
     /**
      * @param  EloquentCollection<int,Complaint>  $complaints  sudah disaring wewenang, rentang tanggal, dan outlet
@@ -50,12 +55,19 @@ final class GrafikLaporan
         private readonly User $user,
         private readonly EloquentCollection $complaints,
         private readonly ?int $outletId,
+        private readonly SatuanWaktu $satuan,
     ) {}
 
-    /* ---------- Grafik 1 dan 3: per outlet per bulan ---------- */
+    public function satuan(): SatuanWaktu
+    {
+        return $this->satuan;
+    }
+
+    /* ---------- Grafik 1 dan 3: per outlet per periode ---------- */
 
     /**
-     * Complaint per outlet per bulan, plus angka yang sama untuk Barang Rusak.
+     * Complaint per outlet per periode, plus angka yang sama untuk Barang
+     * Rusak. Periodenya hari, minggu, bulan, atau tahun — lihat SatuanWaktu.
      *
      * JUMLAH MENTAH TIDAK DIPAKAI sebagai ukuran mutu. Jaringan tumbuh dari 5
      * ke 11 outlet; grafik yang menjumlah saja membaca setiap pembukaan outlet
@@ -63,12 +75,12 @@ final class GrafikLaporan
      * mentah dan bertepatan dengan pembukaan Jagakarsa — padahal per outlet
      * angkanya di bawah rata-rata 2025.
      *
-     * @return list<array{bulan:string,label:string,complaint:int,rusak:int,outlet:int,per:float|null}>
+     * @return list<array{periode:string,label:string,judul:string,complaint:int,rusak:int,outlet:int,per:float|null}>
      */
-    public function perBulan(): array
+    public function perPeriode(): array
     {
-        if ($this->bulanan !== null) {
-            return $this->bulanan;
+        if ($this->periodik !== null) {
+            return $this->periodik;
         }
 
         // Hanya complaint yang punya outlet yang masuk pembilang: keluhan yang
@@ -76,52 +88,60 @@ final class GrafikLaporan
         // Jumlah yang dikeluarkan diumumkan lewat tanpaOutlet(), bukan diam.
         $berOutlet = $this->complaints
             ->filter(fn (Complaint $c) => $c->created_at !== null && $c->outlet_id !== null)
-            ->groupBy(fn (Complaint $c) => $c->created_at->format('Y-m'));
+            ->groupBy(fn (Complaint $c) => $this->satuan->kunci($c->created_at));
 
         $baris = [];
 
-        foreach ($this->sumbuBulan() as $bulan) {
-            $isi = $berOutlet->get($bulan);
+        foreach ($this->sumbuPeriode() as $periode) {
+            $isi = $berOutlet->get($periode);
             $total = $isi?->count() ?? 0;
             $rusak = $isi?->where('category', self::KATEGORI_SOROTAN)->count() ?? 0;
-            $outlet = $this->outletAktifPada($bulan);
+            $outlet = $this->outletAktifPada($periode);
 
             $baris[] = [
-                'bulan' => $bulan,
-                'label' => $this->labelBulan($bulan),
+                'periode' => $periode,
+                'label' => $this->satuan->labelSumbu($periode),
+                'judul' => $this->satuan->labelPenuh($periode),
                 'complaint' => $total,
                 'rusak' => $rusak,
                 'outlet' => $outlet,
-                // Bulan tanpa satu pun outlet aktif bukan nol — angkanya TIDAK
-                // ADA. Membaginya dengan nol, atau menggambarnya sebagai 0,
-                // sama-sama mengarang.
+                // Periode tanpa satu pun outlet aktif bukan nol — angkanya
+                // TIDAK ADA. Membaginya dengan nol, atau menggambarnya sebagai
+                // 0, sama-sama mengarang.
                 'per' => $outlet > 0 ? round($total / $outlet, 2) : null,
             ];
         }
 
-        return $this->bulanan = $baris;
+        return $this->periodik = $baris;
     }
 
     /**
-     * Jumlah outlet yang SUDAH AKTIF pada bulan itu — bukan jumlah outlet
+     * Jumlah outlet yang SUDAH AKTIF pada periode itu — bukan jumlah outlet
      * hari ini. Outlet yang belum buka tidak boleh ikut membagi.
      *
-     * Aktif diturunkan dari bulan complaint pertamanya, karena tanggal buka
+     * Aktif diturunkan dari tanggal complaint pertamanya, karena tanggal buka
      * outlet tidak ada di sistem ini. Akibatnya outlet yang sudah buka tapi
      * belum pernah dikeluhkan tidak ikut membagi — angkanya jadi sedikit lebih
      * tinggi, bukan lebih rendah. Itu arah kesalahan yang aman: ia tidak
      * membuat mutu terlihat lebih baik daripada kenyataannya.
+     *
+     * Dibandingkan terhadap AKHIR periodenya, bukan awalnya: outlet yang
+     * complaint pertamanya 20 Agustus tetap dihitung aktif sepanjang Agustus.
+     * Perbandingan terhadap awal periode akan mengeluarkannya dari bulannya
+     * sendiri — dan pada satuan harian, dari harinya sendiri.
      */
-    private function outletAktifPada(string $bulan): int
+    private function outletAktifPada(string $periode): int
     {
+        $akhir = $this->satuan->akhir($periode)->format('Y-m-d H:i:s');
+
         return count(array_filter(
             $this->mulaiOutlet(),
-            fn (string $mulai) => $mulai <= $bulan,
+            fn (string $mulai) => $mulai <= $akhir,
         ));
     }
 
     /**
-     * Bulan complaint pertama tiap outlet, dari SELURUH sejarah — bukan dari
+     * Tanggal complaint pertama tiap outlet, dari SELURUH sejarah — bukan dari
      * rentang yang sedang dilihat. Kalau dibatasi rentang, memilih Juli–Agustus
      * membuat semua outlet seolah-olah baru mulai di bulan Juli.
      *
@@ -154,7 +174,7 @@ final class GrafikLaporan
                 continue;
             }
 
-            $mulai[] = Carbon::parse((string) $nilai)->format('Y-m');
+            $mulai[] = Carbon::parse((string) $nilai)->format('Y-m-d H:i:s');
         }
 
         return $this->mulaiOutlet = $mulai;
@@ -256,30 +276,31 @@ final class GrafikLaporan
      * Median, bukan rata-rata: satu kasus 41 hari menarik rata-rata dan
      * membuat bulan yang baik terlihat buruk.
      *
-     * Dikelompokkan menurut bulan MASUKNYA complaint, bukan bulan selesainya,
-     * supaya sumbu mendatarnya sama persis dengan dua grafik di atasnya —
-     * rentang tanggal halaman ini menyaring `created_at`.
+     * Dikelompokkan menurut periode MASUKNYA complaint, bukan periode
+     * selesainya, supaya sumbu mendatarnya sama persis dengan dua grafik di
+     * atasnya — rentang tanggal halaman ini menyaring `created_at`.
      *
-     * @return list<array{bulan:string,label:string,median:float|null,n:int}>
+     * @return list<array{periode:string,label:string,judul:string,median:float|null,n:int}>
      */
     public function medianPenyelesaian(): array
     {
         $selesai = $this->complaints
             ->filter(fn (Complaint $c) => $c->created_at !== null && $c->resolutionMinutes() !== null)
-            ->groupBy(fn (Complaint $c) => $c->created_at->format('Y-m'));
+            ->groupBy(fn (Complaint $c) => $this->satuan->kunci($c->created_at));
 
         $baris = [];
 
-        foreach ($this->sumbuBulan() as $bulan) {
-            $isi = $selesai->get($bulan);
+        foreach ($this->sumbuPeriode() as $periode) {
+            $isi = $selesai->get($periode);
 
             $hari = $isi === null
                 ? []
                 : $isi->map(fn (Complaint $c) => ((int) $c->resolutionMinutes()) / 1440)->values()->all();
 
             $baris[] = [
-                'bulan' => $bulan,
-                'label' => $this->labelBulan($bulan),
+                'periode' => $periode,
+                'label' => $this->satuan->labelSumbu($periode),
+                'judul' => $this->satuan->labelPenuh($periode),
                 'median' => $hari === [] ? null : round($this->median($hari), 2),
                 'n' => count($hari),
             ];
@@ -355,17 +376,18 @@ final class GrafikLaporan
      * Titik grafik 1. Keterangan tiap titik menyebut kedua angka penyusunnya —
      * pembagi yang tidak kelihatan adalah pembagi yang tidak bisa diperiksa.
      *
-     * @return list<array{label:string,nilai:float|null,teks:string}>
+     * @return list<array{label:string,judul:string,nilai:float|null,teks:string}>
      */
     public function titikPerOutlet(): array
     {
         return array_map(fn (array $b) => [
             'label' => $b['label'],
+            'judul' => $b['judul'],
             'nilai' => $b['per'],
             'teks' => $b['per'] === null
                 ? 'belum ada outlet aktif'
                 : $this->desimal($b['per']).' per outlet ('.$b['complaint'].' complaint, '.$b['outlet'].' outlet)',
-        ], $this->perBulan());
+        ], $this->perPeriode());
     }
 
     /**
@@ -386,22 +408,24 @@ final class GrafikLaporan
      * 2026, jadi garis biaya akan menukik pada 2026 karena lubang pencatatan.
      * Jumlah kasus terisi 100%.
      *
-     * @return list<array{label:string,nilai:float|null,teks:string}>
+     * @return list<array{label:string,judul:string,nilai:float|null,teks:string}>
      */
     public function titikBarangRusak(): array
     {
         return array_map(fn (array $b) => [
             'label' => $b['label'],
+            'judul' => $b['judul'],
             'nilai' => (float) $b['rusak'],
             'teks' => $b['rusak'].' kasus',
-        ], $this->perBulan());
+        ], $this->perPeriode());
     }
 
-    /** @return list<array{label:string,nilai:float|null,teks:string}> */
+    /** @return list<array{label:string,judul:string,nilai:float|null,teks:string}> */
     public function titikMedian(): array
     {
         return array_map(fn (array $b) => [
             'label' => $b['label'],
+            'judul' => $b['judul'],
             'nilai' => $b['median'],
             'teks' => $b['median'] === null
                 ? 'belum ada complaint yang selesai'
@@ -461,16 +485,17 @@ final class GrafikLaporan
     /* ---------- Sumbu waktu ---------- */
 
     /**
-     * Bulan-bulan yang digambar: dari bulan complaint pertama sampai bulan
-     * complaint terakhir DI DALAM rentang yang dipilih, tanpa bolong.
+     * Periode-periode yang digambar: dari periode complaint pertama sampai
+     * periode complaint terakhir DI DALAM rentang yang dipilih, tanpa bolong.
      *
-     * Bulan kosong di tengah tetap digambar — nol complaint sebulan itu
-     * informasi. Bulan kosong di ujung tidak, supaya rentang setahun yang
-     * datanya cuma dua bulan tidak menghasilkan grafik yang 83% ruang mati.
+     * Periode kosong di tengah tetap digambar — nol complaint sebulan (atau
+     * sehari) itu informasi. Periode kosong di ujung tidak, supaya rentang
+     * setahun yang datanya cuma dua bulan tidak menghasilkan grafik yang 83%
+     * ruang mati.
      *
      * @return list<string>
      */
-    private function sumbuBulan(): array
+    private function sumbuPeriode(): array
     {
         if ($this->sumbu !== null) {
             return $this->sumbu;
@@ -478,30 +503,65 @@ final class GrafikLaporan
 
         $kunci = $this->complaints
             ->filter(fn (Complaint $c) => $c->created_at !== null)
-            ->map(fn (Complaint $c) => $c->created_at->format('Y-m'))
+            ->map(fn (Complaint $c) => $this->satuan->kunci($c->created_at))
             ->unique()->sort()->values();
 
         if ($kunci->isEmpty()) {
             return $this->sumbu = [];
         }
 
-        $bulan = Carbon::parse(((string) $kunci->first()).'-01')->startOfMonth();
-        $akhir = Carbon::parse(((string) $kunci->last()).'-01')->startOfMonth();
+        $periode = (string) $kunci->first();
+        $terakhir = (string) $kunci->last();
         $sumbu = [];
 
-        while ($bulan->lte($akhir)) {
-            $sumbu[] = $bulan->format('Y-m');
-            $bulan = $bulan->copy()->addMonth();
+        while ($periode <= $terakhir) {
+            $sumbu[] = $periode;
+            $periode = $this->satuan->sesudah($periode);
         }
 
         return $this->sumbu = $sumbu;
     }
 
-    private function labelBulan(string $bulan): string
-    {
-        [$tahun, $ke] = explode('-', $bulan);
+    /* ---------- Kepadatan data (API-62 nomor 2) ---------- */
 
-        return self::BULAN[((int) $ke) - 1].' '.substr($tahun, 2);
+    /**
+     * Satu baris keterangan kalau satuan yang dipakai membuat sebagian besar
+     * titiknya bernilai nol — atau null kalau tidak.
+     *
+     * KETERANGAN, BUKAN LARANGAN. Satuan yang dipilih sendiri tetap digambar
+     * apa adanya; yang ditambahkan cuma kalimat yang menjelaskan kenapa
+     * grafiknya bergerigi. Dari 545 baris pertama, 46% hari tidak punya satu
+     * pun complaint — harian pada rentang panjang memang menggambar gigi
+     * gergaji, dan itu bukan kerusakan yang perlu disembunyikan.
+     *
+     * Titik yang nilainya TIDAK ADA (null) tidak dihitung sebagai nol: nol
+     * berarti "diukur, hasilnya kosong", null berarti "tidak terukur". Tapi
+     * keduanya tetap jadi penyebut, karena keduanya sama-sama titik yang
+     * tidak memperlihatkan apa-apa.
+     *
+     * @param  list<array{label:string,judul:string,nilai:float|null,teks:string}>  $titik
+     */
+    public function keteranganPadatData(array $titik): ?string
+    {
+        if (count($titik) < 4) {
+            return null;
+        }
+
+        $nol = count(array_filter($titik, fn (array $t) => $t['nilai'] !== null && (float) $t['nilai'] === 0.0));
+        $porsi = $nol / count($titik);
+
+        if ($porsi <= self::AMBANG_NOL) {
+            return null;
+        }
+
+        $satuanKecil = mb_strtolower($this->satuan->satuan());
+        $lebihLebar = $this->satuan->lebihLebar();
+
+        return round($porsi * 100).'% titik di grafik ini bernilai nol — sebagian besar '.$satuanKecil
+            .' pada periode ini tidak ada complaint sama sekali.'
+            .($lebihLebar === null
+                ? ''
+                : ' Satuan waktu yang lebih lebar ('.$lebihLebar->label().') akan lebih terbaca.');
     }
 
     /** @param  list<float>  $nilai */
