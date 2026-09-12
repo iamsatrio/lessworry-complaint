@@ -201,6 +201,53 @@ final class GrafikLaporan
         return $baris;
     }
 
+    /**
+     * Biaya per LAYANAN, terurut menurun. (API-59)
+     *
+     * Kembarannya `biayaPerKategori()`, sumbu yang berbeda — dan justru
+     * sumbu inilah alasan `Sepatu & Tas` dan `Karpet & Gorden` ditarik keluar
+     * dari `Satuan Non Cloth`. Selama keduanya menumpang di sana, "berapa
+     * kerugian dari layanan karpet" hanya bisa dijawab dengan menghitung
+     * tangan dari uraian keluhannya satu per satu.
+     *
+     * Complaint tanpa layanan tidak dibuang: ia muncul sebagai
+     * `Tidak dicatat`, karena total biaya yang diam-diam kehilangan sebagian
+     * barisnya lebih menyesatkan daripada baris berlabel jujur.
+     *
+     * `terisi` ikut, sama seperti grafik kategori: total biaya tanpa
+     * cakupannya menyesatkan — kolom biaya terisi 96% pada 2025 dan 38% pada
+     * 2026, yang turun pencatatannya, bukan biayanya.
+     *
+     * @return list<array{layanan:string,label:string,kasus:int,terisi:int,biaya:int,rata:int|null}>
+     */
+    public function biayaPerLayanan(): array
+    {
+        $baris = $this->complaints
+            ->groupBy(fn (Complaint $c) => $c->layanan ?: 'tidak_dicatat')
+            ->map(function ($isi, $layanan) {
+                $bernilai = $isi->filter(fn (Complaint $c) => $this->punyaNilai($c));
+
+                return [
+                    'layanan' => (string) $layanan,
+                    'label' => $layanan === 'tidak_dicatat'
+                        ? 'Tidak dicatat'
+                        : (string) config('complaint.layanan.'.$layanan, $layanan),
+                    'kasus' => $isi->count(),
+                    'terisi' => $bernilai->count(),
+                    'biaya' => (int) $bernilai->sum('compensation_amount'),
+                    'rata' => $bernilai->isEmpty()
+                        ? null
+                        : (int) round($bernilai->sum('compensation_amount') / $bernilai->count()),
+                ];
+            })
+            ->sortByDesc('biaya')
+            ->values()
+            ->all();
+
+        /** @var list<array{layanan:string,label:string,kasus:int,terisi:int,biaya:int,rata:int|null}> $baris */
+        return $baris;
+    }
+
     /* ---------- Grafik 4: median waktu penyelesaian ---------- */
 
     /**
@@ -376,6 +423,23 @@ final class GrafikLaporan
             'judul' => $b['label'].' · '.self::rupiah($b['biaya']).' · '.$b['kasus'].' kasus · '
                 .$this->cakupanTeks($b['terisi'], $b['kasus']),
         ], $this->biayaPerKategori());
+    }
+
+    /**
+     * Batang biaya per layanan. Bentuknya sama dengan `batangBiaya()`; yang
+     * berbeda cuma sumbunya. (API-59)
+     *
+     * @return list<array{label:string,nilai:float,teks:string,judul:string}>
+     */
+    public function batangBiayaLayanan(): array
+    {
+        return array_map(fn (array $b) => [
+            'label' => $b['label'],
+            'nilai' => (float) $b['biaya'],
+            'teks' => self::rupiah($b['biaya']).' · '.$b['kasus'].' kasus',
+            'judul' => $b['label'].' · '.self::rupiah($b['biaya']).' · '.$b['kasus'].' kasus · '
+                .$this->cakupanTeks($b['terisi'], $b['kasus']),
+        ], $this->biayaPerLayanan());
     }
 
     /** Cakupan yang wajib menempel pada setiap total biaya. */
