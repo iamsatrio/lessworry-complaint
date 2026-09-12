@@ -34,6 +34,11 @@ namespace App\Services;
  *    keluhan tentang wadah jadi keluhan tentang layanan cuci tas.
  * 3. **Semua pencocokan memakai batas kata.** `tas` tanpa `\b` mencocokkan
  *    "batas", "pantas", dan "tastes" — dan itu merusak diam-diam.
+ * 4. **Baris ambigu tidak dipindah.** Kata kunci yang baru muncul setelah
+ *    klausa pertama menahan barisnya di `satuan_non_cloth`, bukan sekadar
+ *    memberinya tanda. Lihat `ambigu()` untuk alasannya; aturannya tinggal
+ *    DI SINI, bukan di perintah pembetulan saja, supaya jalur impor ikut
+ *    mematuhinya tanpa menyalin apa pun. (Keputusan Modrić 10 Sep 2026)
  */
 final class LayananDariUraian
 {
@@ -81,23 +86,43 @@ final class LayananDariUraian
     }
 
     /**
-     * Layanan yang cocok dengan uraian ini, atau null kalau tidak ada.
+     * Layanan yang BOLEH diisikan untuk uraian ini, atau null.
      *
      * Yang tidak cocok pulang null dan baris tetap `satuan_non_cloth`. Nilai
      * yang salah diam-diam lebih buruk daripada nilai lama yang terlalu kasar:
      * yang kasar masih jujur, yang salah dibaca seolah dipastikan orang.
+     *
+     * Baris ambigu juga pulang null, dan itu aturan yang sama — bukan
+     * pengecualian terhadapnya. `ambigu` berarti TIDAK PASTI, dan menaruh
+     * nilai yang tidak pasti ke `karpet_gorden` berarti menyuntikkan satu
+     * baris meragukan ke dalam bucket 12 baris yang justru dibangun issue ini
+     * untuk dipercaya. Yang mau tahu bahwa barisnya cocok tapi ditahan
+     * memanggil `periksa()`; yang mau tahu nilai apa yang boleh disimpan
+     * memanggil ini.
      */
     public static function tebak(?string $uraian): ?string
     {
-        return self::periksa($uraian)['layanan'] ?? null;
+        $temu = self::periksa($uraian);
+
+        return $temu === null || $temu['ambigu'] ? null : $temu['layanan'];
     }
 
     /**
-     * Sama seperti `tebak()`, tapi ikut membawa kata yang cocok dan letaknya —
-     * dua-duanya dipakai laporan kering supaya orang yang membacanya tahu
-     * KENAPA sebuah baris terpilih, bukan cuma bahwa ia terpilih.
+     * Apa yang cocok dengan uraian ini, apa adanya — termasuk baris yang
+     * ditahan `ambigu`.
      *
-     * @return array{layanan:string,kata:string,posisi:int}|null
+     * Kata yang cocok dan letaknya ikut supaya laporan kering bisa
+     * menerangkan KENAPA sebuah baris terpilih, bukan cuma bahwa ia terpilih.
+     * `ambigu` ikut supaya baris yang ditahan masih bisa DICETAK: ditahan
+     * tanpa terlihat sama saja dengan hilang, dan orang yang membaca laporan
+     * itulah yang berhak memutuskan barisnya.
+     *
+     * Perhatikan bedanya dengan `tebak()`: yang ini menjawab "apa yang
+     * cocok", yang itu menjawab "apa yang boleh disimpan". Baris ambigu
+     * menjawab kedua pertanyaan itu secara berbeda, dan justru di situlah
+     * gunanya dua metode.
+     *
+     * @return array{layanan:string,kata:string,posisi:int,ambigu:bool}|null
      */
     public static function periksa(?string $uraian): ?array
     {
@@ -107,7 +132,14 @@ final class LayananDariUraian
 
         foreach (self::POLA as $layanan => $pola) {
             if (preg_match($pola, $uraian, $m, PREG_OFFSET_CAPTURE) === 1) {
-                return ['layanan' => $layanan, 'kata' => (string) $m[0][0], 'posisi' => (int) $m[0][1]];
+                $posisi = (int) $m[0][1];
+
+                return [
+                    'layanan' => $layanan,
+                    'kata' => (string) $m[0][0],
+                    'posisi' => $posisi,
+                    'ambigu' => self::ambigu((string) $uraian, $posisi),
+                ];
             }
         }
 
@@ -115,19 +147,29 @@ final class LayananDariUraian
     }
 
     /**
-     * Kata kuncinya muncul SETELAH klausa pertama — perlu dibaca orang
-     * sebelum barisnya dipindah.
+     * Kata kuncinya muncul SETELAH klausa pertama — barisnya ditahan.
      *
-     * Tim menulis barangnya lebih dulu: "Karpet bau apek", "Handle koper
-     * tidak dibersihkan". Kalau kata kuncinya baru muncul setelah koma atau
-     * titik, keluhannya biasanya tentang hal lain dan barang itu cuma
-     * disebut sambil lalu — persis kasus "Miss komunikasi antara kasir dan
-     * customer, kasir menginfokan penyelesaian bedcover dan karpet…", yang
-     * isinya salah paham, bukan karpetnya.
+     * Tim menulis barangnya lebih dulu: "Karpet bau apek", "Gorden sobek",
+     * "Handle koper tidak dibersihkan". Kalau kata kuncinya baru muncul
+     * setelah koma atau titik, keluhannya biasanya tentang hal lain dan
+     * barang itu cuma disebut sambil lalu — persis kasus "Miss komunikasi
+     * antara kasir dan customer, kasir menginfokan penyelesaian bedcover dan
+     * karpet…", yang isinya salah paham, bukan karpetnya.
      *
-     * Ini penanda untuk dibaca, BUKAN penyaring: baris bertanda tetap ikut
-     * dipindah kalau perintahnya dijalankan dengan `--tulis`. Yang memutuskan
-     * orang, setelah membacanya.
+     * Ini PENYARING, bukan sekadar penanda. Sebelumnya baris bertanda tetap
+     * ikut dipindah dan penandanya cuma dicetak; itu membuat perintah
+     * menuliskan nilai yang sudah diputuskan tidak tepat, dan membuat jalur
+     * impor — yang tidak mencetak apa pun — mengisinya diam-diam. Sekarang
+     * `tebak()` menahannya, jadi kedua jalur sepakat tanpa menyalin aturan.
+     * (Keputusan Modrić 10 Sep 2026)
+     *
+     * Proksinya memang bukan alasan aslinya — yang sebenarnya terjadi pada
+     * baris itu adalah satu nota berisi dua layanan, dan kolomnya bernilai
+     * tunggal. Proksi yang terlalu lebar akan diam-diam menahan baris karpet
+     * sungguhan. Diukur, bukan dikira-kira: atas 60 baris yang cocok di 545
+     * complaint nyata, yang tertandai **tepat satu** — baris itu. Dan arah
+     * gagalnya aman: yang tertahan tetap `satuan_non_cloth`, nilai lama yang
+     * kasar tapi jujur, dan ia TERCETAK di laporan kering, bukan hilang.
      *
      * `substr` biasa, bukan `mb_substr`: `$posisi` dari preg_match adalah
      * offset byte, dan yang dicari cuma tanda baca ASCII.

@@ -69,20 +69,34 @@ class BetulkanLayanan extends Command
     private function betulkan(JejakComplaint $jejak): int
     {
         $kering = ! $this->option('tulis');
-        $pindah = $this->kandidat();
+        $cocok = $this->kandidat();
+
+        // Yang cocok belum tentu yang dipindah, dan yang memutuskan bukan
+        // perintah ini: `ditahan` datang dari `LayananDariUraian::tebak()`.
+        // Pemisahannya terjadi sekali, di sini, supaya tabel "yang akan
+        // dipindah", angka ringkasannya, dan apa yang benar-benar ditulis
+        // adalah tiga pandangan atas satu himpunan yang sama — bukan tiga
+        // penyaring yang kebetulan sepakat.
+        $pindah = array_values(array_filter($cocok, fn (array $b) => ! $b['ditahan']));
+        $ditahan = array_values(array_filter($cocok, fn (array $b) => $b['ditahan']));
 
         $this->info('Pembetulan layanan (API-59) — '.($kering ? 'MODE HITUNG, tidak menulis apa pun' : 'MENULIS'));
         $this->newLine();
 
-        if ($pindah === []) {
+        if ($cocok === []) {
             $this->line('Tidak ada baris '.$this->label(LayananDariUraian::ASAL).' yang cocok kata kunci.');
 
             return self::SUCCESS;
         }
 
-        $this->cetakBaris($pindah);
-        $this->cetakRingkasan($pindah);
-        $this->cetakAmbigu($pindah);
+        if ($pindah === []) {
+            $this->line('Tidak ada baris yang dipindah — semua yang cocok tertahan sebagai ambigu.');
+        } else {
+            $this->cetakBaris($pindah);
+            $this->cetakRingkasan($pindah);
+        }
+
+        $this->cetakDitahan($ditahan);
         $this->cetakPagarKiloan();
 
         if ($kering) {
@@ -102,12 +116,22 @@ class BetulkanLayanan extends Command
     }
 
     /**
-     * Baris yang akan dipindah.
+     * Baris yang COCOK kata kunci — termasuk yang nanti ditahan.
      *
      * Penyaringnya kolom `layanan`, BUKAN isi uraiannya: uraian yang menyebut
      * sepatu pada complaint Kiloan tetap complaint Kiloan.
      *
-     * @return list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool}>
+     * Dua pertanyaan, dua sumber, dan bedanya disengaja:
+     *
+     * - **Boleh dipindah?** dijawab `tebak()`. Perintah ini TIDAK memutuskan
+     *   sendiri. Kalau kelak ada alasan penahanan kedua, ia lahir di
+     *   `LayananDariUraian` dan perintah ini mengikutinya tanpa disunting —
+     *   itulah gunanya keputusannya tidak disalin ke sini.
+     * - **Kenapa?** dijawab `periksa()`, yang tetap membawa barisnya beserta
+     *   kata yang cocok dan tanda `ambigu`. Dipakai untuk MENCETAK, tidak
+     *   pernah untuk memutuskan.
+     *
+     * @return list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool,ditahan:bool}>
      */
     private function kandidat(): array
     {
@@ -128,14 +152,15 @@ class BetulkanLayanan extends Command
                     'complaint' => $complaint,
                     'ke' => $temu['layanan'],
                     'kata' => $temu['kata'],
-                    'ambigu' => LayananDariUraian::ambigu($uraian, $temu['posisi']),
+                    'ambigu' => $temu['ambigu'],
+                    'ditahan' => LayananDariUraian::tebak($uraian) === null,
                 ];
             });
 
         return $hasil;
     }
 
-    /** @param list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool}> $pindah */
+    /** @param list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool,ditahan:bool}> $pindah */
     private function tulis(array $pindah, JejakComplaint $jejak): void
     {
         DB::transaction(function () use ($pindah, $jejak) {
@@ -337,7 +362,13 @@ class BetulkanLayanan extends Command
         $complaint->syncOriginalAttribute('layanan');
     }
 
-    /** @param list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool}> $pindah */
+    /**
+     * Tabel baris yang BENAR-BENAR akan dipindah. Yang ditahan tidak ikut ke
+     * sini — ia punya bloknya sendiri di bawah, supaya tidak ada pembaca yang
+     * menghitung tabel ini lalu mendapat angka yang berbeda dari yang ditulis.
+     *
+     * @param  list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool,ditahan:bool}>  $pindah
+     */
     private function cetakBaris(array $pindah): void
     {
         $potong = max(20, (int) $this->option('potong'));
@@ -350,12 +381,12 @@ class BetulkanLayanan extends Command
                 $this->label((string) $b['complaint']->layanan),
                 $this->label($b['ke']),
                 $b['kata'],
-                ($b['ambigu'] ? '⚠ ' : '').$this->potong((string) $b['complaint']->description, $potong),
+                $this->potong((string) $b['complaint']->description, $potong),
             ], $pindah),
         );
     }
 
-    /** @param list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool}> $pindah */
+    /** @param list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool,ditahan:bool}> $pindah */
     private function cetakRingkasan(array $pindah): void
     {
         $per = [];
@@ -375,32 +406,36 @@ class BetulkanLayanan extends Command
     }
 
     /**
-     * Baris yang kata kuncinya baru muncul setelah klausa pertama.
+     * Baris yang cocok kata kunci tapi DITAHAN, karena kata kuncinya baru
+     * muncul setelah klausa pertama.
      *
-     * Ditampilkan terpisah supaya tidak tenggelam di antara 60 baris lain.
-     * Ia tetap ikut dipindah — yang memutuskan sebaliknya orang, setelah
-     * membacanya.
+     * Dicetak selalu, termasuk saat nol. Angka nol di sini bukan ruang
+     * terbuang: pembaca laporan perlu tahu bahwa penyaringnya dijalankan dan
+     * tidak menahan apa pun, bukan menebak apakah baginya memang tidak ada
+     * atau bagian itu lupa dicetak.
      *
-     * @param  list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool}>  $pindah
+     * @param  list<array{complaint:Complaint,ke:string,kata:string,ambigu:bool,ditahan:bool}>  $ditahan
      */
-    private function cetakAmbigu(array $pindah): void
+    private function cetakDitahan(array $ditahan): void
     {
-        $ambigu = array_values(array_filter($pindah, fn (array $b) => $b['ambigu']));
+        $this->newLine();
+        $this->line('Ditahan karena kata kuncinya di luar klausa pertama: '.count($ditahan).' baris.');
 
-        if ($ambigu === []) {
+        if ($ditahan === []) {
             return;
         }
 
-        $this->newLine();
-        $this->warn('Perlu dibaca dulu — kata kuncinya muncul setelah klausa pertama, '
-            .'jadi keluhannya mungkin bukan tentang barang itu:');
+        $this->warn('  Perlu dibaca — keluhannya mungkin bukan tentang barang itu:');
 
-        foreach ($ambigu as $b) {
-            $this->line('  #'.$b['complaint']->id.' ('.$b['kata'].' -> '.$this->label($b['ke']).')');
+        foreach ($ditahan as $b) {
+            $this->line('  #'.$b['complaint']->id.' (cocok '.$b['kata'].' -> '.$this->label($b['ke'])
+                .', TETAP di '.$this->label((string) $b['complaint']->layanan).')');
             $this->line('    '.$b['complaint']->description);
         }
 
-        $this->line('  Baris di atas TETAP ikut dipindah kalau perintah dijalankan dengan --tulis.');
+        $this->line('  Baris di atas TIDAK dipindah, bahkan dengan --tulis. Kalau salah satunya');
+        $this->line('  memang harus pindah, sunting complaint-nya lewat aplikasi — jangan');
+        $this->line('  melebarkan kata kuncinya sampai angkanya cocok.');
     }
 
     /**
@@ -413,7 +448,12 @@ class BetulkanLayanan extends Command
         $cocok = Complaint::query()
             ->where('layanan', 'like', 'kiloan%')
             ->get(['id', 'layanan', 'description'])
-            ->filter(fn (Complaint $c) => LayananDariUraian::tebak($c->description) !== null)
+            // `periksa()`, bukan `tebak()`: yang dihitung di sini "berapa baris
+            // Kiloan yang COCOK kata kunci", dan `tebak()` sekarang sudah
+            // menahan baris ambigu. Memakainya akan membuat pagar ini
+            // melaporkan angka yang lebih kecil dari yang sebenarnya cocok —
+            // pagar yang mengecilkan dirinya sendiri tidak menjaga apa pun.
+            ->filter(fn (Complaint $c) => LayananDariUraian::periksa($c->description) !== null)
             ->count();
 
         $this->newLine();
