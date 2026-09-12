@@ -373,6 +373,14 @@ class PemetaBarisImpor
      * pelanggan, bukan barang yang disebut keluhannya: tas laundry itu wadah
      * tempat cucian datang dan pulang, dan yang dibeli tetap Kiloan.
      *
+     * Baris yang DITAHAN — kata kuncinya di luar klausa pertama, atau
+     * uraiannya tentang tas laundry — tetap di `satuan_non_cloth`, sama
+     * seperti di perintah pembetulan, karena penyaringnya tinggal di
+     * `LayananDariUraian` dan bukan di pemanggilnya. Bedanya di sini ia tidak bisa dicetak ke layar siapa pun,
+     * jadi ia dicatat sebagai ANOMALI: impor yang menahan baris tanpa
+     * mengatakannya adalah impor yang menyembunyikan keputusannya sendiri,
+     * dan laporan impor justru tempat hal begitu harus muncul.
+     *
      * @param  list<array{kolom:string,alasan:string}>  $anomali
      */
     private function pertajam(string $kunci, string $uraian, array &$anomali): string
@@ -383,16 +391,31 @@ class PemetaBarisImpor
 
         $halus = LayananDariUraian::tebak($uraian);
 
-        if ($halus === null) {
-            return $kunci;
+        if ($halus !== null) {
+            $anomali[] = [
+                'kolom' => 'Layanan',
+                'alasan' => 'Satuan Non Cloth dipertajam jadi '
+                    .config('complaint.layanan.'.$halus, $halus).' dari uraiannya',
+            ];
+
+            return $halus;
         }
 
-        $anomali[] = [
-            'kolom' => 'Layanan',
-            'alasan' => 'Satuan Non Cloth dipertajam jadi '.config('complaint.layanan.'.$halus, $halus).' dari uraiannya',
-        ];
+        // `tebak()` memulangkan null karena dua sebab yang berbeda: tidak ada
+        // kata kunci sama sekali, atau ada tapi ditahan. `periksa()` yang
+        // membedakannya — dipakai untuk MENERANGKAN, bukan untuk memutuskan.
+        $temu = LayananDariUraian::periksa($uraian);
 
-        return $halus;
+        if ($temu !== null) {
+            $anomali[] = [
+                'kolom' => 'Layanan',
+                'alasan' => 'uraiannya menyebut '.config('complaint.layanan.'.$temu['layanan'], $temu['layanan'])
+                    .' tapi ditahan di Satuan Non Cloth ('
+                    .LayananDariUraian::alasanTahan((string) $temu['tahan']).') — perlu dibaca orang',
+            ];
+        }
+
+        return $kunci;
     }
 
     /** @param list<array{kolom:string,alasan:string}> $anomali */
