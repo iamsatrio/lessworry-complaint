@@ -116,11 +116,16 @@ php artisan backup:verify      # pulihkan dump terakhir, hitung baris complaints
 ```
 
 `backup:database` sudah terdaftar di penjadwal Laravel, harian pukul 02.00.
-Yang perlu ditambahkan di server hanyalah satu baris crontab:
+Yang perlu ditambahkan hanyalah satu jadwal per menit:
 
 ```cron
-* * * * * cd /var/www/care && php artisan schedule:run >> /dev/null 2>&1
+* * * * * cd /path/ke/aplikasi && /path/lengkap/ke/php artisan schedule:run >/dev/null 2>&1
 ```
+
+Di `care.lessworry.id` (cPanel DomaiNesia) jadwal itu dipasang lewat menu
+**Cron Jobs**, bukan `crontab -e`, dan path PHP-nya wajib lengkap — cron tidak
+membaca `~/.bashrc`, dan `php` polos di cPanel belum tentu 8.4. Perintah
+jadinya ada di `deploy-care-lessworry.md` bagian 12.
 
 - [ ] Baris `schedule:run` di atas terpasang, dan sudah dibuktikan dengan
       melihat berkas baru muncul keesokan harinya.
@@ -138,7 +143,12 @@ Yang perlu ditambahkan di server hanyalah satu baris crontab:
       memulihkan berkas yang isinya tidak dipercaya, dan yang menahannya
       menulis ke produksi adalah hak akses, bukan pembacaan isi dumpnya
       (`--one-database` hanya mengikuti `USE`; `INSERT INTO produksi.tabel`
-      lewat begitu saja). Caranya di `deploy-care-lessworry.md`.
+      lewat begitu saja). Caranya di `deploy-care-lessworry.md` Lampiran A.
+      **Di hosting bersama (cPanel) langkah ini tidak bisa dipenuhi**:
+      `backup:verify` menuntut `CREATE DATABASE` dengan nama acak, dan
+      pengguna database cPanel tidak punya hak itu. Di sana pengujian
+      pemulihan pindah ke mesin lain — caranya di `deploy-care-lessworry.md`
+      bagian 12.
 - [ ] Pengguna yang dipakai proses web **tidak** punya `CREATE`/`DROP DATABASE`.
 
 ## Optimasi

@@ -25,6 +25,18 @@ use Illuminate\Support\Carbon;
  */
 class JejakComplaint
 {
+    /**
+     * Awalan tetap baris riwayat pembetulan layanan. (API-59)
+     *
+     * Bukan hiasan kalimat: INI yang dipakai `complaint:betulkan-layanan
+     * --balikkan` untuk mengenali baris mana yang pernah dipindah. Mengubah
+     * teksnya memutus jalan mundur untuk baris yang sudah terlanjur ditulis.
+     */
+    public const TANDA_LAYANAN = 'Layanan dibetulkan (API-59)';
+
+    /** Awalan tetap baris riwayat pembatalan pembetulan itu. (API-59) */
+    public const TANDA_LAYANAN_BATAL = 'Pembetulan layanan (API-59) dibatalkan';
+
     public function dibuat(Complaint $complaint, User $user): ComplaintActivity
     {
         return $this->tulis($complaint, $user, 'created', [
@@ -119,6 +131,28 @@ class JejakComplaint
         return $this->tulis($complaint, null, 'note', ['note' => $isi]);
     }
 
+    /**
+     * Kolom `layanan` yang dibetulkan perintah, bukan orang. (API-59)
+     *
+     * Tanpa pengguna, sama seperti baris impor: yang memindahkan 60 baris
+     * riwayat adalah sebuah perintah, dan menempelkannya ke akun siapa pun
+     * membuat riwayat berbohong tentang siapa yang memutuskannya.
+     */
+    public function layananDibetulkan(Complaint $complaint, string $dari, string $ke): ComplaintActivity
+    {
+        return $this->tulis($complaint, null, 'note', [
+            'note' => self::TANDA_LAYANAN.': '.$this->labelLayanan($dari).' → '.$this->labelLayanan($ke).'.',
+        ]);
+    }
+
+    /** Jalan mundurnya. Barisnya bertambah, tidak ada yang dihapus. (API-59) */
+    public function layananDikembalikan(Complaint $complaint, string $dari, string $ke): ComplaintActivity
+    {
+        return $this->tulis($complaint, null, 'note', [
+            'note' => self::TANDA_LAYANAN_BATAL.': '.$this->labelLayanan($dari).' → '.$this->labelLayanan($ke).'.',
+        ]);
+    }
+
     public function penugasan(Complaint $complaint, User $user, ?string $divisi): ComplaintActivity
     {
         $diteruskan = filled($divisi);
@@ -204,6 +238,11 @@ class JejakComplaint
 
             return $p['name'].' ('.$peran.($p['stage'] ? ' · '.$p['stage'] : '').')';
         })->implode(', ');
+    }
+
+    private function labelLayanan(string $kunci): string
+    {
+        return (string) config('complaint.layanan.'.$kunci, $kunci);
     }
 
     private function rupiah(int $nilai): string

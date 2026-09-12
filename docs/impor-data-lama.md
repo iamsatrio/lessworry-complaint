@@ -199,3 +199,49 @@ Ini aman selama impornya belum dipakai: complaint hasil impor belum punya
 catatan penanganan dari petugas. Begitu ada orang yang menambah catatan atau
 mengubah status pada baris impor, penghapusan itu ikut membuang pekerjaannya —
 perbaiki barisnya lewat aplikasi, jangan impor ulang.
+
+## Membetulkan kolom layanan pada baris yang sudah masuk (API-59)
+
+Baris impor yang tercatat `Satuan Non Cloth` padahal keluhannya tentang sepatu,
+tas, karpet, atau gorden dipindah ke dua nilai layanan baru — `Sepatu & Tas`
+dan `Karpet & Gorden` — tanpa menghapus dan mengimpor ulang apa pun.
+
+Hitung dulu. Bawaannya mode kering; perintah mencetak **setiap** baris yang
+akan dipindah lengkap dengan potongan uraiannya:
+
+```bash
+php artisan complaint:betulkan-layanan
+```
+
+Bacalah daftarnya, terutama blok **"Perlu dibaca dulu"** — di situ berkumpul
+baris yang kata kuncinya baru muncul setelah klausa pertama, jadi keluhannya
+mungkin bukan tentang barang itu. Baris bertanda tetap ikut dipindah; yang
+memutuskan sebaliknya orang, dengan menyunting complaint-nya lewat aplikasi
+setelah perintah dijalankan.
+
+```bash
+php artisan complaint:betulkan-layanan --tulis
+```
+
+Jalan mundurnya mengembalikan **persis** baris yang pernah dipindah perintah
+ini, dikenali dari baris riwayat yang ditulis saat memindahkannya. Complaint
+yang layanannya diisi petugas sendiri tidak ikut:
+
+```bash
+php artisan complaint:betulkan-layanan --balikkan          # hitung saja
+php artisan complaint:betulkan-layanan --balikkan --tulis
+```
+
+Tiga hal yang perlu diketahui sebelum menjalankannya:
+
+- **Hanya baris yang sekarang bernilai `satuan_non_cloth`** yang disentuh.
+  Baris ber-layanan Kiloan tidak pernah ikut, apa pun isi uraiannya — di sana
+  ada keluhan berbunyi *"Tas laundry gak dikembalikan"*, dan tas laundry itu
+  **wadah** tempat cucian datang dan pulang. Tasnya memang milik pelanggan,
+  tapi bukan tasnya yang dicuci; yang dibeli Kiloan. Kolom `layanan` mencatat
+  **jasa yang dibeli**, bukan barang yang disebut keluhannya.
+- **`updated_at` tidak dinaikkan.** Yang mencatat perubahannya adalah baris
+  riwayat pada complaint itu.
+- **Impor ulang berkas yang sama menghasilkan nilai yang sama.**
+  `PemetaBarisImpor` memanggil kata kunci yang sama (`LayananDariUraian`), jadi
+  baris tidak pulang ke `satuan_non_cloth` setelah impor diulang.
