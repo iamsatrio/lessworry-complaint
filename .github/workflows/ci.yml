@@ -38,7 +38,14 @@ jobs:
           php-version: ${{ env.PHP_VERSION }}
           # gd dipakai PenyimpanFoto untuk mengecilkan foto dan membuang
           # EXIF-nya; tanpa itu test lampiran gagal.
-          extensions: mbstring, gd, sqlite3, pdo_sqlite
+          #
+          # zip, dom, xmlreader, fileinfo, dan filter dituntut
+          # openspout/openspout, yang menulis rekap .xlsx halaman Laporan
+          # (API-62). Ditulis eksplisit walau kebanyakan sudah bawaan: kalau
+          # salah satunya hilang, `composer install` berhenti pada pemeriksaan
+          # platform — sebelum satu test pun jalan — dan pesannya tidak
+          # menyebut fitur yang membutuhkannya.
+          extensions: mbstring, gd, sqlite3, pdo_sqlite, zip, dom, xmlreader, fileinfo, filter
           coverage: none
 
       - name: Cache dependensi Composer

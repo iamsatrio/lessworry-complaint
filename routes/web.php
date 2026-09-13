@@ -76,6 +76,9 @@ Route::middleware(['auth', 'auth.session', 'active', 'email.verified', 'password
 
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
+    // Format kedua di sebelah CSV, bukan penggantinya: CSV yang dipakai alat
+    // lain, `.xlsx` yang selamat dibuka Excel wilayah Indonesia. (API-62 #4)
+    Route::get('/reports/export.xlsx', [ReportController::class, 'exportXlsx'])->name('reports.export.xlsx');
 
     // Pengelolaan pengguna — hanya admin (dicek di controller).
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
