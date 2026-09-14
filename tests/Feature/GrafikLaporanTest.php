@@ -6,6 +6,7 @@ use App\Models\Complaint;
 use App\Models\Outlet;
 use App\Models\User;
 use App\Services\GrafikLaporan;
+use App\Services\SatuanWaktu;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
@@ -56,20 +57,34 @@ class GrafikLaporanTest extends TestCase
         return $complaint;
     }
 
-    private function grafik(User $user, string $dari, string $sampai, ?int $outletId = null): GrafikLaporan
-    {
+    private function grafik(
+        User $user,
+        string $dari,
+        string $sampai,
+        ?int $outletId = null,
+        SatuanWaktu $satuan = SatuanWaktu::Bulanan,
+    ): GrafikLaporan {
         return new GrafikLaporan($user, Complaint::query()
             ->visibleTo($user)
             ->whereBetween('created_at', [Carbon::parse($dari), Carbon::parse($sampai)])
             ->when($outletId !== null, fn ($q) => $q->where('outlet_id', $outletId))
             ->with('outlet')
-            ->get(), $outletId);
+            ->get(), $outletId, $satuan);
     }
 
-    private function laporan(User $user, string $dari, string $sampai): string
+    /**
+     * Satuan waktunya dipatok bulanan, tidak dibiarkan mengikuti bawaan.
+     *
+     * Sejak API-62 nomor 2, satuan sumbu grafik ditentukan lebar rentang
+     * tanggalnya: rentang sebulan yang dipakai kebanyakan test di berkas ini
+     * akan digambar HARIAN kalau dibiarkan. Yang diuji di sini perilaku
+     * bulanannya — jadi bulanan disebut eksplisit, bukan diandaikan.
+     * Bawaannya sendiri punya testnya sendiri di SatuanWaktuGrafikTest.
+     */
+    private function laporan(User $user, string $dari, string $sampai, string $satuan = 'bulanan'): string
     {
         return $this->actingAs($user)
-            ->get('/reports?from='.$dari.'&to='.$sampai)
+            ->get('/reports?from='.$dari.'&to='.$sampai.'&satuan='.$satuan)
             ->assertOk()
             ->getContent();
     }
@@ -90,10 +105,10 @@ class GrafikLaporanTest extends TestCase
         $this->complaint('2026-08-14 09:00', $baru);
         $this->complaint('2026-08-20 09:00', $baru);
 
-        $bulanan = $this->grafik($this->userAs('supervisor'), '2026-07-01', '2026-08-31 23:59')->perBulan();
+        $bulanan = $this->grafik($this->userAs('supervisor'), '2026-07-01', '2026-08-31 23:59')->perPeriode();
 
-        $juli = collect($bulanan)->firstWhere('bulan', '2026-07');
-        $agustus = collect($bulanan)->firstWhere('bulan', '2026-08');
+        $juli = collect($bulanan)->firstWhere('periode', '2026-07');
+        $agustus = collect($bulanan)->firstWhere('periode', '2026-08');
 
         $this->assertSame(1, $juli['outlet'],
             'Outlet Baru belum menerima complaint apa pun pada Juli, jadi tidak boleh ikut membagi bulan Juli.');
@@ -115,8 +130,8 @@ class GrafikLaporanTest extends TestCase
         // Rentang hanya Agustus. Outlet Lama tetap terhitung aktif walau
         // complaint pertamanya di luar rentang — kalau tidak, memilih rentang
         // sempit membuat semua outlet seolah-olah baru buka bulan itu.
-        $agustus = collect($this->grafik($this->userAs('supervisor'), '2026-08-01', '2026-08-31 23:59')->perBulan())
-            ->firstWhere('bulan', '2026-08');
+        $agustus = collect($this->grafik($this->userAs('supervisor'), '2026-08-01', '2026-08-31 23:59')->perPeriode())
+            ->firstWhere('periode', '2026-08');
 
         $this->assertSame(2, $agustus['outlet']);
         $this->assertSame(1.0, $agustus['per']);
@@ -127,8 +142,8 @@ class GrafikLaporanTest extends TestCase
         // Complaint tanpa outlet sama sekali: pembilangnya tidak bisa dibagi.
         $this->complaint('2026-07-03 09:00');
 
-        $juli = collect($this->grafik($this->userAs('supervisor'), '2026-07-01', '2026-07-31 23:59')->perBulan())
-            ->firstWhere('bulan', '2026-07');
+        $juli = collect($this->grafik($this->userAs('supervisor'), '2026-07-01', '2026-07-31 23:59')->perPeriode())
+            ->firstWhere('periode', '2026-07');
 
         $this->assertNull($juli['per'], 'Tidak ada pembagi berarti angkanya TIDAK ADA, bukan nol.');
         $this->assertSame(0, $juli['outlet']);
@@ -252,7 +267,7 @@ class GrafikLaporanTest extends TestCase
         $this->complaint('2026-07-06 09:00', $outlet, ['status' => 'close', 'resolved_at' => '2026-08-16 09:00']);
 
         $juli = collect($this->grafik($this->userAs('supervisor'), '2026-07-01', '2026-07-31 23:59')->medianPenyelesaian())
-            ->firstWhere('bulan', '2026-07');
+            ->firstWhere('periode', '2026-07');
 
         $this->assertSame(1.0, $juli['median']);
         $this->assertSame(3, $juli['n']);
@@ -290,7 +305,7 @@ class GrafikLaporanTest extends TestCase
 
         // Pembalikan itu nyata, bukan kekhawatiran teoretis — grafik 1 memang
         // membalik urutan kedua bulan ini, dan di sana pembagi itu benar.
-        $bulanan = collect($grafik->perBulan())->keyBy('bulan');
+        $bulanan = collect($grafik->perPeriode())->keyBy('periode');
         $this->assertGreaterThan($bulanan['2026-08']['per'], $bulanan['2026-03']['per']);
     }
 
@@ -328,8 +343,8 @@ class GrafikLaporanTest extends TestCase
         $this->complaint('2026-07-04 09:00', $lain);
 
         $kasir = $this->userAs('kasir', $milikKasir);
-        $juli = collect($this->grafik($kasir, '2026-07-01', '2026-07-31 23:59')->perBulan())
-            ->firstWhere('bulan', '2026-07');
+        $juli = collect($this->grafik($kasir, '2026-07-01', '2026-07-31 23:59')->perPeriode())
+            ->firstWhere('periode', '2026-07');
 
         $this->assertSame(1, $juli['outlet']);
         $this->assertSame(1.0, $juli['per']);

@@ -288,11 +288,31 @@ details.filters .body{padding:0 22px 20px}
 .ccard .nm{font-family:var(--display);font-weight:700;font-size:15px}
 .ccard .meta{font-size:13px;color:var(--muted);margin-bottom:11px}
 
+/* ---------- Pintasan rentang tanggal (API-62 nomor 5) ---------- */
+/* Tautan biasa, bukan kalender: satu permintaan GET per pintasan, tanpa satu
+   baris skrip dan tanpa satu paket JavaScript. */
+.pintasan{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.pintasan .chip{font-family:var(--display);font-weight:600;font-size:13px;color:var(--muted);
+  background:var(--mint);border:1.5px solid var(--line);border-radius:var(--r-pill);
+  padding:0 14px;min-height:38px;display:flex;align-items:center;white-space:nowrap}
+.pintasan .chip:hover{border-color:var(--teal);color:var(--teal-deep)}
+/* Yang sedang aktif dibedakan warna DAN tebal hurufnya: warna sendirian
+   bukan pembeda yang cukup. */
+.pintasan .chip.aktif{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:700}
+.rentang-terpilih{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px;margin:0 0 16px;
+  padding-bottom:16px;border-bottom:1px solid var(--line)}
+.rentang-terpilih span{color:var(--muted);font-size:13.5px}
+.rentang-terpilih b{font-family:var(--display);font-weight:700;font-size:17px;color:var(--ink)}
+.rentang-terpilih .small{font-size:12.5px}
+
 /* ---------- Grafik (SVG langsung, tanpa satu pun pustaka) ---------- */
 /* Ukuran huruf di sini dalam satuan viewBox, bukan piksel layar: SVG-nya
    ikut menyusut bersama lebar kartu. Itu sebabnya kanvasnya punya lebar
    minimum dan boleh digeser mendatar di HP — huruf 5px bukan grafik. */
 .fig .fig-note{color:var(--muted);font-size:13.5px;margin:0 0 16px}
+/* Keterangan di BAWAH gambar — kepadatan data, sasaran tunjuk yang terlalu
+   rapat. Sengaja bukan panel merah: ini penjelasan, bukan larangan. */
+.fig .fig-bawah{color:var(--muted);font-size:13px;margin:12px 0 0;padding-left:11px;border-left:3px solid var(--mint-deep)}
 .fig .g-canvas{overflow-x:auto}
 .fig svg{display:block;width:100%;min-width:560px;max-width:920px;height:auto;margin:0 auto}
 .fig .g-grid{stroke:var(--line);stroke-width:1}
