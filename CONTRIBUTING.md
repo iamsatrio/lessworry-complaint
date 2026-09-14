@@ -81,6 +81,42 @@ Reviewer yang menjadikan semua hal penghalang akan diabaikan. Yang tidak pernah 
 - Klaim di deskripsi PR tidak menggantikan pemeriksaan. Reviewer menjalankan sendiri.
 - Merge memakai squash: satu perubahan jadi satu commit di `main`.
 
+## Berapa PR boleh terbuka sekaligus
+
+Ditetapkan Zidane, 10 September 2026, setelah sepuluh PR terbuka sekaligus membuat
+tiga di antaranya macet lebih dari 37 jam.
+
+- **Maksimal 3 PR terbuka** atas nama satu pembangun.
+- **Nol PR baru** selama ada PR miliknya yang masih konflik atau sudah ditolak.
+  Yang ditolak dibereskan dulu; menumpuk PR baru di atasnya membuat antrean
+  bergerak lebih lambat, bukan lebih cepat.
+- Kuota penuh tapi pekerjaannya sudah jadi: **simpan di branch, jangan buka PR**,
+  lalu catat di komentar issue-nya. Branch yang menunggu tidak menua; PR yang
+  menunggu menua — `main` bergerak di bawahnya dan ia perlu rebase.
+- Mau melanggar: minta izin dulu. Jangan buka dulu lalu beralasan.
+
+Alasannya bukan kerapian. PR yang saling menyentuh berkas yang sama harus
+digabung berurutan, dan tiap penggabungan memaksa sisanya rebase. Sepuluh PR
+terbuka bukan sepuluh pekerjaan yang berjalan — itu sembilan pekerjaan yang
+menunggu sambil membusuk.
+
+## Besar PR
+
+- **Panduan, bukan hukum: di atas ~400 baris perubahan non-test layak dipecah.**
+  PR seribu baris menghabiskan waktu tinjau yang sama dengan tiga PR tiga ratus
+  baris, tapi mengunci lebih banyak berkas dan lebih sering bentrok dengan PR lain.
+- Kalau memecahnya membuat perubahannya lebih sulit dimengerti — migrasi yang
+  harus jatuh bersama kodenya, misalnya — jangan dipecah, dan **tulis alasannya
+  di deskripsi PR**.
+
+## Kalau PR-mu ditolak
+
+- Perbaiki di branch yang sama dan dorong ulang. Jangan membuka PR baru untuk
+  perbaikan yang sama — riwayat tinjauannya ikut hilang.
+- Kalau kamu **tidak setuju** dengan temuan reviewer, tulis alasannya di komentar
+  PR. Menolak dengan alasan adalah jawaban yang sah; mendiamkannya lalu
+  mendorong perubahan lain bukan.
+
 ## Aturan yang tidak tertulis di sini tidak berlaku
 
 Kalau sebuah tuntutan muncul berulang di review, tempatnya di dokumen ini atau di `pint.json`/`phpstan.neon` — bukan jadi pendapat yang muncul lagi di review berikutnya.
