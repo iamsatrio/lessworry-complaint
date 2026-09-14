@@ -58,6 +58,11 @@ class LaporanFilterRequest extends FormRequest
             // dan selisih dua kode itu sudah cukup untuk memetakan jaringan.
             // authorize() di atas menolak keduanya dengan jawaban yang sama.
             'outlet' => ['nullable', 'integer'],
+            // `satuan` sengaja TIDAK divalidasi di sini. Nilai yang tidak
+            // dikenali diperlakukan sebagai "tidak memilih" oleh
+            // SaringanLaporan, bukan sebagai galat: ini saringan tampilan,
+            // bukan data yang disimpan, dan menolak seluruh halaman karena
+            // satu potongan URL yang salah ketik tidak menolong siapa pun.
         ];
     }
 

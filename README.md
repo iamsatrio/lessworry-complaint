@@ -116,15 +116,16 @@ Pakai hanya kalau datanya memang boleh hilang — mesin pengembangan sendiri,
 atau saat migrasi lokal sudah kadung berantakan dan lebih cepat mulai ulang.
 
 > **Jangan pernah di produksi.** Data complaint sungguhan tidak bisa
-> dikembalikan dengan `git`. Urutan pembaruan untuk server produksi ada di
-> **API-34**, dan langkah deploy lengkapnya di
-> `docs/deploy-care-lessworry.md`.
+> dikembalikan dengan `git`. Urutan reset dan impor untuk produksi ada di
+> `docs/deploy-care-lessworry.md` **bagian 10** — versi cPanel yang
+> menggantikan urutan VPS di **API-34** — dan langkah deploy lengkapnya di
+> dokumen yang sama.
 
 ## Dokumentasi
 
 - `docs/nevira-api.md` — kontrak integrasi NEVIRA, termasuk jebakan header `Bearer`
 - `docs/deploy.md` — daftar periksa sebelum produksi
-- `docs/deploy-care-lessworry.md` — rujukan produksi: langkah deploy dan pembaruan di `care.lessworry.id`
+- `docs/deploy-care-lessworry.md` — rujukan produksi: langkah deploy dan pembaruan di `care.lessworry.id` (cPanel DomaiNesia; jalur VPS disimpan sebagai Lampiran A)
 
 ## Pengujian
 

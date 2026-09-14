@@ -160,6 +160,27 @@ return [
     |
     | Wajib diisi saat intake supaya laporan bisa menunjukkan layanan mana yang
     | paling sering bermasalah.
+    |
+    | DELAPAN sejak API-59, bukan enam lagi. `Sepatu & Tas` dan
+    | `Karpet & Gorden` ditarik keluar dari `Satuan Non Cloth` karena keduanya
+    | menyembunyikan biaya nyata: 13 complaint karpet/gorden menanggung
+    | Rp 3.264.975 — Rp 251.152 per kejadian, biaya per complaint TERTINGGI di
+    | seluruh data, 2,6x bedding — dan complaint termahal ketiga sepanjang
+    | sejarah (`Gorden sobek`, Rp 2.525.000) tercatat sebagai Satuan Non Cloth.
+    | Selama keduanya menumpang di sana, "berapa kerugian dari layanan karpet"
+    | tidak punya jawaban.
+    |
+    | Keenam nilai lama TIDAK berubah kuncinya maupun namanya: 545 baris
+    | backfill dan seluruh laporan yang sudah ada tetap cocok tanpa disentuh.
+    |
+    | Baby Gear sengaja TIDAK ditambahkan — 18 layanan di katalog, satu
+    | complaint dalam 18 bulan. Katalog 426 layanan NEVIRA juga tidak masuk
+    | sini: itu daftar harga, bukan taksonomi complaint.
+    |
+    | Kata kunci yang memindahkan baris lama ke dua nilai baru ada di
+    | `App\Services\LayananDariUraian`, bukan di sini — polanya regex, dan
+    | satu-satunya tempatnya berada di kelas yang dipakai perintah pembetulan
+    | maupun pemeta impor.
     */
     'layanan' => [
         'kiloan_cuset' => 'Kiloan – Cuci Setrika',
@@ -168,6 +189,8 @@ return [
         'satuan_non_cloth' => 'Satuan Non Cloth',
         'satuan_cloth' => 'Satuan Cloth',
         'satuan_bedding' => 'Satuan Bedding',
+        'sepatu_tas' => 'Sepatu & Tas',
+        'karpet_gorden' => 'Karpet & Gorden',
     ],
 
     /*
@@ -185,6 +208,13 @@ return [
     | seolah datanya benar.
     */
     'layanan_dari_nevira' => [
+        // Dua kelompok baru berdiri PALING ATAS. Kelompoknya di katalog NEVIRA
+        // memang bernama begitu — `Sepatu & Tas - …`, `Karpet - …`,
+        // `Vitrase - …` — jadi nota yang barangnya sepatu tidak lagi mengisi
+        // kolom layanan dengan nilai yang sudah dibetulkan di riwayat. (API-59)
+        'sepatu & tas' => 'sepatu_tas',
+        'karpet' => 'karpet_gorden',
+        'vitrase' => 'karpet_gorden',
         'non cloth' => 'satuan_non_cloth',
         'bedding' => 'satuan_bedding',
         'cuci setrika' => 'kiloan_cuset',

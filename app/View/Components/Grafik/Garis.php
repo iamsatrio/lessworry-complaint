@@ -53,13 +53,25 @@ class Garis extends Component
     /** Garis tengah sasaran tunjuk yang dituju, dalam piksel LAYAR. */
     private const SASARAN_PX = 28;
 
+    /**
+     * Batas atas lebar kanvas, dalam piksel layar.
+     *
+     * Tanpa batas ini, 545 titik harian menuntut kanvas 16.000px — grafik
+     * yang harus digeser dua puluh layar penuh untuk dibaca ujung ke ujung.
+     * Batasnya menggigit hanya kalau seseorang memilih sendiri satuan waktu
+     * yang jauh lebih rapat dari bawaannya, dan saat menggigit ia diumumkan
+     * di bawah grafik — bukan diam-diam mengecilkan sasaran tunjuknya.
+     */
+    private const LEBAR_MAKS = 4000;
+
     private ?float $maks = null;
 
     private ?float $langkah = null;
 
     /**
-     * @param  list<array{label:string,nilai:float|null,teks:string}>  $titik
+     * @param  list<array{label:string,judul:string,nilai:float|null,teks:string}>  $titik
      * @param  array{min:float,max:float,label:string}|null  $pita  rentang acuan, mis. ambang SLA
+     * @param  string|null  $catatanBawah  satu baris di BAWAH gambar, mis. keterangan kepadatan data
      */
     public function __construct(
         public string $judul,
@@ -68,6 +80,7 @@ class Garis extends Component
         public string $warna = 'var(--teal)',
         public ?array $pita = null,
         public string $kosongTeks = 'Belum ada angka yang bisa digambar untuk periode ini.',
+        public ?string $catatanBawah = null,
     ) {}
 
     public function render(): View
@@ -218,12 +231,17 @@ class Garis extends Component
             $simpul[] = [
                 'x' => $this->x($i),
                 'y' => $this->y((float) $t['nilai']),
-                'label' => $t['label'],
+                // Label PANJANG di kotak keterangan, bukan label sumbunya.
+                // Pada satuan mingguan label sumbunya cuma menyebut tanggal
+                // Seninnya; di kotak keterangan ruangnya cukup untuk menulis
+                // "3–9 Agustus 2026", dan itu yang membuat pembacanya tahu
+                // satu titik mencakup apa. (API-62 nomor 2)
+                'label' => $t['judul'],
                 'nilai' => $t['teks'],
                 // Keterangan satu baris untuk <title>: cadangan pembaca layar,
                 // dan satu-satunya keterangan yang tersisa kalau CSS gagal
                 // dimuat. Tooltipnya sendiri memisahkan kedua bagian ini.
-                'teks' => $t['label'].' · '.$t['teks'],
+                'teks' => $t['judul'].' · '.$t['teks'],
             ];
         }
 
@@ -258,7 +276,20 @@ class Garis extends Component
             self::RUANG_TITIK_MIN * self::W * ($n - 1) / (self::W - self::KIRI - self::KANAN)
         ) + 1;
 
-        return max(self::LEBAR_MIN, $butuh);
+        return min(self::LEBAR_MAKS, max(self::LEBAR_MIN, $butuh));
+    }
+
+    /**
+     * Titiknya masih cukup renggang untuk punya sasaran tunjuk ≥28px?
+     *
+     * False berarti batas lebar kanvas menggigit dan menunjuk titiknya jadi
+     * sulit. Yang dilakukan komponen ini saat itu terjadi: mengatakannya di
+     * bawah grafik. Bukan menolak menggambar — satuan waktu yang dipilih
+     * sendiri tetap digambar apa adanya. (API-62 nomor 2)
+     */
+    public function sasaranCukup(): bool
+    {
+        return $this->lebarMin() < self::LEBAR_MAKS;
     }
 
     /**

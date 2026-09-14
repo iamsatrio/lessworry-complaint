@@ -250,17 +250,24 @@ class TaksonomiTimTest extends TestCase
     }
 
     /**
-     * Layanan punya ENAM nilai. Kiloan dicatat tim dalam tiga varian, dan
-     * menggabungkannya jadi satu membuang justru perbedaan yang mau dilihat.
+     * Layanan punya DELAPAN nilai sejak API-59. Kiloan dicatat tim dalam tiga
+     * varian, dan menggabungkannya jadi satu membuang justru perbedaan yang
+     * mau dilihat; `Sepatu & Tas` dan `Karpet & Gorden` ditarik keluar dari
+     * `Satuan Non Cloth` karena keduanya menyembunyikan biaya nyata.
+     *
+     * Yang dijaga di sini bukan angkanya, tapi urutannya: enam yang lama
+     * berdiri lebih dulu dengan kunci yang persis sama, karena 545 baris
+     * backfill dan seluruh laporan yang sudah ada memakainya.
      */
-    public function test_layanan_punya_enam_nilai_termasuk_tiga_varian_kiloan(): void
+    public function test_layanan_punya_delapan_nilai_dengan_enam_yang_lama_tak_berubah(): void
     {
         $layanan = config('complaint.layanan');
 
-        $this->assertCount(6, $layanan);
+        $this->assertCount(8, $layanan);
         $this->assertSame([
             'kiloan_cuset', 'kiloan', 'kiloan_culip',
             'satuan_non_cloth', 'satuan_cloth', 'satuan_bedding',
+            'sepatu_tas', 'karpet_gorden',
         ], array_keys($layanan));
 
         // Empat nilai lama tetap sah — tidak ada complaint tersimpan yang

@@ -17,8 +17,11 @@ Artisan::command('inspire', function () {
 | di dalam perintahnya sendiri — dump yang belum selesai tidak boleh disusul
 | jadwal berikutnya.
 |
-| Perlu satu baris di crontab server, kalau belum ada:
-|   * * * * * cd /var/www/care && php artisan schedule:run >> /dev/null 2>&1
+| Perlu satu jadwal per menit di hosting, kalau belum ada. Di cPanel dipasang
+| lewat menu Cron Jobs, dengan path PHP dan path aplikasi ditulis LENGKAP —
+| cron tidak membaca ~/.bashrc:
+|   * * * * * cd /home/<user>/care && /path/ke/php84 artisan schedule:run >/dev/null 2>&1
+| Selengkapnya: docs/deploy-care-lessworry.md bagian 12.
 */
 Schedule::command('backup:database')
     ->dailyAt('02:00')
