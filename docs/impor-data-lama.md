@@ -213,11 +213,16 @@ akan dipindah lengkap dengan potongan uraiannya:
 php artisan complaint:betulkan-layanan
 ```
 
-Bacalah daftarnya, terutama blok **"Perlu dibaca dulu"** — di situ berkumpul
-baris yang kata kuncinya baru muncul setelah klausa pertama, jadi keluhannya
-mungkin bukan tentang barang itu. Baris bertanda tetap ikut dipindah; yang
-memutuskan sebaliknya orang, dengan menyunting complaint-nya lewat aplikasi
-setelah perintah dijalankan.
+Bacalah daftarnya, lalu blok **"Ditahan karena kata kuncinya di luar klausa
+pertama"** di bawahnya — di situ berkumpul baris yang cocok kata kunci tapi
+kata itu baru muncul setelah koma atau titik, jadi keluhannya mungkin bukan
+tentang barang itu. Baris di blok itu **tidak dipindah**, bahkan dengan
+`--tulis`, dan jalur impor menahannya juga. Kalau salah satunya memang harus
+pindah, sunting complaint-nya lewat aplikasi — jangan melebarkan kata kuncinya
+sampai angkanya cocok.
+
+Blok itu dicetak walau isinya nol, supaya pembaca tahu penyaringnya berjalan
+dan tidak menahan apa pun — bukan menebak apakah bagian itu lupa dicetak.
 
 ```bash
 php artisan complaint:betulkan-layanan --tulis
@@ -244,4 +249,7 @@ Tiga hal yang perlu diketahui sebelum menjalankannya:
   riwayat pada complaint itu.
 - **Impor ulang berkas yang sama menghasilkan nilai yang sama.**
   `PemetaBarisImpor` memanggil kata kunci yang sama (`LayananDariUraian`), jadi
-  baris tidak pulang ke `satuan_non_cloth` setelah impor diulang.
+  baris tidak pulang ke `satuan_non_cloth` setelah impor diulang — dan baris
+  yang ditahan sebagai ambigu ditahan juga di sana. Impor tidak bisa mencetak
+  apa pun ke layar, jadi penahanan itu muncul sebagai **anomali** di laporan
+  impor: `uraiannya menyebut … tapi tidak di klausa pertama`.

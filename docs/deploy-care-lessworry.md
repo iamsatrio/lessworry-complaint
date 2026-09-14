@@ -100,9 +100,13 @@ echo 'export PHP=/opt/cpanel/ea-php84/root/usr/bin/php' >> ~/.bashrc
 
 Ekstensi yang dibutuhkan — periksa dengan binari yang sama, bukan `php` polos:
 
+`filter`, `xmlreader`, `zip`, `dom`, dan `fileinfo` dituntut `openspout/openspout`,
+yang menulis rekap `.xlsx` di halaman Laporan (API-62). Tanpa salah satunya
+`composer install` berhenti sebelum aplikasinya jalan.
+
 ```bash
 $PHP -m | tr 'A-Z' 'a-z' | sort > ~/ada.txt
-for e in bcmath curl dom fileinfo gd mbstring openssl pdo_mysql tokenizer xml zip; do
+for e in bcmath curl dom fileinfo filter gd mbstring openssl pdo_mysql tokenizer xml xmlreader zip; do
   grep -qx "$e" ~/ada.txt || echo "KURANG: $e"
 done
 rm ~/ada.txt
