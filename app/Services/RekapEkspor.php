@@ -25,20 +25,8 @@ use Illuminate\Support\Collection;
  * kolom yang bisa berbeda, dan yang berbeda diam-diam adalah yang lebih jarang
  * dibuka. Di sini keduanya membaca daftar yang sama.
  */
-final class RekapEkspor
+final class RekapEkspor implements IsiRekap
 {
-    /** Kolom yang isinya teks apa adanya — termasuk yang KELIHATAN angka. */
-    public const TEKS = 'teks';
-
-    /** Bilangan bulat: boleh dijumlah dan dirata-rata di lembar sebarnya. */
-    public const ANGKA = 'angka';
-
-    /** Bilangan bulat rupiah; di `.xlsx` diberi format mata uang. */
-    public const RUPIAH = 'rupiah';
-
-    /** Tanggal dan jam sungguhan, bukan teks yang berbentuk tanggal. */
-    public const TANGGAL = 'tanggal';
-
     /** @var EloquentCollection<int,ComplaintResponsible>|null */
     private ?EloquentCollection $pelaku = null;
 

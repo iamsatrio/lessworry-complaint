@@ -9,6 +9,7 @@ use App\Http\Controllers\ComplaintResponsibleController;
 use App\Http\Controllers\ComplaintStatusController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmailVerificationController;
+use App\Http\Controllers\KerugianController;
 use App\Http\Controllers\NeviraLookupController;
 use App\Http\Controllers\OperasionalController;
 use App\Http\Controllers\PasswordController;
@@ -99,6 +100,13 @@ Route::middleware(['auth', 'auth.session', 'active', 'email.verified', 'password
     // Format kedua di sebelah CSV, bukan penggantinya: CSV yang dipakai alat
     // lain, `.xlsx` yang selamat dibuka Excel wilayah Indonesia. (API-62 #4)
     Route::get('/reports/export.xlsx', [ReportController::class, 'exportXlsx'])->name('reports.export.xlsx');
+
+    // Halaman Kerugian. MEMBACA saja — nilai kompensasi tidak bisa diubah
+    // dari sini, dan tidak ada rute POST/PUT di bawah nama ini. Saringan
+    // outlet-nya lewat LaporanFilterRequest yang sama, jadi kasir tetap
+    // terbatas pada outletnya. (API-43)
+    Route::get('/reports/kerugian', [KerugianController::class, 'index'])->name('reports.kerugian');
+    Route::get('/reports/kerugian/export', [KerugianController::class, 'export'])->name('reports.kerugian.export');
 
     // Pengelolaan pengguna — hanya admin (dicek di controller).
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
