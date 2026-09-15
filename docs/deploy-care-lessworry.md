@@ -325,7 +325,7 @@ BACKUP_PATH=/home/<user>/backup-care
 BACKUP_KEEP=7
 
 # NEVIRA — pakai service account, bukan akun pribadi
-NEVIRA_API_BASE=https://api.nevira.id/api
+NEVIRA_BASE_URL=https://api.nevira.id/api
 NEVIRA_LOGIN_ENDPOINT=/admin/login
 NEVIRA_EMAIL=
 NEVIRA_PASSWORD=
