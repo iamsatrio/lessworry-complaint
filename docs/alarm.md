@@ -36,13 +36,13 @@ satu.
 1. Buat kelas di `app/Alarms/` yang mengimplementasikan `App\Alarms\Alarm`:
 
 ```php
-final class TagihanJatuhTempo implements Alarm
+final class SaldoKoinMenipis implements Alarm
 {
-    public function kunci(): string { return 'tagihan.jatuh_tempo'; }
+    public function kunci(): string { return 'nevira.saldo_koin'; }
 
-    public function judul(): string { return 'Tagihan jatuh tempo'; }
+    public function judul(): string { return 'Saldo koin NEVIRA menipis'; }
 
-    public function tindakan(): string { return 'Bayar sebelum layanan diputus.'; }
+    public function tindakan(): string { return 'Isi ulang sebelum kasir tidak bisa menerbitkan nota.'; }
 
     public function periksa(Lingkup $lingkup): ?Nyala
     {
@@ -51,6 +51,10 @@ final class TagihanJatuhTempo implements Alarm
 }
 ```
 
+`App\Alarms\TagihanJatuhTempo` adalah contoh yang sudah jalan untuk alarm yang
+barisnya BUKAN complaint — lihat di sana kalau alarmmu berdiri di atas tabel
+lain. (API-73)
+
 2. Daftarkan di `config/complaint.php` → `alarms.terdaftar`. Urutannya urutan
    tampil. Kelas yang tidak mengimplementasikan `Alarm` membuat papan melempar
    saat dibuka — papan yang diam-diam kehilangan satu alarm terlihat sama
@@ -58,6 +62,27 @@ final class TagihanJatuhTempo implements Alarm
 
 3. Tulis testnya. Yang wajib ada: keadaan yang menyalakan, dan keadaan yang
    **tidak** menyalakan.
+
+## Bentuk isi kartu
+
+Kartu alarm merender tiga kolom, dan ketiganya datang dari `Nyala` — bukan
+ditebak kartunya:
+
+| Bagian `Nyala` | Isi |
+|---|---|
+| `daftar[]` | satu baris: `id`, `tiket` (label), `outlet`, `umur` (kolom waktu), `tautan` |
+| `kolom` | judul ketiga kolom. Bawaannya `Nyala::KOLOM_COMPLAINT` = Tiket · Outlet · Lama |
+| `tautanSemua` | tujuan "dan N lagi". Null berarti jumlahnya disebut tanpa tautan |
+
+Nama kunci `tiket` dan `umur` datang dari dua alarm complaint yang pertama,
+tapi artinya umum. Alarm yang barisnya bukan complaint mengganti **judul**
+kolomnya lewat `kolom`, bukan bentuk barisnya — satu bentuk baris berarti satu
+kartu yang merender semuanya. `TagihanJatuhTempo` memakainya untuk
+Tagihan · Outlet · Jatuh tempo.
+
+`tautan` wajib diisi tiap baris. Kartu tidak boleh menebak "ini pasti
+complaint": tebakan itu menerbitkan tautan ke complaint untuk baris tagihan,
+dan yang keluar 404 yang terlihat seperti data hilang.
 
 ## Aturan yang mengikat
 
@@ -75,6 +100,13 @@ final class TagihanJatuhTempo implements Alarm
   `ComplaintLewatSla` dengan `Complaint::isOverdue()`), tulis test yang menjaga
   keduanya sepakat baris demi baris. Dua tempat yang menjawab pertanyaan yang
   sama dengan caranya sendiri akan berpisah diam-diam.
+- **Kalau alarmmu menghitung tanggal, hitung di kalender operasional.**
+  Aplikasi berjalan di UTC dan hari UTC berganti pukul 07.00 WIB — di tengah
+  jam kerja. Jatuh tempo dan "hari ini" yang dibandingkan dengan zona berbeda
+  selisihnya bergeser tujuh jam, dan pembulatan ke bawah memakan satu hari:
+  "telat 6 hari" tertulis "telat 5 hari", tiap hari, tanpa satu pun tanda.
+  `PeriodeTagihan::hariIni()` mengembalikan tanggal polos untuk alasan itu.
+  (API-73)
 
 ## Wewenang
 
@@ -93,3 +125,23 @@ untuk keadaan yang belum ada itu.
 |---|---|---|
 | `ALARM_BELUM_DIPEGANG_JAM` | `4` | umur minimum complaint tanpa pemilik sebelum alarmnya menyala. **Tebakan** — uji coba lapangan (API-10) yang memperbaikinya |
 | `ALARM_ZONA_WAKTU` | `Asia/Jakarta` | zona yang menentukan kapan "besok" mulai |
+
+## Tagihan bulanan — pengecualian yang disebut, bukan dilanggar diam-diam
+
+`TagihanJatuhTempo` menyaring di PHP, bukan di SQL. Aturan "saring di SQL" di
+atas berdiri karena tabel complaint berisi ratusan baris dan tumbuh terus;
+tabel `tagihan` adalah daftar tulisan tangan berisi belasan baris, dan aturan
+"hari terakhir bulan" ditulis berbeda di sqlite dan MySQL. Jumlah kuerinya
+tetap dua berapa pun banyak tagihannya. Alasan lengkapnya ada di
+`App\Services\PeriodeTagihan`.
+
+Ia juga satu-satunya alarm yang benar-benar PADAM saat ditandai. Itu bukan
+ketidakkonsistenan: menandai complaint "sudah saya tangani" berarti *aku
+memegangnya* dan keadaannya belum berubah, sementara menandai tagihan "sudah
+dibayar" memang mengubah keadaannya. Yang memadamkan alarm tetap keadaannya
+berubah. Penandaannya PER PERIODE (`pembayaran_tagihan.periode`, 'YYYY-MM'),
+bukan per hari operasional seperti `penanda_alarm`.
+
+Wewenangnya juga dua, bukan satu: `dashboard.view` membaca, dan
+`dashboard.manage_tagihan` — daftar perannya di `config/complaint.php` →
+`tagihan_roles` — mengubah dan menandai dibayar.
