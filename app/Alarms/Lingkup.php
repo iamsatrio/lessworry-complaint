@@ -4,6 +4,7 @@ namespace App\Alarms;
 
 use App\Models\Complaint;
 use App\Models\Outlet;
+use App\Models\Tagihan;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -40,5 +41,39 @@ final class Lingkup
         return $this->outlet === null
             ? $query
             : $query->where('outlet_id', $this->outlet->id);
+    }
+
+    /**
+     * Tagihan AKTIF yang boleh dilihat pembaca ini. (API-73)
+     *
+     * Alasannya sama dengan complaints(): satu jalur, supaya kebocoran cakupan
+     * tidak bisa bersembunyi di alarm yang menulis kuerinya sendiri.
+     *
+     * Tagihan tingkat jaringan IKUT TERBAWA meski saringan outlet sedang
+     * menyala. Sewa kantor pusat dan langganan perangkat lunak berlaku untuk
+     * semua outlet; membuangnya saat seseorang menyaring satu outlet membuat
+     * alarmnya padam untuk tagihan yang jatuh tempo hari itu juga — dan alarm
+     * yang padam terbaca sebagai "tidak ada yang perlu dibayar", bukan sebagai
+     * "sedang disaring".
+     *
+     * Yang nonaktif tidak pernah ikut: menonaktifkan tagihan memang berarti
+     * memadamkan alarmnya, dan riwayat pembayarannya tetap terbaca di halaman
+     * Tagihan.
+     *
+     * @return Builder<Tagihan>
+     */
+    public function tagihan(): Builder
+    {
+        $query = Tagihan::query()->visibleTo($this->user)->where('is_active', true);
+
+        if ($this->outlet === null) {
+            return $query;
+        }
+
+        $outletId = $this->outlet->id;
+
+        return $query->where(function (Builder $q) use ($outletId): void {
+            $q->whereNull('outlet_id')->orWhere('outlet_id', $outletId);
+        });
     }
 }

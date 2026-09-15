@@ -2,6 +2,7 @@
 
 use App\Alarms\ComplaintBelumDipegang;
 use App\Alarms\ComplaintLewatSla;
+use App\Alarms\TagihanJatuhTempo;
 
 return [
 
@@ -323,6 +324,22 @@ return [
     'dashboard_roles' => ['admin', 'supervisor'],
 
     /*
+    | Peran yang boleh MENGELOLA tagihan bulanan — wewenang
+    | `dashboard.manage_tagihan`. (API-73)
+    |
+    | Sengaja LEBIH SEMPIT daripada `dashboard_roles`. Melihat alarm tagihan
+    | adalah membaca pekerjaan hari ini; mengubah nominalnya menyentuh
+    | keuangan jaringan, dan menandainya "sudah dibayar" memadamkan satu-
+    | satunya pengingat yang ada. Supervisor membaca papan yang sama, tapi
+    | tidak menyatakan tagihan sudah dibayar.
+    |
+    | Daftarnya di sini, bukan di kode: kalau satrio kelak memberikannya ke
+    | Supervisor, itu satu baris config — dan sesudah API-21 selesai, satu
+    | centang di halaman peran.
+    */
+    'tagihan_roles' => ['admin'],
+
+    /*
     | Alarm Dashboard Operations. (API-72)
     */
     'alarms' => [
@@ -338,6 +355,11 @@ return [
         'terdaftar' => [
             ComplaintBelumDipegang::class,
             ComplaintLewatSla::class,
+            // Tagihan berdiri PALING BAWAH, bukan karena kurang penting tapi
+            // karena kurang mendesak: complaint yang terlantar memburuk tiap
+            // jam, tagihan memburuk tiap hari. Yang dibaca lebih dulu adalah
+            // yang jarak waktunya lebih pendek. (API-73)
+            TagihanJatuhTempo::class,
         ],
 
         /*

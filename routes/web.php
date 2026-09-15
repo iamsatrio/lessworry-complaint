@@ -12,8 +12,10 @@ use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\NeviraLookupController;
 use App\Http\Controllers\OperasionalController;
 use App\Http\Controllers\PasswordController;
+use App\Http\Controllers\PembayaranTagihanController;
 use App\Http\Controllers\PenandaAlarmController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\TagihanController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -69,6 +71,37 @@ Route::middleware(['auth', 'auth.session', 'active', 'email.verified', 'password
         Route::get('/operasional', OperasionalController::class)->name('operasional');
         Route::post('/operasional/alarm/{alarm}/tangani', [PenandaAlarmController::class, 'store'])
             ->name('operasional.alarm.tangani');
+
+        /*
+        | Tagihan bulanan. (API-73)
+        |
+        | DUA gerbang, sengaja tidak satu. Membaca daftarnya bagian dari
+        | membaca papan pagi — `dashboard.view`. Mengubah nominalnya menyentuh
+        | keuangan jaringan, dan menandainya dibayar MEMADAMKAN satu-satunya
+        | pengingat yang ada — `dashboard.manage_tagihan`, yang daftar perannya
+        | lebih sempit.
+        |
+        | Gerbangnya di sini yang menegakkan. Halaman menyembunyikan tombol
+        | untuk yang tidak berwewenang, tapi itu kerapian, bukan wewenang.
+        */
+        Route::get('/tagihan', [TagihanController::class, 'index'])->name('tagihan.index');
+
+        Route::middleware('can:dashboard.manage_tagihan')->group(function () {
+            Route::get('/tagihan/baru', [TagihanController::class, 'create'])->name('tagihan.create');
+            Route::post('/tagihan', [TagihanController::class, 'store'])->name('tagihan.store');
+            Route::post('/tagihan/ambang', [TagihanController::class, 'ambang'])->name('tagihan.ambang');
+            Route::get('/tagihan/{tagihan}/ubah', [TagihanController::class, 'edit'])->name('tagihan.edit');
+            Route::put('/tagihan/{tagihan}', [TagihanController::class, 'update'])->name('tagihan.update');
+            // Nonaktifkan, bukan hapus. Tidak ada rute DELETE untuk tagihan,
+            // dan itu keputusan: riwayat pembayarannya harus tetap utuh.
+            Route::post('/tagihan/{tagihan}/status', [TagihanController::class, 'status'])->name('tagihan.status');
+
+            Route::post('/tagihan/{tagihan}/bayar', [PembayaranTagihanController::class, 'store'])
+                ->name('tagihan.bayar');
+            Route::delete('/tagihan/{tagihan}/bayar/{periode}', [PembayaranTagihanController::class, 'destroy'])
+                ->where('periode', '[0-9]{4}-[0-9]{2}')
+                ->name('tagihan.bayar.batal');
+        });
     });
 
     Route::get('/complaints', [ComplaintController::class, 'index'])->name('complaints.index');

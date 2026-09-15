@@ -14,12 +14,16 @@
   <div class="alarm-b">
     <p class="tindakan">{{ $baris->alarm->tindakan() }}</p>
 
+    {{-- Judul kolom dan tujuan tiap baris datang dari alarmnya, tidak ditebak
+         di sini: kartu yang sama merender complaint maupun tagihan bulanan,
+         dan kartu yang menebak "ini pasti complaint" akan menerbitkan tautan
+         ke complaint untuk baris tagihan. (API-73) --}}
     <table>
-      <thead><tr><th>Tiket</th><th>Outlet</th><th>Lama</th></tr></thead>
+      <thead><tr><th>{{ $nyala->kolom[0] }}</th><th>{{ $nyala->kolom[1] }}</th><th>{{ $nyala->kolom[2] }}</th></tr></thead>
       <tbody>
       @foreach($nyala->daftar as $item)
         <tr>
-          <td><a href="{{ route('complaints.show', $item['id']) }}" class="tix">{{ $item['tiket'] }}</a></td>
+          <td><a href="{{ $item['tautan'] }}" class="tix">{{ $item['tiket'] }}</a></td>
           <td class="muted small">{{ $item['outlet'] }}</td>
           <td class="small">{{ $item['umur'] }}</td>
         </tr>
@@ -32,7 +36,7 @@
            terlihat seperti seluruhnya lebih buruk daripada angka yang jujur. --}}
       <p class="muted small" style="margin:12px 0 0">
         Dan {{ $nyala->sisa() }} lagi.
-        <a href="{{ route('complaints.index', ['status' => 'open']) }}">Lihat di papan kerja →</a>
+        @if($nyala->tautanSemua)<a href="{{ $nyala->tautanSemua }}">Lihat selengkapnya →</a>@endif
       </p>
     @endif
 

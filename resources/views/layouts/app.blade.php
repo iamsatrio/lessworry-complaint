@@ -426,6 +426,14 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
         <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">Ringkasan</a>
         <a href="{{ route('complaints.index') }}" class="{{ request()->routeIs('complaints.index') ? 'active' : '' }}">Papan Kerja</a>
         <a href="{{ route('reports.index') }}" class="{{ request()->routeIs('reports.*') ? 'active' : '' }}">Laporan</a>
+        {{-- Tagihan berdiri di belakang gerbang yang sama dengan Dashboard
+             Operations: yang membaca papan paginya juga yang membaca daftar
+             tagihannya. Mengubahnya butuh wewenang kedua yang lebih sempit,
+             dan itu dijawab tombol di dalam halaman — bukan menu yang hilang.
+             (API-73) --}}
+        @if(auth()->user()->canViewDashboard())
+          <a href="{{ route('tagihan.index') }}" class="{{ request()->routeIs('tagihan.*') ? 'active' : '' }}">Tagihan</a>
+        @endif
         @if(auth()->user()->canManageUsers())
           <a href="{{ route('users.index') }}" class="{{ request()->routeIs('users.*') ? 'active' : '' }}">Pengguna</a>
         @endif
