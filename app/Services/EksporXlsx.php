@@ -42,7 +42,7 @@ final class EksporXlsx
     /** Tanggal dan jam, urutan hari-bulan-tahun seperti kebiasaan di sini. */
     private const FORMAT_TANGGAL = 'dd/mm/yyyy hh:mm';
 
-    public function __construct(private readonly RekapEkspor $rekap) {}
+    public function __construct(private readonly IsiRekap $rekap) {}
 
     public function unduh(): StreamedResponse
     {
@@ -64,7 +64,7 @@ final class EksporXlsx
                 $sel = [];
 
                 foreach ($baris as $i => $nilai) {
-                    $sel[] = $this->sel($nilai, $tipe[$i] ?? RekapEkspor::TEKS, $rupiah, $tanggal);
+                    $sel[] = $this->sel($nilai, $tipe[$i] ?? IsiRekap::TEKS, $rupiah, $tanggal);
                 }
 
                 $writer->addRow(new Row($sel));
@@ -92,11 +92,11 @@ final class EksporXlsx
         }
 
         return match ($tipe) {
-            RekapEkspor::TANGGAL => $nilai instanceof Carbon
+            IsiRekap::TANGGAL => $nilai instanceof Carbon
                 ? new DateTimeCell($nilai->toDateTime(), $tanggal)
                 : new StringCell((string) $nilai, null),
-            RekapEkspor::RUPIAH => new NumericCell((int) $nilai, $rupiah),
-            RekapEkspor::ANGKA => new NumericCell((int) $nilai, null),
+            IsiRekap::RUPIAH => new NumericCell((int) $nilai, $rupiah),
+            IsiRekap::ANGKA => new NumericCell((int) $nilai, null),
             default => new StringCell((string) $nilai, null),
         };
     }

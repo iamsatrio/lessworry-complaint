@@ -337,31 +337,25 @@ final class GrafikLaporan
     {
         $total = $this->complaints->count();
         $bernilai = $this->complaints->filter(fn (Complaint $c) => $this->punyaNilai($c));
-        $persen = $total === 0 ? null : (int) round($bernilai->count() / $total * 100);
+        $persen = NilaiBiaya::persen($bernilai->count(), $total);
 
         return [
             'terisi' => $bernilai->count(),
             'total' => $total,
             'biaya' => (int) $bernilai->sum('compensation_amount'),
             'persen' => $persen,
-            'rendah' => $persen !== null && $persen < 50,
+            'rendah' => NilaiBiaya::rendah($persen),
         ];
     }
 
     /**
-     * Complaint ini punya nilai biaya yang benar-benar dicatat?
-     *
-     * Kolomnya `unsignedBigInteger default 0` dan tidak nullable, jadi basis
-     * data TIDAK BISA membedakan "kompensasi Rp 0" dari "tidak pernah diisi" —
-     * impor data lama pun menulis 0 untuk sel kosong. Selama kolomnya masih
-     * begitu, nol dibaca sebagai tidak tercatat, dan complaint tersebut tidak
-     * ikut dihitung dalam rata-rata maupun cakupan. Menghitungnya sebagai
-     * Rp 0 akan menarik turun setiap rata-rata biaya dengan angka yang tidak
-     * pernah ada orang yang mencatatnya.
+     * Complaint ini punya nilai biaya yang benar-benar dicatat? Aturannya
+     * ditulis satu kali di NilaiBiaya — halaman Laporan dan halaman Kerugian
+     * tidak boleh punya dua jawaban untuk pertanyaan ini. (API-43)
      */
     private function punyaNilai(Complaint $complaint): bool
     {
-        return (int) $complaint->compensation_amount > 0;
+        return NilaiBiaya::tercatat($complaint);
     }
 
     /** Complaint pada periode ini yang tidak punya outlet — tidak masuk grafik 1 dan 3. */
@@ -469,12 +463,12 @@ final class GrafikLaporan
     /** Cakupan yang wajib menempel pada setiap total biaya. */
     public function cakupanTeks(int $terisi, int $total): string
     {
-        return 'dari '.$terisi.' dari '.$total.' complaint yang punya nilai biaya';
+        return NilaiBiaya::cakupanTeks($terisi, $total);
     }
 
     public static function rupiah(int $nilai): string
     {
-        return 'Rp '.number_format($nilai, 0, ',', '.');
+        return NilaiBiaya::rupiah($nilai);
     }
 
     public function desimal(float $nilai): string
@@ -567,12 +561,6 @@ final class GrafikLaporan
     /** @param  list<float>  $nilai */
     private function median(array $nilai): float
     {
-        sort($nilai);
-        $n = count($nilai);
-        $tengah = intdiv($n, 2);
-
-        return $n % 2 === 1
-            ? $nilai[$tengah]
-            : ($nilai[$tengah - 1] + $nilai[$tengah]) / 2;
+        return NilaiBiaya::median($nilai);
     }
 }

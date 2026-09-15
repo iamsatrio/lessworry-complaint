@@ -425,7 +425,12 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
         @endif
         <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">Ringkasan</a>
         <a href="{{ route('complaints.index') }}" class="{{ request()->routeIs('complaints.index') ? 'active' : '' }}">Papan Kerja</a>
-        <a href="{{ route('reports.index') }}" class="{{ request()->routeIs('reports.*') ? 'active' : '' }}">Laporan</a>
+        <a href="{{ route('reports.index') }}" class="{{ request()->routeIs('reports.index') || request()->routeIs('reports.export*') ? 'active' : '' }}">Laporan</a>
+        {{-- Kerugian berdiri sendiri di navigasi, bukan bagian di dalam
+             Laporan: pertanyaan "berapa uang yang keluar" dibawa orang yang
+             berbeda, pada hari yang berbeda, dari pertanyaan "berapa
+             complaint minggu ini". (API-43) --}}
+        <a href="{{ route('reports.kerugian') }}" class="{{ request()->routeIs('reports.kerugian*') ? 'active' : '' }}">Kerugian</a>
         @if(auth()->user()->canManageUsers())
           <a href="{{ route('users.index') }}" class="{{ request()->routeIs('users.*') ? 'active' : '' }}">Pengguna</a>
         @endif

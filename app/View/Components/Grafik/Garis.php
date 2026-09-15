@@ -94,13 +94,31 @@ class Garis extends Component
         return $this->nilai() === [];
     }
 
+    /** Angka satu garis bantu sumbu tegak, seringkas yang masih benar. */
+    private function angkaSumbu(float $nilai, float $langkah): string
+    {
+        // Angka jutaan diringkas jadi "6 jt". Ruang label sumbu ini 54 satuan
+        // viewBox — cukup untuk "6.000" dan tidak cukup untuk "6.000.000",
+        // yang terpotong di depan jadi "00.000" dan terbaca sebagai angka
+        // lain. Diringkas hanya kalau LANGKAHNYA sendiri sebesar itu, jadi
+        // grafik bersumbu kecil (complaint per outlet, median hari, persen)
+        // tidak berubah satu huruf pun. (API-43)
+        foreach ([['jt', 1_000_000.0], ['rb', 1_000.0]] as [$satuan, $bagi]) {
+            if ($langkah >= $bagi) {
+                return $this->pecahan($nilai / $bagi, $langkah / $bagi).' '.$satuan;
+            }
+        }
+
+        return $this->pecahan($nilai, $langkah);
+    }
+
     /**
      * Angka sumbu ditulis dengan pecahan sebanyak yang DIBUTUHKAN langkahnya.
      * Langkah 0,25 yang dibulatkan ke satu angka di belakang koma menghasilkan
      * sumbu 0,3 · 0,5 · 0,8 · 1,0 — jaraknya terlihat tidak sama rata padahal
      * sama, dan pembacanya menyimpulkan skalanya melengkung.
      */
-    private function angkaSumbu(float $nilai, float $langkah): string
+    private function pecahan(float $nilai, float $langkah): string
     {
         $desimal = match (true) {
             fmod($langkah, 1.0) === 0.0 => 0,
