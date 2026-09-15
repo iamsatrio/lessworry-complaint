@@ -211,15 +211,22 @@ class WewenangPeranSaatIniTest extends TestCase
     }
 
     /**
-     * Batas kompensasi hidup di config, bukan di User — API-21 memindahkannya
-     * ke kolom peran. Nilainya tidak boleh berubah saat pindah.
+     * Batas kompensasi ditanya lewat gerbangnya, bukan lewat sumber datanya.
+     *
+     * `config('complaint.compensation_limit.<peran>')` adalah tempat angkanya
+     * disimpan hari ini, dan API-21 memang berencana mengosongkannya. Yang
+     * dipakai aplikasi `User::compensationLimit()` — ComplaintStatusController
+     * dan complaints/show.blade.php dua-duanya memanggil metodenya, tidak ada
+     * yang membaca config sendiri. Mengunci config berarti mengunci berkas yang
+     * akan hilang, bukan perilaku yang harus tetap identik sesudahnya.
+     * (Temuan tinjauan PR #31 — API-79.)
      */
     #[DataProvider('peran')]
     public function test_batas_kompensasi_tidak_bergeser(string $peran): void
     {
         $this->assertSame(
             self::tabelWewenang()[$peran]['compensation_limit'],
-            config('complaint.compensation_limit.'.$peran),
+            (new User(['role' => $peran]))->compensationLimit(),
             'Batas kompensasi '.$peran.' bergeser dari nilai sebelum API-21.'
         );
     }
