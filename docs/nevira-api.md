@@ -1,15 +1,21 @@
 # Integrasi NEVIRA POS
 
 Diverifikasi dari koleksi Postman `less-worry BE` dan diuji langsung ke `api.nevira.id` pada 2026-08-26.
+**Diperiksa ulang 15 September 2026** terhadap `api.nevira.id` dengan service account sungguhan — bagian
+yang berubah diberi tanggalnya sendiri di bawah. Semua pemeriksaan hanya `GET`.
 
 ## Autentikasi
 
 ```
-POST /api/login
+POST /api/admin/login
 { "email": "...", "password": "..." }
 
 200 -> { "access_token": "<JWT>", "user_data": { ... } }
 ```
+
+**Jalurnya `/api/admin/login`, bukan `/api/login`** (diperiksa 15 September 2026). Dokumen ini
+sebelumnya menulis `/api/login`; kodenya sendiri sudah benar — `config/nevira.php` menyusunnya dari
+`NEVIRA_LOGIN_ENDPOINT`, standarnya `/admin/login`.
 
 Setiap request berikutnya membawa:
 
@@ -93,13 +99,13 @@ GET /api/transactions/31242                             -> detail
 data.id_transaction              int
 data.transaction_number          string   <- nomor struk
 data.order_type                  REGULAR | ...
-data.status                      ORDER | PROCESSING | READY_FOR_PICKUP | COMPLETED | VOID | LATE | DEADLINE
+data.status                      ORDER | PROCESSING | PROCESSED | READY_FOR_PICKUP | COMPLETED | VOID | REFUND
 data.payment_status              PAID | UNPAID
 data.progress_percentage         int
 data.subtotal / tax / grand_total
 data.pickup_fee / delivery_fee / other_fees
 data.estimated_completion_date   ISO8601
-data.completion_date             ISO8601 | null
+data.completion_date             SELALU null  <- jangan dipakai, lihat peringatan di bawah
 data.id_outlet, data.outlet_name
 data.customer { id_customer, customer_name, phone, email, address, city, ... }
 data.outlet   { id_outlet, outlet_name, address, phone, city, ... }
@@ -109,6 +115,56 @@ data.payments []  { payment_method, amount, change_amount, payment_proof }
 data.media    []  { media_type, media_path, media_purpose }
 data.promos   []  { promo_name, promo_type, value_type, value }
 ```
+
+### `LATE` dan `DEADLINE` bukan nilai `status` — keduanya nilai SARING
+
+Dokumen ini sebelumnya mendaftar `LATE` dan `DEADLINE` sebagai nilai `status`. Tidak ada baris yang
+pernah ber-`status` salah satu dari keduanya. Keduanya hanya dipahami sebagai **parameter saring**,
+diturunkan dari `estimated_completion_date` dibanding waktu sekarang, dan baris yang dikembalikan
+tetap ber-`status` ORDER atau PROCESSING (diperiksa 15 September 2026):
+
+```
+GET /api/transactions?status=LATE      -> 200, total 12, baris: ORDER 2 · PROCESSING 10
+GET /api/transactions?status=DEADLINE  -> 200, total 94, baris: ORDER 7 · PROCESSING 13
+```
+
+- **`DEADLINE`** = tenggatnya jatuh **hari ini**, apa pun keadaannya. Jendela sehari.
+- **`LATE`** = tenggatnya **sudah lewat** dan notanya belum selesai. Menengok ke belakang; `LATE` ⊄ `DEADLINE`.
+
+Nilai `status` yang sungguh ada: `ORDER`, `PROCESSING`, `PROCESSED`, `READY_FOR_PICKUP`, `COMPLETED`,
+`VOID`, `REFUND`. `PROCESSED` dan `REFUND` hilang dari daftar lama.
+
+### ⚠️ `completion_date` SELALU `null` — jangan hitung SLA darinya
+
+Ini jebakan paling mahal di seluruh integrasi, karena **gagal tanpa bersuara**: bukan error, bukan nol,
+melainkan angka yang terlihat masuk akal dan keliru. Siapa pun yang menulis laporan SLA atau
+ketepatan waktu dengan field ini akan salah dan tidak tahu.
+
+Diperiksa 15 September 2026:
+
+```
+100 nota ?status=COMPLETED (daftar)  -> completion_date terisi = 0
+5 nota yang sama lewat endpoint detail -> completion_date terisi = 0
+```
+
+Nol dari seratus, dan nol juga pada dua pemeriksaan sebelumnya atas 1.000 nota COMPLETED bulan
+Agustus dan September. `completion_date > estimated_completion_date` **tidak bisa dihitung**, hari ini
+maupun mundur ke belakang.
+
+**Gantinya:**
+
+```
+waktu selesai sungguhan = max(services[].processes[].completed_at)
+```
+
+Yaitu tahap pengerjaan terakhir yang selesai, di seluruh baris layanan pada nota itu. Field ini terisi:
+25 dari 25 tahap pada pemeriksaan 15 September, 26 dari 26 dan 267 dari 267 pada dua pemeriksaan
+sebelumnya.
+
+Harganya perlu diketahui sebelum dipakai: **`processes[]` hanya ada di endpoint detail.** Daftar
+transaksi membawa `services[]` tanpa `processes`. Laporan ketepatan waktu untuk seluruh riwayat berarti
+**satu panggilan detail per nota** — sekitar 25.000 nota untuk seluruh riwayat, ~6.200 sebulan. Tarik
+sekali, simpan di basis data kita, lalu inkremental harian. Jangan pernah dihitung saat halaman dibuka.
 
 ### Satu nota bisa berisi banyak baris layanan
 
@@ -120,18 +176,23 @@ Karena itu `summarizeTransaction()` menyimpan penandanya, dan snapshot complaint
 
 ```
 services[].index            int          <- nomor urut baris pada nota, mulai 1
-services[].name             string|null  <- services[].service.service_name, BELUM TERVERIFIKASI
+services[].name             string|null  <- services[].service.service_name (TERVERIFIKASI 15 Sep 2026)
 services[].code             string|null  <- services[].service_number apa adanya
 processes[].service_index   int          <- baris layanan yang dikerjakan proses ini
 processes[].service_name    string|null  <- namanya, untuk judul kelompok di halaman complaint
 ```
 
-**`services[].service.service_name` belum pernah diverifikasi terhadap respons sungguhan.**
-Tabel bentuk respons di atas hanya menyebut `service_number`, tanpa menyebut isinya. Karena itu
-`name` dan `code` disimpan TERPISAH dan `name` **tidak** jatuh ke `service_number`: cadangan diam-diam
-ke sana membuat kode seperti `4471` lewat sebagai nama layanan di layar kasir.
+**`services[].service.service_name` sudah diverifikasi terhadap respons sungguhan** (15 September
+2026): 15 dari 15 baris layanan pada 6 nota punya kuncinya dan terisi, di daftar maupun di detail.
+Catatan "BELUM TERVERIFIKASI" yang dulu ada di sini dicabut. Ada dua jalur ke nama yang sama dan
+keduanya terisi — `services[].service_name` yang datar dan `services[].service.service_name` yang
+bersarang; `NeviraClient::namaLayanan()` membaca yang bersarang.
 
-Kalau namanya tidak ada, sebutan barisnya jatuh ke nomor urutnya — `Barang ke-3 dari 10`, di pemilih
+`name` dan `code` tetap disimpan TERPISAH, dan `name` tetap **tidak** jatuh ke `service_number`:
+cadangan diam-diam ke sana membuat kode seperti `4471` lewat sebagai nama layanan di layar kasir.
+
+Perilaku ketiadaan nama tetap dipertahankan meskipun sekarang namanya terbukti ada — satu nota yang
+bentuknya lain tidak boleh membuat layar kasir menampilkan kode. Kalau namanya tidak ada, sebutan barisnya jatuh ke nomor urutnya — `Barang ke-3 dari 10`, di pemilih
 intake `Barang ke-3 · 1 pcs` — yang masih bisa dicocokkan orang dengan struk di tangannya. Kodenya
 tetap ditampilkan, tapi sebagai keterangan, bukan sebagai identitas barang.
 
@@ -170,9 +231,72 @@ Dipakai untuk memilih pelaku complaint dari daftar alih-alih mengetik nama (API-
 disimpan sebentar (`NEVIRA_OUTLET_STAFF_TTL`, standar 10 menit) supaya membuka halaman complaint
 berkali-kali tidak menghabiskan jatah itu.
 
+## Jebakan yang gagal diam-diam
+
+Endpoint di bagian ini **tidak dipanggil sistem complaint** — ketiganya milik Dashboard Operations
+(API-65). Ditulis di sini karena ketiganya salah dengan cara yang sama: **membalas 200 dan terlihat
+benar.** Yang membalas 500 tidak berbahaya; yang berbahaya yang menjawab nol dengan tenang.
+
+Semua angka di bawah dari panggilan sungguhan 15 September 2026.
+
+### 1. Format tanggal berbeda per endpoint, dan satu di antaranya diam saat salah
+
+| Endpoint | Format | Kalau formatnya salah |
+|---|---|---|
+| `/transactions` | `YYYY-MM-DD` | — |
+| `/reports/dashboard` | menerima keduanya, hasilnya identik | — |
+| `/reports/attendance` | **`DD-MM-YYYY`** | HTTP **500** — berisik, tidak menipu |
+| `/transfer-order-trx/statistics` | **`YYYY-MM-DD`** | **200 dengan `total_transfer_order = 0`** |
+
+```
+/transfer-order-trx/statistics?start_date=2026-09-01&end_date=2026-09-10 -> 200, total = 389
+/transfer-order-trx/statistics?start_date=01-09-2026&end_date=10-09-2026 -> 200, total =   0
+/reports/attendance?start_date=2026-09-01&end_date=2026-09-10            -> 500
+/reports/attendance?start_date=01-09-2026&end_date=10-09-2026            -> 200
+```
+
+Dua endpoint bertetangga menuntut format yang **berlawanan**, dan yang satu diam saat salah. Dashboard
+yang salah format di `/statistics` akan melaporkan "tidak ada transfer order" — angka yang masuk akal,
+dan keliru.
+
+### 2. `/category` pakai `limit`, jangan `per_page`
+
+```
+GET /api/category?per_page=200  -> 200, total=11, dikembalikan 10   <- satu kategori hilang
+GET /api/category?limit=200     -> 200, total=11, dikembalikan 11
+```
+
+`per_page` menjatuhkan satu baris tanpa bersuara, dan `page` di luar halaman pertama mengembalikan
+kosong padahal `total`-nya 11. Kategori yang hilang itu nyata, bukan duplikat kosong. Siapa pun yang
+memakai `per_page` di sini akan menyimpulkan ada sepuluh kategori, dan angka itu akan terbawa ke
+laporan tanpa ada yang menyadarinya.
+
+### 3. `/transfer-order-trx` mengembalikan array berisi satu objek paginasi
+
+```
+res.data     -> undefined
+res[0].data  -> baris transfer order
+```
+
+Akar responsnya **array berisi satu elemen**, bukan objek paginasi langsung seperti `/transactions`.
+`res.data` tidak melempar galat, ia hanya `undefined` — dan daftar kosong terbaca sebagai "tidak ada
+transfer order". Diperiksa 15 September: akar = array 1 elemen, `res['data']` tidak ada,
+`res[0]['data']` berisi barisnya.
+
+`/transfer-order-trx/statistics` **tidak** berbentuk begitu — ia objek biasa. Jadi bentuknya berbeda
+antar endpoint dalam satu keluarga yang sama.
+
 ## Kredensial
 
 Lewat environment variable saja — `NEVIRA_EMAIL`, `NEVIRA_PASSWORD`. Lihat `.env.example`.
+
+Nama variabel base URL: **`NEVIRA_BASE_URL`**. Itu nama yang dipasang di runtime, dan sejak API-65
+`config/nevira.php` membacanya lebih dulu. Nama lama `NEVIRA_API_BASE` masih diterima sebagai cadangan
+supaya lingkungan yang sudah memakainya tidak putus — tapi yang ditulis di `.env.example` dan yang
+dipakai untuk lingkungan baru adalah `NEVIRA_BASE_URL`.
+
+Kalau keduanya kosong, nilainya jatuh ke `https://api.nevira.id/api`. Perhatikan akibatnya di staging:
+salah menulis nama variabelnya **tidak** menghasilkan galat — aplikasinya diam-diam menunjuk produksi.
 
 Gunakan **service account** khusus integrasi dengan hak baca secukupnya. Jangan memakai akun pribadi: kalau orangnya ganti password, integrasi mati, dan hak aksesnya jauh lebih luas daripada yang dibutuhkan.
 
