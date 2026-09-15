@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title','Dashboard')
+@section('title','Ringkasan')
 @section('content')
 <div class="eyebrow">{{ now()->translatedFormat('l, d F Y') }}</div>
 <h1>Selamat datang, {{ Str::before(auth()->user()->name,' ') }}</h1>

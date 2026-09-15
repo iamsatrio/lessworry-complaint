@@ -307,6 +307,26 @@ class User extends Authenticatable
     }
 
     /**
+     * Melihat Dashboard Operations — wewenang `dashboard.view`. (API-72)
+     *
+     * Daftar perannya di `config/complaint.php` → `dashboard_roles`, bukan
+     * ditulis di sini: keputusan tentang supervisor belum diambil satrio, dan
+     * peran yang kelak diberi wewenang ini tidak boleh menunggu satu commit.
+     *
+     * Dipakai dua tempat yang harus sepakat: middleware `can:dashboard.view`
+     * di rutenya (yang menegakkan) dan navigasi (yang menyembunyikan menunya).
+     * Menyembunyikan menu saja bukan wewenang — itu hanya membuat kebocoran
+     * lebih sulit ditemukan.
+     */
+    public function canViewDashboard(): bool
+    {
+        /** @var array<int,string> $peran */
+        $peran = (array) config('complaint.dashboard_roles', []);
+
+        return in_array($this->role, $peran, true);
+    }
+
+    /**
      * Penanda draft form intake di penyimpanan perangkat.
      *
      * Perangkat outlet dipakai bergantian, jadi draft harus terikat pengguna:

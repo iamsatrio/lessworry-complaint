@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -21,6 +23,16 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        /*
+         * Wewenang membuka Dashboard Operations. (API-72)
+         *
+         * Ability, bukan Policy: yang dijaga bukan sebuah model — tidak ada
+         * objek "dashboard" untuk ditanyakan. Rutenya memakai
+         * `can:dashboard.view` dan navigasinya memanggil method yang sama,
+         * jadi tidak ada dua tempat yang bisa berbeda pendapat.
+         */
+        Gate::define('dashboard.view', fn (User $user): bool => $user->canViewDashboard());
+
         // Antarmuka berbahasa Indonesia: tanggal dan waktu relatif ikut diterjemahkan.
         Carbon::setLocale('id');
 
