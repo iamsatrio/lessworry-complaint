@@ -42,7 +42,8 @@
       <td style="text-align:right;white-space:nowrap">
         <a href="{{ route('users.edit',$u) }}" class="small">Ubah</a>
         <form method="POST" action="{{ route('users.reset-password',$u) }}" style="display:inline;margin-left:10px"
-              onsubmit="return confirm('Setel ulang password {{ $u->name }}? Password lamanya langsung tidak berlaku.')">
+              data-konfirmasi="Setel ulang password {{ $u->name }}? Password lamanya langsung tidak berlaku."
+              onsubmit="return confirm(this.dataset.konfirmasi)">
           @csrf<button class="ghost" style="padding:6px 12px;min-height:34px;font-size:12.5px">Reset Password</button>
         </form>
       </td>

@@ -48,7 +48,8 @@
         <b>Ini melemahkan pengaman, jadi alasannya wajib dan tercatat.</b>
       </p>
       <form method="POST" action="{{ route('users.verify-email',$user) }}"
-            onsubmit="return confirm('Tandai {{ $user->name }} terverifikasi tanpa lewat email? Tindakan ini tercatat atas namamu.')">
+            data-konfirmasi="Tandai {{ $user->name }} terverifikasi tanpa lewat email? Tindakan ini tercatat atas namamu."
+            onsubmit="return confirm(this.dataset.konfirmasi)">
         @csrf
         <label for="reason">Alasan <span class="req">*</span></label>
         <textarea id="reason" name="reason" rows="3" required

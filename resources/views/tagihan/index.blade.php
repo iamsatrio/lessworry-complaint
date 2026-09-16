@@ -92,7 +92,8 @@
              persis kegagalan yang bikin halaman ini ada. --}}
         @if(isset($riwayat[$t->id]))
           <form method="POST" action="{{ route('tagihan.bayar.batal', [$t, $riwayat[$t->id]->periode]) }}"
-                onsubmit="return confirm('Batalkan penandaan {{ $t->nama }} untuk {{ PeriodeTagihan::periodeTerbaca($riwayat[$t->id]->periode) }}? Alarmnya akan menyala lagi.')">
+                data-konfirmasi="Batalkan penandaan {{ $t->nama }} untuk {{ PeriodeTagihan::periodeTerbaca($riwayat[$t->id]->periode) }}? Alarmnya akan menyala lagi."
+                onsubmit="return confirm(this.dataset.konfirmasi)">
             @csrf @method('DELETE')
             <button class="ghost">Batalkan penandaan terakhir</button>
           </form>
@@ -103,7 +104,8 @@
         {{-- Tidak ada tombol Hapus, dan itu keputusan: tagihan yang dihapus
              membawa riwayat pembayarannya ikut hilang. (API-73 kriteria 1) --}}
         <form method="POST" action="{{ route('tagihan.status', $t) }}"
-              onsubmit="return confirm('{{ $t->is_active ? 'Nonaktifkan' : 'Aktifkan lagi' }} {{ $t->nama }}?')">
+              data-konfirmasi="{{ $t->is_active ? 'Nonaktifkan' : 'Aktifkan lagi' }} {{ $t->nama }}?"
+              onsubmit="return confirm(this.dataset.konfirmasi)">
           @csrf
           <input type="hidden" name="aktif" value="{{ $t->is_active ? 0 : 1 }}">
           <button class="ghost">{{ $t->is_active ? 'Nonaktifkan' : 'Aktifkan lagi' }}</button>
