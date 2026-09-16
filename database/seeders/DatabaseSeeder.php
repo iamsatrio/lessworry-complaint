@@ -4,12 +4,21 @@ namespace Database\Seeders;
 
 use App\Models\Outlet;
 use App\Models\User;
+use App\Services\JejakPengguna;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
+    /** Satu-satunya penulis jejak audit akun — sama dengan yang dipakai controller. */
+    private JejakPengguna $jejak;
+
+    public function __construct(?JejakPengguna $jejak = null)
+    {
+        $this->jejak = $jejak ?? new JejakPengguna;
+    }
+
     /**
      * Outlet nyata dan akun tim. Tidak ada complaint contoh.
      *
@@ -158,9 +167,24 @@ class DatabaseSeeder extends Seeder
         ];
 
         $dicetak = [];
+        $peranDikembalikan = [];
 
         foreach ($daftar as [$nama, $email, $peran]) {
             $user = User::where('email', $email)->first();
+
+            // Peran di daftar ini adalah DEKLARASI, bukan nilai awal seperti
+            // `is_active` — keputusan API-57 nomor 1. Daftarnya cara satrio
+            // menetapkan siapa memegang apa, dan API-50 memakainya persis
+            // begitu untuk menaikkan satu orang jadi admin. Kalau perannya
+            // jadi nilai awal, menyunting daftar berhenti berpengaruh pada
+            // mesin yang akunnya sudah ada — dan itu mematikan satu-satunya
+            // mekanisme yang dipakai untuk menetapkannya.
+            //
+            // Yang diperbaiki di sini bukan aturannya melainkan diamnya.
+            // Sebelum ini, peran yang diturunkan sengaja lewat halaman
+            // Pengguna kembali naik pada deploy berikutnya tanpa satu jejak
+            // pun — dan yang kembali bisa berupa peran tertinggi di sistem.
+            $peranLama = $user?->role;
 
             // Kelima akun ini melihat seluruh outlet dan tidak terikat divisi
             // mana pun, jadi kedua kolom itu kosong — dan disetel kosong,
@@ -214,10 +238,17 @@ class DatabaseSeeder extends Seeder
                 $user->forceFill($atribut)->save();
             }
 
+            if ($peranLama !== null && $peranLama !== $peran) {
+                $this->jejak->peranDisetelUlangSeeder($user, $peranLama);
+                $peranDikembalikan[] = [$nama, $email, $peranLama, $peran];
+            }
+
             if ($perluPasswordBaru) {
                 $dicetak[] = [$nama, $email, $peran, $sementara];
             }
         }
+
+        $this->laporkanPeranDikembalikan($peranDikembalikan);
 
         $this->matikanDemoLama();
 
@@ -254,7 +285,49 @@ class DatabaseSeeder extends Seeder
      * Passwordnya diganti tanpa syarat, bukan hanya kalau masih bocor:
      * akun ini tidak boleh bisa dimasuki lagi apa pun password terakhirnya,
      * dan `is_active = false` saja bisa terbalik oleh satu perbaikan manual.
+     *
+     * ## Kenapa TIDAK ada pengecualian, termasuk untuk `kasir@` dkk.
+     *
+     * API-57 nomor 2 menawarkan melepas `kasir@`, `produksi@`, dan `kurir@`
+     * di `lessworry.id` begitu password bocornya tidak lagi berlaku, dengan
+     * alasan "yang berbahaya password bocornya, bukan alamatnya".
+     *
+     * Itu tidak bisa dibangun: `Hash::check` tidak membedakan dua keadaan
+     * yang justru harus dibedakan. Akun Kasir Tebet yang dibuat Admin dan
+     * akun bersama dari seeder sebelas-akun versi lama SAMA-SAMA berpassword
+     * bukan-bocor — yang kedua memakai password sendiri sejak awal, dan
+     * PeranAdminTest::test_tiga_akun_bersama_lama_ikut_dimatikan menuntutnya
+     * MATI. Melepas keduanya berarti meninggalkan akun bersama yang tidak
+     * dipegang siapa pun tetap hidup.
+     *
+     * Jadi ketiganya diblokir permanen, dan README yang harus berubah — ia
+     * yang menyuruh Admin memakai alamat itu. Lihat komentar API-57.
      */
+    /**
+     * Laporkan peran yang dikembalikan seeder, kalau ada.
+     *
+     * Dicetak sebagai peringatan, bukan baris biasa: yang dikembalikan bisa
+     * berupa peran tertinggi di sistem, dan orang yang menjalankan deploy
+     * berhak tahu itu terjadi tanpa harus membuka halaman Pengguna.
+     *
+     * @param  array<int,array{0:string,1:string,2:string,3:string}>  $baris
+     */
+    private function laporkanPeranDikembalikan(array $baris): void
+    {
+        if (! $baris) {
+            return;
+        }
+
+        $this->command->newLine();
+        $this->command->warn('Peran dikembalikan ke daftar akun seeder:');
+        $this->command->table(['Nama', 'Email', 'Peran sebelumnya', 'Peran sekarang'], $baris);
+        $this->command->line(
+            'Daftar akun di seeder adalah deklarasi: ia berlaku tiap kali seeder jalan. '
+            .'Supaya perubahan peran bertahan, ubah daftarnya di DatabaseSeeder — bukan '
+            .'lewat halaman Pengguna. Tiap baris di atas juga tercatat di jejak audit akunnya.'
+        );
+    }
+
     private function matikanDemoLama(): void
     {
         $dimatikan = [];
