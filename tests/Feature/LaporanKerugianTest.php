@@ -276,6 +276,103 @@ class LaporanKerugianTest extends TestCase
         );
     }
 
+    /**
+     * Kelompok yang belum punya satu pun nilai biaya tercatat TETAP tergambar.
+     *
+     * Saringan `biaya > 0` yang dulu menutup `batang()` membuang persis
+     * kelompok bercakupan nol. Karena nol dibaca sebagai TIDAK TERCATAT
+     * (NilaiBiaya::tercatat()), `biaya == 0` selalu berarti "belum ada yang
+     * mengisi" — bukan "kerugiannya nol". Outlet dengan tiga complaint yang
+     * kolom biayanya kosong hilang dari grafik, lalu terbaca sebagai outlet
+     * yang tidak punya masalah.
+     *
+     * Yang menahan kerusakannya selama ini cuma tata letak: tabelnya berdiri
+     * tepat di bawah grafiknya. Itu bertahan hanya selama keduanya satu
+     * layar. (Tinjauan PR #35, API-96)
+     */
+    public function test_kelompok_bercakupan_nol_tidak_hilang_dari_batang(): void
+    {
+        $cipete = Outlet::create(['name' => 'Cipete', 'code' => 'CPT']);
+        $lebak = Outlet::create(['name' => 'Lebak Bulus', 'code' => 'LBB']);
+
+        $this->complaint('2026-06-02', $cipete, ['compensation_amount' => 500_000, 'tindak_lanjut' => 'compensate']);
+
+        // Tiga complaint, tidak satu pun kolom biayanya diisi.
+        $this->complaint('2026-06-03', $lebak);
+        $this->complaint('2026-06-04', $lebak);
+        $this->complaint('2026-06-05', $lebak);
+
+        $rekap = $this->rekap();
+        $batang = collect($rekap->batang($rekap->perOutlet()))->keyBy('label');
+
+        $this->assertArrayHasKey(
+            'Lebak Bulus',
+            $batang->all(),
+            'outlet bercakupan nol tidak boleh lenyap dari grafik — hilang dari grafik terbaca sebagai tidak punya masalah'
+        );
+
+        $this->assertSame(0.0, $batang['Lebak Bulus']['nilai']);
+
+        // Keterangannya menyebut cakupannya, dan TIDAK menyebut Rp 0: nol di
+        // kolom itu berarti belum diisi, bukan kerugian nol.
+        $this->assertSame(
+            'belum ada nilai tercatat · 0 dari 3 kasus bernilai',
+            $batang['Lebak Bulus']['teks']
+        );
+        $this->assertStringNotContainsString('Rp 0', $batang['Lebak Bulus']['teks']);
+
+        $this->assertStringContainsString(
+            'dari 0 dari 3 complaint yang punya nilai biaya',
+            $batang['Lebak Bulus']['judul']
+        );
+        $this->assertStringNotContainsString('Rp 0', $batang['Lebak Bulus']['judul']);
+
+        // Kelompok yang punya nilai tidak berubah tulisannya.
+        $this->assertSame('Rp 500.000 · 1 dari 1 kasus bernilai', $batang['Cipete']['teks']);
+    }
+
+    /**
+     * Rentang yang tidak punya satu pun nilai biaya tercatat menggambar
+     * kelompoknya, bukan grafik kosong. Grafik kosong mengatakan "tidak ada
+     * kelompok"; yang benar "ada kelompoknya, nilainya yang belum dicatat".
+     */
+    public function test_semua_kelompok_bercakupan_nol_tetap_digambar(): void
+    {
+        $this->complaint('2026-06-02', null, ['category' => 'barang_rusak']);
+        $this->complaint('2026-06-03', null, ['category' => 'kurang_bersih']);
+
+        $rekap = $this->rekap();
+        $batang = $rekap->batang($rekap->perKategori());
+
+        $this->assertCount(2, $batang, 'dua kategori tanpa nilai tercatat tetap dua baris, bukan grafik kosong');
+        foreach ($batang as $b) {
+            $this->assertSame(0.0, $b['nilai']);
+            $this->assertStringContainsString('belum ada nilai tercatat', $b['teks']);
+        }
+    }
+
+    /**
+     * Grafik dan tabel di halaman Kerugian menyebut kelompok yang SAMA.
+     * Selama keduanya ada di satu halaman, selisih di antaranya adalah cara
+     * halaman ini berbohong tanpa terlihat berbohong.
+     */
+    public function test_batang_dan_tabel_menyebut_kelompok_yang_sama(): void
+    {
+        $cipete = Outlet::create(['name' => 'Cipete', 'code' => 'CPT']);
+        $lebak = Outlet::create(['name' => 'Lebak Bulus', 'code' => 'LBB']);
+
+        $this->complaint('2026-06-02', $cipete, ['compensation_amount' => 500_000, 'tindak_lanjut' => 'compensate']);
+        $this->complaint('2026-06-03', $lebak);
+
+        $rekap = $this->rekap();
+        $tabel = $rekap->perOutlet();
+
+        $this->assertSame(
+            array_column($tabel, 'label'),
+            array_column($rekap->batang($tabel), 'label'),
+        );
+    }
+
     public function test_complaint_tanpa_outlet_tidak_hilang_dari_pengelompokan(): void
     {
         $this->complaint('2026-06-02', null, ['compensation_amount' => 90_000, 'tindak_lanjut' => 'compensate']);

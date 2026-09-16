@@ -281,6 +281,19 @@ final class RekapKerugian
     /**
      * Batang biaya untuk salah satu pengelompokan di atas.
      *
+     * SEMUA kelompok digambar, termasuk yang belum punya satu pun nilai
+     * biaya tercatat. Saringan `biaya > 0` yang dulu ada di sini membuang
+     * persis kelompok bercakupan nol — dan karena `NilaiBiaya::tercatat()`
+     * membaca nol sebagai TIDAK TERCATAT, `biaya == 0` selalu berarti
+     * "belum ada yang mengisi", bukan "kerugiannya nol". Outlet dengan 40
+     * complaint yang kolom biayanya tidak pernah diisi hilang dari grafik,
+     * dan yang hilang dari grafik terbaca sebagai yang tidak punya masalah:
+     * kesimpulan salah yang seluruh halaman ini dibangun untuk mencegah.
+     *
+     * Batangnya nol panjang — komponennya menyisakan 2px supaya barisnya
+     * tetap terlihat ada — dan keterangannya menyebut cakupannya apa adanya,
+     * bukan "Rp 0". (Tinjauan PR #35, API-96)
+     *
      * @param  list<array{label:string,kasus:int,terisi:int,biaya:int,persen:int|null,rendah:bool}>  $baris
      * @return list<array{label:string,nilai:float,teks:string,judul:string}>
      */
@@ -296,11 +309,28 @@ final class RekapKerugian
             // bercakupan rendah akan selalu terlihat lebih murah per kasus
             // daripada kelompok bercakupan penuh — padahal yang rendah
             // pengisian kolomnya, bukan biayanya. (Tinjauan PR #35)
-            'teks' => NilaiBiaya::rupiah($b['biaya']).' · '
+            'teks' => self::nilaiTerbaca($b).' · '
                 .$b['terisi'].' dari '.$b['kasus'].' kasus bernilai',
-            'judul' => $b['label'].' · '.NilaiBiaya::rupiah($b['biaya']).' · '
+            'judul' => $b['label'].' · '.self::nilaiTerbaca($b).' · '
                 .NilaiBiaya::cakupanTeks($b['terisi'], $b['kasus']),
-        ], array_values(array_filter($baris, fn (array $b) => $b['biaya'] > 0)));
+        ], $baris);
+    }
+
+    /**
+     * Rupiah kelompok ini, atau kalimat yang jujur kalau tidak ada satu pun
+     * nilai tercatat di dalamnya.
+     *
+     * "Rp 0" pada kelompok bercakupan nol adalah angka yang tidak pernah ada
+     * orang yang mencatatnya — aturan yang sama dengan
+     * `NilaiBiaya::tercatat()`, ditulis di tempat pembacanya melihatnya.
+     *
+     * @param  array{terisi:int,biaya:int}  $baris
+     */
+    private static function nilaiTerbaca(array $baris): string
+    {
+        return $baris['terisi'] === 0
+            ? 'belum ada nilai tercatat'
+            : NilaiBiaya::rupiah($baris['biaya']);
     }
 
     /** Periode yang cakupannya rendah — dihitung, bukan dicari pembacanya. */
