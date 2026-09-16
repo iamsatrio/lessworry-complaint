@@ -14,11 +14,15 @@ use Illuminate\Support\Facades\Log;
  * Batasan keras (API-2): sistem complaint tidak pernah menulis, mengubah,
  * atau menghapus data di NEVIRA. Kelas ini sengaja hanya mengekspos GET.
  *
- * Autentikasi (diverifikasi dari koleksi Postman "less-worry BE" dan diuji
- * langsung ke api.nevira.id pada 2026-08-26):
+ * Autentikasi (diverifikasi dari koleksi Postman "less-worry BE", diuji
+ * langsung ke api.nevira.id pada 2026-08-26, diperiksa ulang 2026-09-15):
  *
- *   POST /api/login  {email, password}  ->  {access_token, user_data}
+ *   POST /api/admin/login  {email, password}  ->  {access_token, user_data}
  *   lalu setiap request membawa header:  Authorization: <token>
+ *
+ * Jalur login mengikuti platform akun — /admin/login untuk Back Office,
+ * /login untuk POS — dan disusun dari NEVIRA_LOGIN_ENDPOINT, bukan ditanam
+ * di sini.
  *
  * PENTING: token dikirim MENTAH, TANPA awalan "Bearer". Memakai
  * "Bearer <token>" membuat server membalas 500 Server Error — bukan 401 —
