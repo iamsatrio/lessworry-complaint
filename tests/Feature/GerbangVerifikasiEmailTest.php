@@ -8,6 +8,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\TestCase;
 
@@ -86,6 +87,51 @@ class GerbangVerifikasiEmailTest extends TestCase
             'Address budi@lessworry.id was rejected',
             PengirimVerifikasiEmail::tanpaKredensial('Address budi@lessworry.id was rejected')
         );
+    }
+
+    /**
+     * Password ber-`@` mentah tidak menyisakan ekornya. (API-97)
+     *
+     * Gagal sebelum perbaikannya: bagian password dibaca dengan `[^/@\s]*`,
+     * yang berhenti di `@` pertama, jadi `budi:pa@ss123@mail.example` hanya
+     * tersensor sampai `budi:pa` dan `ss123@mail.example` ikut masuk log.
+     * `%40` memang bentuk yang benar untuk `@` di dalam DSN, tapi `.env` yang
+     * salah tulis persis keadaan yang membuat fungsi ini terpanggil.
+     *
+     * Dua baris terakhir adalah pagarnya: perbaikan yang menyerakah sampai
+     * `@` terakhir di SELURUH baris akan menelan `budi@lessworry.id`, dan
+     * alamat penerima bukan kredensial — ia harus tetap terbaca di log.
+     */
+    #[DataProvider('penyensoranDsn')]
+    public function test_penyensoran_tidak_menyisakan_ekor_password(string $masukan, string $harapan): void
+    {
+        $this->assertSame($harapan, PengirimVerifikasiEmail::tanpaKredensial($masukan));
+    }
+
+    public static function penyensoranDsn(): array
+    {
+        return [
+            'password biasa' => [
+                'smtp://budi:rahasia123@mail.example:587',
+                'smtp://[kredensial-disensor]@mail.example:587',
+            ],
+            'password memuat @ mentah' => [
+                'smtp://budi:pa@ss123@mail.example:587',
+                'smtp://[kredensial-disensor]@mail.example:587',
+            ],
+            'password memuat beberapa @ mentah' => [
+                'smtp://budi:a@b@c@mail.example:587',
+                'smtp://[kredensial-disensor]@mail.example:587',
+            ],
+            'alamat penerima sesudah DSN tidak ikut tersensor' => [
+                'smtp://user:p%40ss@mail.example:587 recipient budi@lessworry.id',
+                'smtp://[kredensial-disensor]@mail.example:587 recipient budi@lessworry.id',
+            ],
+            'DSN tanpa kredensial tidak berubah' => [
+                'smtp://mail.example:587',
+                'smtp://mail.example:587',
+            ],
+        ];
     }
 
     /* ---------- 2. Ganti huruf besar-kecil alamat ---------- */
