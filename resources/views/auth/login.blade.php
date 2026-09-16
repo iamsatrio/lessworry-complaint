@@ -1,5 +1,9 @@
 @extends('layouts.app')
 @section('title','Masuk')
+{{-- Galat login dilaporkan atas nama `email` — password yang salah pun
+     pulang ke kolom email, karena sistem tidak memberi tahu mana dari
+     keduanya yang salah. Jadi petanya cukup satu baris. (API-88 Bagian B) --}}
+@section('galat-anchor'){!! json_encode(['email' => 'email']) !!}@endsection
 @section('content')
 <div style="max-width:420px;margin:9vh auto 0">
   <div style="text-align:center;margin-bottom:26px">
@@ -12,9 +16,13 @@
     <form method="POST" action="{{ route('login') }}">
       @csrf
       <label for="email">Email</label>
-      <input id="email" type="email" name="email" value="{{ old('email') }}" required autofocus autocomplete="username">
+      <input id="email" type="email" name="email" value="{{ old('email') }}" required autofocus autocomplete="username"
+        @error('email') aria-invalid="true" aria-describedby="email-error" @enderror>
+      @error('email')<p class="err-field" id="email-error">{{ $message }}</p>@enderror
       <label for="password">Password</label>
-      <input id="password" type="password" name="password" required autocomplete="current-password">
+      <input id="password" type="password" name="password" required autocomplete="current-password"
+        @error('password') aria-invalid="true" aria-describedby="password-error" @enderror>
+      @error('password')<p class="err-field" id="password-error">{{ $message }}</p>@enderror
       <div style="margin-top:22px"><button style="width:100%">Masuk</button></div>
     </form>
   </div>

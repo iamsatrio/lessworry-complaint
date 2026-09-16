@@ -1,5 +1,17 @@
 @extends('layouts.app')
 @section('title','Ubah Pengguna')
+{{-- Halaman ini memuat DUA form: ubah data akun (users/_form) dan tandai
+     terverifikasi. Keduanya memulangkan galatnya ke halaman yang sama, jadi
+     petanya memuat kolom dari keduanya. (API-88 Bagian B) --}}
+@section('galat-anchor'){!! json_encode([
+  'name'      => 'name',
+  'email'     => 'email',
+  'role'      => 'role',
+  'outlet_id' => 'outlet_id',
+  'division'  => 'division',
+  'is_active' => 'is_active',
+  'reason'    => 'reason',
+]) !!}@endsection
 @section('content')
 <div style="max-width:560px;margin:0 auto">
   <div class="eyebrow">Pengelolaan tim</div>
@@ -11,10 +23,12 @@
       @include('users._form')
 
       <label for="is_active">Status akun</label>
-      <select id="is_active" name="is_active">
+      <select id="is_active" name="is_active"
+        @error('is_active') aria-invalid="true" aria-describedby="is_active-error" @enderror>
         <option value="1" @selected(old('is_active', $user->is_active))>Aktif</option>
         <option value="0" @selected(!old('is_active', $user->is_active))>Nonaktif</option>
       </select>
+      @error('is_active')<p class="err-field" id="is_active-error">{{ $message }}</p>@enderror
       <p class="hint">
         Akun tidak pernah dihapus, hanya dinonaktifkan — complaint menyimpan siapa yang mencatat dan menutupnya,
         dan jejak itu harus tetap utuh. Akun nonaktif langsung kehilangan akses, termasuk yang sesinya sedang berjalan.
@@ -53,7 +67,9 @@
         @csrf
         <label for="reason">Alasan <span class="req">*</span></label>
         <textarea id="reason" name="reason" rows="3" required
-                  placeholder="Contoh: akun bersama kasir outlet, tidak punya kotak surat sendiri.">{{ old('reason') }}</textarea>
+                  placeholder="Contoh: akun bersama kasir outlet, tidak punya kotak surat sendiri."
+                  @error('reason') aria-invalid="true" aria-describedby="reason-error" @enderror>{{ old('reason') }}</textarea>
+        @error('reason')<p class="err-field" id="reason-error">{{ $message }}</p>@enderror
         <div style="margin-top:16px"><button>Tandai Terverifikasi</button></div>
       </form>
     @endif
