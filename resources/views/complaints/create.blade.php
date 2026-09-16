@@ -16,6 +16,9 @@
   'channel'                   => 'ch',
   'reporter_name'             => 'rn',
   'reporter_phone'            => 'rp',
+  'resolution'                => 'res',
+  'tindak_lanjut'             => 'tl',
+  'compensation_amount'       => 'komp',
 ]) !!}@endsection
 @section('content')
 <div class="eyebrow">Complaint baru</div>
@@ -309,22 +312,28 @@
 
   <div id="ditempat-blok" @style(['display:none' => ! $diTempat])>
     <label for="res">Apa yang kamu lakukan <span class="req">*</span></label>
-    <textarea id="res" name="resolution" placeholder="Mis. Dicuci ulang saat itu juga, pelanggan menunggu dan setuju.">{{ $nilai('resolution') }}</textarea>
+    <textarea id="res" name="resolution" placeholder="Mis. Dicuci ulang saat itu juga, pelanggan menunggu dan setuju."
+      @error('resolution') aria-invalid="true" aria-describedby="res-error" @enderror>{{ $nilai('resolution') }}</textarea>
+    @error('resolution')<p class="err-field" id="res-error">{{ $message }}</p>@enderror
 
     <div class="row">
       <div><label for="tl">Tindak lanjut <span class="req">*</span></label>
-        <select id="tl" name="tindak_lanjut">
+        <select id="tl" name="tindak_lanjut"
+          @error('tindak_lanjut') aria-invalid="true" aria-describedby="tl-error" @enderror>
           <option value="" disabled @selected(blank($nilai('tindak_lanjut')))>— pilih tindak lanjut —</option>
           @foreach(config('complaint.tindak_lanjut') as $k=>$v)
             <option value="{{ $k }}" @selected($nilai('tindak_lanjut')===$k)>{{ $v }}</option>
           @endforeach
         </select>
+        @error('tindak_lanjut')<p class="err-field" id="tl-error">{{ $message }}</p>@enderror
       </div>
       {{-- Petunjuknya DI LUAR baris: .row meratakan bawah, jadi kolom yang
            punya hint di bawahnya jadi lebih tinggi dan kolom sebelahnya
            terdorong turun. --}}
       <div><label for="komp">Kompensasi (Rp)</label>
-        <input id="komp" name="compensation_amount" inputmode="numeric" value="{{ $nilai('compensation_amount') }}" placeholder="Kosongkan kalau tidak ada">
+        <input id="komp" name="compensation_amount" inputmode="numeric" value="{{ $nilai('compensation_amount') }}" placeholder="Kosongkan kalau tidak ada"
+          @error('compensation_amount') aria-invalid="true" aria-describedby="komp-error" @enderror>
+        @error('compensation_amount')<p class="err-field" id="komp-error">{{ $message }}</p>@enderror
       </div>
     </div>
 

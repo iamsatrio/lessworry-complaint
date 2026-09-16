@@ -218,4 +218,97 @@ class GalatKolomTest extends TestCase
         $this->assertStringContainsString('scroll-padding-bottom', $blok[0],
             'scroll-padding-bottom dipasang di luar media query .fab.');
     }
+
+    /* ---------- 4. Blok tangani-di-tempat, tiga kolom yang terlewat urutan merge ---------- */
+
+    /**
+     * PR #36 memasang penanda galat sebelum PR #32 menambahkan blok
+     * tangani-di-tempat. Sesudah keduanya di satu pohon, `resolution`,
+     * `tindak_lanjut`, dan `compensation_amount` tidak ikut terjangkau.
+     *
+     * Kolomnya duduk di dalam #ditempat-blok, jauh di bawah ringkasan — persis
+     * pola yang API-86 ada untuk menutupnya. (API-107)
+     */
+    public function test_kolom_tangani_di_tempat_yang_kosong_dilaporkan_di_kolomnya(): void
+    {
+        $kasir = $this->userAs('kasir', Outlet::create(['name' => 'Outlet Uji', 'is_active' => true]));
+
+        $html = $this->actingAs($kasir)
+            ->from('/complaints/create')
+            ->followingRedirects()
+            ->post('/complaints', [
+                'nevira_transaction_number' => 'INV/1/2/3',
+                'tangani_di_tempat' => '1',
+                'resolution' => '',
+                'tindak_lanjut' => '',
+            ])->assertOk()->getContent();
+
+        foreach (['res', 'tl'] as $idKolom) {
+            $this->assertPesanSama($html, $idKolom);
+        }
+
+        $this->assertMatchesRegularExpression(
+            '/<textarea id="res"[^>]*aria-invalid="true"[^>]*aria-describedby="res-error"/s',
+            $html,
+            'Kolom tindakan penyelesaian tidak menunjuk pesan galatnya.'
+        );
+        $this->assertMatchesRegularExpression(
+            '/<select id="tl"[^>]*aria-invalid="true"[^>]*aria-describedby="tl-error"/s',
+            $html,
+            'Select tindak lanjut tidak menunjuk pesan galatnya.'
+        );
+    }
+
+    /**
+     * Pesan soal uang dan batas wewenang — yang paling mahal untuk ditebak
+     * kolomnya. Kasir mengirim kompensasi di atas batasnya lewat centang
+     * tangani-di-tempat. (API-107)
+     */
+    public function test_kompensasi_di_atas_wewenang_dilaporkan_di_kolomnya(): void
+    {
+        $kasir = $this->userAs('kasir', Outlet::create(['name' => 'Outlet Uji', 'is_active' => true]));
+
+        $html = $this->actingAs($kasir)
+            ->from('/complaints/create')
+            ->followingRedirects()
+            ->post('/complaints', [
+                'nevira_transaction_number' => 'INV/1/2/3',
+                'tangani_di_tempat' => '1',
+                'resolution' => 'Dicuci ulang saat itu juga.',
+                'tindak_lanjut' => array_key_first(config('complaint.tindak_lanjut')),
+                'compensation_amount' => '200000000',
+            ])->assertOk()->getContent();
+
+        $pesan = $this->assertPesanSama($html, 'komp');
+        $this->assertStringContainsString('melebihi batas wewenang', $pesan);
+
+        $this->assertMatchesRegularExpression(
+            '/<input id="komp"[^>]*aria-invalid="true"[^>]*aria-describedby="komp-error"/s',
+            $html,
+            'Kolom kompensasi tidak menunjuk pesan galatnya.'
+        );
+    }
+
+    /** Butir ringkasannya harus jadi tautan, bukan teks polos. (API-107) */
+    public function test_butir_ringkasan_tangani_di_tempat_menautkan_ke_kolomnya(): void
+    {
+        $kasir = $this->userAs('kasir', Outlet::create(['name' => 'Outlet Uji', 'is_active' => true]));
+
+        $html = $this->actingAs($kasir)
+            ->from('/complaints/create')
+            ->followingRedirects()
+            ->post('/complaints', [
+                'nevira_transaction_number' => 'INV/1/2/3',
+                'tangani_di_tempat' => '1',
+                'compensation_amount' => '200000000',
+            ])->assertOk()->getContent();
+
+        preg_match('/<div class="err" id="galat-ringkas".*?<\/ul>/s', $html, $ringkas);
+        $this->assertNotEmpty($ringkas, 'Ringkasan galat hilang.');
+
+        foreach (['res', 'tl', 'komp'] as $idKolom) {
+            $this->assertStringContainsString('href="#'.$idKolom.'"', $ringkas[0],
+                "Butir ringkasan untuk #$idKolom tidak menautkan ke kolomnya.");
+        }
+    }
 }
