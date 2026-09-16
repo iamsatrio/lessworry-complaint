@@ -24,6 +24,23 @@ class EnsureEmailVerified
     {
         $user = Auth::user();
 
+        // `routeIs(...)` di sini TIDAK pernah bernilai penting hari ini:
+        // rute `verification.*` dan `logout` duduk di grup yang tidak memakai
+        // alias `email.verified`, jadi middleware ini tidak pernah berjalan di
+        // atasnya. Dipertahankan dengan sengaja, bukan karena terlewat.
+        // (Keputusan API-37 nomor 4)
+        //
+        // Yang dijaganya satu kegagalan tertentu: begitu ada yang memasang
+        // `email.verified` pada grup yang memuat rute verifikasi — sengaja,
+        // atau karena menyalin daftar middleware grup di bawahnya — tanpa
+        // syarat ini halaman verifikasi memantul ke dirinya sendiri, dan
+        // SETIAP akun yang belum terverifikasi terkunci tanpa jalan keluar
+        // selain shell. Biaya syarat ini satu pemanggilan; biaya salahnya
+        // seluruh tim tidak bisa masuk.
+        //
+        // Supaya ia tidak diam-diam jadi hidup dan berubah arti,
+        // GerbangVerifikasiEmailTest menuntut rute verifikasi TIDAK memakai
+        // alias ini. Kalau kelak itu berubah, test itu yang bicara lebih dulu.
         if ($user && ! $user->hasVerifiedEmail() && ! $request->routeIs('verification.*', 'logout')) {
             // Pesan yang sedang dalam perjalanan ikut dibawa. Login menaruh
             // kabar "surat gagal dikirim" di flash session lalu mengarahkan

@@ -29,6 +29,28 @@ class UserController extends Controller
         abort_unless($request->user()->canManageUsers(), 403);
     }
 
+    /**
+     * Alamat email dirapikan pada permintaannya sendiri, sebelum validasi.
+     *
+     * Kolom yang TIDAK dikirim tetap tidak dikirim — update() memakai
+     * `sometimes`, dan menambahkan kunci kosong di sini akan mengubah
+     * "jangan sentuh alamatnya" menjadi "kosongkan alamatnya".
+     */
+    private function normalkanEmail(Request $request): void
+    {
+        if (! $request->has('email')) {
+            return;
+        }
+
+        $email = $request->input('email');
+
+        if (! is_string($email)) {
+            return;
+        }
+
+        $request->merge(['email' => mb_strtolower(trim($email))]);
+    }
+
     public function index(Request $request)
     {
         $this->authorizeAdmin($request);
@@ -48,6 +70,17 @@ class UserController extends Controller
     public function store(Request $request)
     {
         $this->authorizeAdmin($request);
+
+        // Dinormalkan SEBELUM validate(), bukan sesudah. (API-37 #2)
+        //
+        // Alamat disimpan huruf kecil, dan `unique` peka huruf besar-kecil di
+        // SQLite. Kalau normalisasinya menyusul di belakang, `unique` memeriksa
+        // `BUDI@...` — yang memang belum ada — lalu baris yang disimpan
+        // `budi@...` menabrak indeks unik basis data. Yang sampai ke admin
+        // halaman galat 500, tanpa satu kata pun tentang alamat yang sudah
+        // dipakai. Aturan yang memeriksa harus melihat nilai yang benar-benar
+        // akan disimpan.
+        $this->normalkanEmail($request);
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
@@ -92,6 +125,13 @@ class UserController extends Controller
     {
         $this->authorizeAdmin($request);
 
+        // Sama seperti store(): normalisasi mendahului validasi, supaya
+        // `Rule::unique` dan `ignore()` sama-sama memandang nilai yang
+        // benar-benar akan disimpan. Tanpa ini, mengubah alamat jadi milik
+        // orang lain dengan huruf berbeda lolos validasi lalu 500 di basis
+        // data. (Tinjauan PR #34)
+        $this->normalkanEmail($request);
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             // Alamat email bisa diubah admin. Tanpa ini, satu salah ketik saat
@@ -109,9 +149,18 @@ class UserController extends Controller
             'is_active' => ['nullable', 'boolean'],
         ]);
 
+        // Nilai yang divalidasi sudah normal, dan nilai yang sama itu yang
+        // dibandingkan dan yang disimpan. (API-37 nomor 2)
+        //
+        // Sebelumnya perbandingannya memakai bentuk yang dinormalkan sementara
+        // fill() menulis nilai MENTAH. Admin yang mengubah `Satrio@` jadi
+        // `satrio@` menghasilkan $emailBerubah === false — benar, verifikasinya
+        // memang tidak perlu direset — tapi kolomnya tetap berubah, jadi tidak
+        // ada baris jejak audit, dan `sha1($user->email)` bergeser sehingga
+        // setiap tautan verifikasi yang sudah beredar mati tanpa ada yang tahu
+        // kenapa.
         $emailLama = $user->email;
-        $emailBerubah = isset($data['email'])
-            && mb_strtolower(trim($data['email'])) !== mb_strtolower($emailLama);
+        $emailBerubah = isset($data['email']) && $data['email'] !== mb_strtolower($emailLama);
 
         // Kolom yang tidak dikirim berarti "jangan diubah", bukan "matikan".
         // $request->boolean() memperlakukan kolom absen sebagai false, jadi
@@ -226,6 +275,14 @@ class UserController extends Controller
     {
         $this->authorizeAdmin($request);
 
+        // Penjagaan lebih dulu, validasi sesudahnya. (API-37 nomor 5)
+        // Urutan sebaliknya membalas "Tulis alasannya" kepada admin yang
+        // menandai akun yang sudah terverifikasi — menyuruh mengerjakan
+        // sesuatu yang tidak ada gunanya dikerjakan, lalu menolaknya juga.
+        if ($user->hasVerifiedEmail()) {
+            return back()->with('warning', 'Akun '.$user->name.' sudah terverifikasi.');
+        }
+
         $data = $request->validate([
             'reason' => ['required', 'string', 'min:5', 'max:500'],
         ], [
@@ -233,10 +290,6 @@ class UserController extends Controller
         ], [
             'reason' => 'alasan',
         ]);
-
-        if ($user->hasVerifiedEmail()) {
-            return back()->with('warning', 'Akun '.$user->name.' sudah terverifikasi.');
-        }
 
         $user->markEmailAsVerified();
         $jejak->emailDiverifikasiManual($user, $request->user(), $data['reason']);
