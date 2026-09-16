@@ -38,7 +38,7 @@ final class EksporCsv
                 $sel = [];
 
                 foreach ($baris as $i => $nilai) {
-                    $sel[] = $this->sel($nilai, $tipe[$i] ?? RekapEkspor::TEKS);
+                    $sel[] = $this->sel($nilai, $tipe[$i] ?? IsiRekap::TEKS);
                 }
 
                 fputcsv($out, $sel);
@@ -62,10 +62,10 @@ final class EksporCsv
     {
         return match ($tipe) {
             // Tanggal ditulis 'Y-m-d H:i', persis seperti sebelumnya.
-            RekapEkspor::TANGGAL => $nilai instanceof Carbon
+            IsiRekap::TANGGAL => $nilai instanceof Carbon
                 ? $nilai->format('Y-m-d H:i')
                 : PerisaiRumus::untukCsv($nilai),
-            RekapEkspor::ANGKA, RekapEkspor::RUPIAH => $nilai,
+            IsiRekap::ANGKA, IsiRekap::RUPIAH => $nilai,
             default => PerisaiRumus::untukCsv($nilai),
         };
     }
