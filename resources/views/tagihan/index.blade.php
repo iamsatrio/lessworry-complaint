@@ -1,5 +1,7 @@
 @extends('layouts.app')
 @section('title','Tagihan')
+{{-- Ringkasan galat menautkan ke kolom ambang pengingat di kartu bawah. --}}
+@section('galat-anchor'){!! json_encode(['ambang_hari' => 'ambang_hari']) !!}@endsection
 @section('content')
 @php use App\Services\PeriodeTagihan; @endphp
 
@@ -128,7 +130,9 @@
       <div>
         <label for="ambang_hari">Hari</label>
         <input id="ambang_hari" name="ambang_hari" type="number" min="1" max="{{ $ambangMaks }}"
-               inputmode="numeric" value="{{ old('ambang_hari', $ambang) }}" style="max-width:120px" required>
+               inputmode="numeric" value="{{ old('ambang_hari', $ambang) }}" style="max-width:120px" required
+               @error('ambang_hari') aria-invalid="true" aria-describedby="ambang_hari-error" @enderror>
+        @error('ambang_hari')<p class="err-field" id="ambang_hari-error">{{ $message }}</p>@enderror
       </div>
       <button class="ghost">Simpan</button>
     </form>

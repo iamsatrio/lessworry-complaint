@@ -128,6 +128,45 @@ class GalatKolomSisaTest extends TestCase
         $this->assertKontrolMenunjukPesan($html, 'reason');
     }
 
+    /* ---------- Tagihan bulanan ---------- */
+
+    /**
+     * Dua view tagihan masuk `main` lewat PR #43, sesudah cabang ini ditulis.
+     * Keduanya punya kolom wajib dan tidak punya satu pun `@error` — ketahuan
+     * oleh pengukuran cakupan di bawah saat cabang ini direbase.
+     */
+    public function test_galat_tagihan_sampai_ke_kolomnya(): void
+    {
+        $admin = $this->userAs('admin');
+
+        $html = $this->actingAs($admin)
+            ->from('/tagihan/baru')->followingRedirects()
+            ->post('/tagihan', [
+                'nama' => '',
+                'pengulangan' => 'tahunan',
+                'jatuh_tempo_hari' => '99',
+                'jatuh_tempo_bulan' => '',
+            ])->assertOk()->getContent();
+
+        foreach (['nama', 'jatuh_tempo_hari', 'jatuh_tempo_bulan'] as $idKolom) {
+            $this->assertPesanSama($html, $idKolom);
+            $this->assertKontrolMenunjukPesan($html, $idKolom);
+        }
+    }
+
+    public function test_galat_ambang_pengingat_sampai_ke_kolomnya(): void
+    {
+        $admin = $this->userAs('admin');
+
+        $html = $this->actingAs($admin)
+            ->from('/tagihan')->followingRedirects()
+            ->post('/tagihan/ambang', ['ambang_hari' => '0'])
+            ->assertOk()->getContent();
+
+        $this->assertPesanSama($html, 'ambang_hari');
+        $this->assertKontrolMenunjukPesan($html, 'ambang_hari');
+    }
+
     /* ---------- Pengukuran cakupan ---------- */
 
     /**
