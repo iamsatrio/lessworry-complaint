@@ -457,6 +457,14 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
              berbeda, pada hari yang berbeda, dari pertanyaan "berapa
              complaint minggu ini". (API-43) --}}
         <a href="{{ route('reports.kerugian') }}" class="{{ request()->routeIs('reports.kerugian*') ? 'active' : '' }}">Kerugian</a>
+        {{-- Tagihan berdiri di belakang gerbang yang sama dengan Dashboard
+             Operations: yang membaca papan paginya juga yang membaca daftar
+             tagihannya. Mengubahnya butuh wewenang kedua yang lebih sempit,
+             dan itu dijawab tombol di dalam halaman — bukan menu yang hilang.
+             (API-73) --}}
+        @if(auth()->user()->canViewDashboard())
+          <a href="{{ route('tagihan.index') }}" class="{{ request()->routeIs('tagihan.*') ? 'active' : '' }}">Tagihan</a>
+        @endif
         @if(auth()->user()->canManageUsers())
           <a href="{{ route('users.index') }}" class="{{ request()->routeIs('users.*') ? 'active' : '' }}">Pengguna</a>
         @endif

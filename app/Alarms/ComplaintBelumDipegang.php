@@ -66,6 +66,11 @@ final class ComplaintBelumDipegang implements Alarm
             ringkasan: $jumlah.' complaint terbuka lebih dari '.$jam.' jam tanpa pemilik. Terlama menganggur '.$terlama.'.',
             daftar: $daftar,
             perOutlet: RingkasanComplaint::perOutlet($query),
+            kolom: Nyala::KOLOM_COMPLAINT,
+            // "Dan N lagi" mengantar ke papan kerja. Disebut di sini, bukan
+            // di kartunya: kartu yang sama juga merender alarm yang barisnya
+            // bukan complaint. (API-73)
+            tautanSemua: route('complaints.index', ['status' => 'open']),
         );
     }
 

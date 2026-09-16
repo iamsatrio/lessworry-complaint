@@ -5,7 +5,15 @@ return [
     | Integrasi NEVIRA POS — HANYA BACA.
     | Sistem ini tidak pernah menulis, mengubah, atau menghapus data di NEVIRA.
     */
-    'base_url' => env('NEVIRA_API_BASE', 'https://api.nevira.id/api'),
+    /*
+    | Dua nama diterima, dan urutannya disengaja. `NEVIRA_BASE_URL` adalah nama
+    | yang dipasang di runtime; `NEVIRA_API_BASE` nama lama yang ditulis
+    | `.env.example` sampai API-65. Menerima satu saja berarti salah satu sisi
+    | putus tanpa bersuara: nilainya jatuh ke bawaan di bawah, yang menunjuk
+    | PRODUKSI — sebuah staging yang salah nama variabelnya tidak akan gagal,
+    | ia akan membaca data sungguhan.
+    */
+    'base_url' => env('NEVIRA_BASE_URL', env('NEVIRA_API_BASE', 'https://api.nevira.id/api')),
     'email' => env('NEVIRA_EMAIL'),
     'password' => env('NEVIRA_PASSWORD'),
 
