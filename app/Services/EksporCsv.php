@@ -6,7 +6,7 @@ use Illuminate\Support\Carbon;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Rekap laporan sebagai CSV.
+ * Rekap sebagai CSV — apa pun isinya. (IsiRekap)
  *
  * TETAP ADA dan sengaja TIDAK BERUBAH satu byte pun oleh API-62 nomor 4:
  * CSV yang dipakai alat lain tidak boleh berubah bentuk karena ada format
@@ -19,7 +19,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 final class EksporCsv
 {
-    public function __construct(private readonly RekapEkspor $rekap) {}
+    public function __construct(private readonly IsiRekap $rekap) {}
 
     public function unduh(): StreamedResponse
     {

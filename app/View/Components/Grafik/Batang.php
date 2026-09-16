@@ -27,6 +27,22 @@ class Batang extends Component
      */
     private const KIRI = 150.0;
 
+    /**
+     * Batas atas ruang label, dalam satuan viewBox. Di atas ini batangnya yang
+     * tersisa terlalu pendek untuk dibandingkan, dan label yang masih lebih
+     * panjang dipotong peramban — itu pilihan yang lebih baik daripada grafik
+     * tanpa batang.
+     */
+    private const KIRI_MAKS = 260.0;
+
+    /**
+     * Lebar rata-rata satu huruf label pada font-size 14px, dalam satuan
+     * viewBox. Taksiran, bukan pengukuran — SVG di server tidak bisa mengukur
+     * teks — dan sengaja dilebihkan: label yang kelebaran menyisakan ruang
+     * kosong, label yang kekurangan terpotong. (API-43)
+     */
+    private const LEBAR_HURUF = 7.4;
+
     private const KANAN = 250.0;
 
     private const TINGGI_BARIS = 34.0;
@@ -63,7 +79,8 @@ class Batang extends Component
     public function bidang(): array
     {
         $maks = max(array_map(fn (array $b) => (float) $b['nilai'], $this->baris ?: [['nilai' => 0]]));
-        $ruang = self::W - self::KIRI - self::KANAN;
+        $kiri = $this->kiri();
+        $ruang = self::W - $kiri - self::KANAN;
         $bidang = [];
 
         foreach ($this->baris as $i => $b) {
@@ -76,7 +93,7 @@ class Batang extends Component
                 'y' => $y,
                 'lebar' => round($lebar, 2),
                 'labelY' => $y + 18,
-                'teksX' => round(self::KIRI + $lebar + 10, 2),
+                'teksX' => round($kiri + $lebar + 10, 2),
                 'label' => $b['label'],
                 'teks' => $b['teks'],
                 'judul' => $b['judul'],
@@ -86,13 +103,27 @@ class Batang extends Component
         return $bidang;
     }
 
+    /**
+     * Ruang label di kiri, MELEBAR kalau labelnya menuntut.
+     *
+     * Nama outlet ("Less Worry 3.1 - Duren Tiga") dua kali lebih panjang dari
+     * nama kategori ("Barang Rusak"), dan ruang tetap 150 memotongnya jadi
+     * "Worry 3.1 - Duren Tiga" — terpotong di DEPAN, karena labelnya rata
+     * kanan. Grafik yang memotong nama outlet di depan membuat dua outlet
+     * terlihat sama. (API-43)
+     */
     public function kiri(): float
     {
-        return self::KIRI;
+        $terpanjang = max(array_map(
+            fn (array $b) => mb_strlen($b['label']),
+            $this->baris ?: [['label' => '']],
+        ));
+
+        return min(self::KIRI_MAKS, max(self::KIRI, $terpanjang * self::LEBAR_HURUF + 12));
     }
 
     public function labelX(): float
     {
-        return self::KIRI - 10;
+        return $this->kiri() - 10;
     }
 }
