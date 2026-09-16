@@ -1,5 +1,15 @@
 @extends('layouts.app')
 @section('title','Tambah Tagihan')
+{{-- Butir ringkasan galat di layout menautkan ke kolomnya lewat peta ini.
+     Nama kolom datang dari TagihanRequest; id-nya dari markup di _form. --}}
+@section('galat-anchor'){!! json_encode([
+  'nama'              => 'nama',
+  'jumlah'            => 'jumlah',
+  'pengulangan'       => 'pengulangan',
+  'jatuh_tempo_bulan' => 'jatuh_tempo_bulan',
+  'jatuh_tempo_hari'  => 'jatuh_tempo_hari',
+  'outlet_id'         => 'outlet_id',
+]) !!}@endsection
 @section('content')
 <div style="max-width:560px;margin:0 auto">
   <div class="eyebrow">Tagihan bulanan</div>
