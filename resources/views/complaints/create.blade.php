@@ -211,11 +211,12 @@
        Keluar dari .row di atas karena tingginya tiga baris: di dalam flex
        row yang align-items-nya flex-end, ia menyisakan rongga di atas tiga
        kolom lainnya. --}}
-  <fieldset class="pilihan" @error('bobot') aria-describedby="bob-error" @enderror>
+  <fieldset class="pilihan" @error('bobot') aria-invalid="true" aria-describedby="bob-error" @enderror>
     <legend>Bobot <span class="req">*</span></legend>
     @foreach(config('complaint.bobot') as $k=>$v)
       <label class="pick">
         <input type="radio" name="bobot" value="{{ $k }}" required
+               @error('bobot') aria-invalid="true" @enderror
                @if($loop->first) id="bob" @endif
                @checked($nilai('bobot')===$k)>
         {{ $v }}
@@ -255,11 +256,12 @@
        radio, "belum memilih" adalah keadaan yang memang tidak ada
        centangnya — tidak ada opsi pertama yang terpilih diam-diam. `required`
        di tiap radio menuntut satu di antaranya dipilih. --}}
-  <fieldset class="pilihan" @error('channel') aria-describedby="ch-error" @enderror>
+  <fieldset class="pilihan" @error('channel') aria-invalid="true" aria-describedby="ch-error" @enderror>
     <legend>Masuk lewat <span class="req">*</span></legend>
     @foreach(config('complaint.channels') as $k=>$v)
       <label class="pick">
         <input type="radio" name="channel" value="{{ $k }}" required
+               @error('channel') aria-invalid="true" @enderror
                @if($loop->first) id="ch" @endif
                @checked($kanal===$k)>
         {{ $v }}

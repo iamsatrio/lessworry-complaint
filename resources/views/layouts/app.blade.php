@@ -156,7 +156,7 @@ fieldset.pilihan>legend{display:block;width:100%;padding:0;
   text-transform:uppercase;color:var(--muted);margin:18px 0 7px}
 fieldset.pilihan .pick{margin-top:0}
 /* Kolom yang salah ditandai di seluruh grupnya, bukan di satu barisnya. */
-fieldset.pilihan[aria-describedby]>legend{color:var(--danger)}
+fieldset.pilihan[aria-invalid]>legend{color:var(--danger)}
 
 /* Label yang membungkus kotak centang adalah baris pilihan, bukan judul
    kolom — jadi tidak mewarisi huruf kapital dan warna redup dari label. */

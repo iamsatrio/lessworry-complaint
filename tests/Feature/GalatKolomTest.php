@@ -311,4 +311,93 @@ class GalatKolomTest extends TestCase
                 "Butir ringkasan untuk #$idKolom tidak menautkan ke kolomnya.");
         }
     }
+    /* ---------- 5. Grup radio: Bobot dan Kanal sesudah keduanya lepas dari select ---------- */
+
+    /**
+     * Sampai PR #49 keduanya `<select>`, dan keduanya membawa `aria-invalid`
+     * saat galat. Sesudah jadi grup radio penanda itu tidak ikut pindah:
+     * deskripsi galatnya diumumkan, keadaan invalid-nya tidak. Dua kolom ini
+     * tidak pernah masuk daftar yang dijaga di atas — itu sebabnya lolos.
+     * (API-119, tinjauan PR #49)
+     */
+    public function test_grup_radio_yang_salah_ditandai_invalid_sampai_ke_tiap_radionya(): void
+    {
+        $kasir = $this->userAs('kasir', Outlet::create(['name' => 'Outlet Uji', 'is_active' => true]));
+
+        $html = $this->actingAs($kasir)
+            ->from('/complaints/create')
+            ->followingRedirects()
+            ->post('/complaints', ['nevira_transaction_number' => 'INV/1/2/3'])
+            ->assertOk()->getContent();
+
+        $grup = [
+            ['bobot', 'bob', 'complaint.bobot'],
+            ['channel', 'ch', 'complaint.channels'],
+        ];
+
+        foreach ($grup as [$nama, $idKolom, $konfig]) {
+            $this->assertPesanSama($html, $idKolom);
+
+            // Grupnya yang salah, jadi grupnya yang diumumkan invalid.
+            $this->assertMatchesRegularExpression(
+                '/<fieldset class="pilihan"[^>]*aria-invalid="true"[^>]*aria-describedby="'.$idKolom.'-error"/',
+                $html,
+                "Grup radio $nama tidak diumumkan sebagai invalid."
+            );
+
+            // Tiap radionya juga: pembaca layar mengumumkan kontrol yang
+            // sedang difokus, bukan fieldset yang membungkusnya.
+            preg_match_all('/<input type="radio" name="'.$nama.'"[^>]*>/', $html, $radio);
+            $this->assertCount(count(config($konfig)), $radio[0], "Radio $nama tidak lengkap.");
+
+            foreach ($radio[0] as $satu) {
+                $this->assertStringContainsString('aria-invalid="true"', $satu,
+                    "Salah satu radio $nama tidak ditandai invalid.");
+            }
+        }
+    }
+
+    /** Grup radio yang sudah benar tidak boleh ikut ditandai salah. */
+    public function test_grup_radio_yang_benar_tidak_ikut_ditandai_salah(): void
+    {
+        $kasir = $this->userAs('kasir', Outlet::create(['name' => 'Outlet Uji', 'is_active' => true]));
+
+        $html = $this->actingAs($kasir)
+            ->from('/complaints/create')
+            ->followingRedirects()
+            ->post('/complaints', [
+                'nevira_transaction_number' => 'INV/1/2/3',
+                'bobot' => array_key_first(config('complaint.bobot')),
+                'channel' => array_key_first(config('complaint.channels')),
+            ])->assertOk()->getContent();
+
+        $this->assertStringNotContainsString('id="bob-error"', $html,
+            'Kolom bobot yang sudah benar ikut ditandai salah.');
+        $this->assertStringNotContainsString('id="ch-error"', $html,
+            'Kolom kanal yang sudah benar ikut ditandai salah.');
+
+        preg_match_all('/<input type="radio" name="(?:bobot|channel)"[^>]*>/', $html, $radio);
+        $this->assertNotEmpty($radio[0], 'Radio bobot dan kanal hilang dari halaman.');
+
+        foreach ($radio[0] as $satu) {
+            $this->assertStringNotContainsString('aria-invalid', $satu,
+                'Radio yang sudah benar ikut ditandai invalid.');
+        }
+    }
+
+    /**
+     * Legend merah harus berpangkal pada penanda galat, bukan pada
+     * `aria-describedby` — atribut itu juga cara normal menempelkan petunjuk
+     * ke sebuah grup, jadi hint pertama yang dipasang akan membuat legend-nya
+     * merah permanen tanpa ada yang salah. (API-119)
+     */
+    public function test_legend_merah_berpangkal_pada_aria_invalid_bukan_deskripsinya(): void
+    {
+        $css = file_get_contents(resource_path('views/layouts/app.blade.php'));
+
+        $this->assertStringContainsString('fieldset.pilihan[aria-invalid]>legend', $css,
+            'Keadaan galat grup radio tidak dibaca dari penanda invalid-nya.');
+        $this->assertStringNotContainsString('fieldset.pilihan[aria-describedby]>legend', $css,
+            'Legend merah masih dipicu oleh aria-describedby: satu hint cukup untuk menyalakannya.');
+    }
 }
