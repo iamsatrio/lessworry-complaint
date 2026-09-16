@@ -279,12 +279,13 @@
         <label for="note">Tambah catatan</label>
         <textarea id="note" name="note" required style="min-height:80px"
           placeholder="Apa yang sudah kamu lakukan untuk complaint ini?">{{ old('note') }}</textarea>
-        <label for="photos">Foto bukti</label>
+        <label for="photos">Lampirkan bukti</label>
         <input id="photos" type="file" name="photos[]" accept="image/jpeg,image/png,image/webp" multiple>
         <p class="hint">
-          Maksimal {{ App\Services\PenyimpanFoto::PER_CATATAN }} foto,
-          {{ App\Services\PenyimpanFoto::maksMb() }} MB per foto.
-          Fotonya dikecilkan otomatis dan data lokasi dari kamera dibuang sebelum disimpan.
+          Foto barang atau tangkapan layar chat.
+          Maksimal {{ App\Services\PenyimpanFoto::PER_CATATAN }},
+          {{ App\Services\PenyimpanFoto::maksMb() }} MB per berkas.
+          Dikecilkan otomatis, data lokasi dibuang.
         </p>
         <div style="margin-top:12px"><button class="ghost">Simpan Catatan</button></div>
       </form>

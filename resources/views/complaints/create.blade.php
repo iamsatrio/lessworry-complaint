@@ -232,7 +232,7 @@
   @error('description')<p class="err-field" id="desc-error">{{ $message }}</p>@enderror
   <p class="hint">Tulis apa yang pelanggan katakan, bukan tafsiranmu. Itu yang menolong saat kasusnya ditelusuri nanti.</p>
 
-  <label for="att">Foto bukti</label>
+  <label for="att">Lampirkan bukti</label>
   <input id="att" type="file" name="attachments[]" multiple accept="image/*"
     @error('attachments.*') aria-invalid="true" aria-describedby="att-error" @enderror>
   {{-- Kuncinya attachments.0, attachments.1, ...; tiap berkas bisa gagal
@@ -240,7 +240,7 @@
   @error('attachments.*')
     <div id="att-error">@foreach($errors->get('attachments.*') as $pesanBerkas)@foreach($pesanBerkas as $pesan)<p class="err-field">{{ $pesan }}</p>@endforeach @endforeach</div>
   @enderror
-  <p class="hint">Untuk keluhan hasil cuci dan barang rusak, foto hampir selalu menentukan.</p>
+  <p class="hint">Foto barangnya, atau tangkapan layar chat pelanggan.</p>
 </div>
 
 <div class="card">
