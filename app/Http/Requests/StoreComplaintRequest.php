@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Complaint;
 use App\Rules\GambarSungguhan;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -63,8 +64,54 @@ class StoreComplaintRequest extends FormRequest
             // saat kasusnya ditelusuri.
             'resolution' => ['required_if:tangani_di_tempat,1,true,on', 'nullable', 'string', 'max:5000'],
             'tindak_lanjut' => ['required_if:tangani_di_tempat,1,true,on', 'nullable', Rule::in(array_keys(config('complaint.tindak_lanjut')))],
-            'compensation_amount' => ['nullable', 'integer', 'min:0', 'max:1000000000'],
+            // Batas atas kolom, dan batas WEWENANG pencatatnya. Keduanya
+            // perlu: yang pertama menjaga kolomnya, yang kedua menjaga uang.
+            'compensation_amount' => ['nullable', 'integer', 'min:0', 'max:1000000000', $this->dalamWewenangKompensasi()],
         ];
+    }
+
+    /**
+     * Angka kompensasi harus berada di dalam wewenang yang MENCATATNYA.
+     *
+     * Jalur status sudah lama menolak ini — ComplaintStatusController::
+     * tolakKompensasi(), "Naikkan ke supervisor." Jalur intake dulu tidak,
+     * dan `PenutupanDiTempat` tidak menutup lubangnya: kelas itu memutuskan
+     * boleh-tidaknya MENUTUP, bukan boleh-tidaknya MENULISKAN angkanya. Jadi
+     * satu kolom, satu peran, dua jawaban berlawanan tergantung pintu mana
+     * yang dipakai. (Tinjauan PR #32)
+     *
+     * Ditolak di validasi, bukan disimpan sebagai 0 diam-diam. Angka uang
+     * yang lenyap tanpa bunyi lebih buruk daripada satu isian yang harus
+     * dibetulkan: kasir melihat sebabnya sebelum menyimpan, isian lainnya
+     * tetap utuh lewat withInput(), dan kalimatnya sama dengan yang sudah
+     * dipakai pintu sebelah.
+     *
+     * Hanya berlaku saat centang penanganan-di-tempat dipakai. Tanpa centang
+     * itu kolomnya memang dibuang di controller, dan form biasa tidak boleh
+     * macet karena angka yang tidak akan dipakai.
+     */
+    private function dalamWewenangKompensasi(): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail): void {
+            if (! $this->boolean('tangani_di_tempat') || ! is_numeric($value)) {
+                return;
+            }
+
+            $user = $this->user();
+            $batas = $user->compensationLimit();
+            $diminta = (int) $value;
+
+            if ($diminta <= $batas) {
+                return;
+            }
+
+            $fail(
+                'Nilai kompensasi Rp '.number_format($diminta, 0, ',', '.')
+                .' melebihi batas wewenang '.$user->roleLabel()
+                .' (Rp '.number_format($batas, 0, ',', '.').'). Naikkan ke supervisor, '
+                .'atau kosongkan kolomnya dan biarkan Customer Care yang mengisinya saat menutup.'
+            );
+        };
     }
 
     public function messages(): array

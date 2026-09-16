@@ -319,7 +319,20 @@ class ComplaintController extends Controller
     ): void {
         $complaint->resolution = $penanganan['resolution'];
         $complaint->tindak_lanjut = $penanganan['tindak_lanjut'];
-        $complaint->compensation_amount = $penanganan['compensation_amount'];
+
+        // Lapis kedua, dan ia gagal ke arah yang aman.
+        //
+        // Gerbang yang sebenarnya ada di StoreComplaintRequest: angka di atas
+        // wewenang pencatat ditolak sebelum apa pun tersimpan, dan kasir
+        // melihat sebabnya. Baris ini menjaga pemanggil yang kelak masuk
+        // TANPA lewat form request itu. Sebelum tinjauan PR #32 baris ini
+        // menulis apa adanya, dan angka Rp 200 juta dari seorang kasir
+        // berbatas Rp 50.000 mendarat di kolomnya lalu ikut terjumlah di
+        // halaman Laporan.
+        $complaint->compensation_amount = min(
+            $penanganan['compensation_amount'],
+            $user->compensationLimit(),
+        );
 
         // Keluhan yang sudah ditangani sudah pasti direspons. Tanpa ini SLA
         // respon pertama tampak terlewat pada tiket yang justru paling cepat.

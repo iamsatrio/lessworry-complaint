@@ -331,10 +331,23 @@ function bacaDraft(){
 }
 function buangDraft(){ try{ localStorage.removeItem(KEY); }catch(e){} }
 
+// Checkbox disimpan lewat `checked`, bukan `value`. Nilai sebuah checkbox
+// selalu "1" entah ia tercentang atau tidak, jadi memulihkannya lewat `value`
+// tidak mencentang apa pun. `tangani_di_tempat` adalah checkbox pertama di
+// form ini — sebelum API-26 tidak ada satu pun, jadi celahnya baru.
+//
+// Akibatnya kalau dibiarkan: kasir mencentang, mengetik penyelesaiannya,
+// halamannya hilang. Ia kembali dan memilih "Lanjutkan isian itu"; resolution
+// dan tindak_lanjut terisi DI DALAM BLOK YANG TERSEMBUNYI, controller
+// membuang keduanya karena centangnya tidak ikut terkirim, dan yang
+// diketiknya hilang tanpa sepatah kata. (Tinjauan PR #32)
 function simpanDraft(){
   if (!form) return;
   const isi = {};
-  for (const f of form.elements) if (f.name && f.type !== 'file' && f.type !== 'hidden') isi[f.name] = f.value;
+  for (const f of form.elements) {
+    if (!f.name || f.type === 'file' || f.type === 'hidden') continue;
+    isi[f.name] = f.type === 'checkbox' ? f.checked : f.value;
+  }
   try{ localStorage.setItem(KEY, JSON.stringify({isi, waktu: Date.now()})); }catch(e){}
 }
 
@@ -342,9 +355,14 @@ function pakaiDraft(d){
   if (!d || !d.isi || !form) return;
   for (const [k,v] of Object.entries(d.isi)) {
     const f = form.elements[k];
-    if (f && f.type !== 'file') f.value = v;
+    if (!f || f.type === 'file') continue;
+    if (f.type === 'checkbox') f.checked = !!v; else f.value = v;
   }
   if (d.isi.category && cat) { cat.value = d.isi.category; fillSub(d.isi.sub_category); }
+  // Centang yang pulih tidak memicu event 'change', jadi bloknya harus
+  // dibuka dari sini — kalau tidak, isian yang barusan dipulihkan duduk di
+  // balik blok tertutup.
+  tampilkanPenyelesaian();
 }
 
 if (form) {
@@ -562,6 +580,11 @@ const tempel = el('tempel');
 const tempelBox = el('tempel-box');
 const webstruk  = el('webstruk');
 
+// `isi` masuk sebagai innerHTML, dan yang disisipkan pemanggilnya memuat
+// hasil.invoice serta hasil.masuk. Aman selama POLA hanya meloloskan angka,
+// garis miring, dan tanda hubung — keamanannya bergantung pada pola di
+// PolaNota, bukan pada apa pun di fungsi ini. Melonggarkan pola INV di sana
+// berarti membaca ulang baris ini lebih dulu. (Tinjauan PR #32)
 function kabarTempel(kelas, isi){
   if (!tempelBox) return;
   tempelBox.style.display = 'block';

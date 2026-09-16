@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Complaint;
 use App\Models\Outlet;
 use App\Models\User;
+use App\Services\PenutupanDiTempat;
 use App\Support\PolaNota;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -177,7 +178,27 @@ class IntakeSatuLangkahTest extends TestCase
 
     /* ================= Kriteria 3 — kompensasi di atas batas ================= */
 
-    public function test_kasir_mencentang_pada_ringan_berkompensasi_seratus_ribu_menghasilkan_handling(): void
+    /**
+     * Angka di atas wewenang pencatat ditolak SEBELUM tersimpan — sama seperti
+     * yang sudah dilakukan jalur status.
+     *
+     * Versi sebelumnya menyimpan 100.000 pada tiket Handling dan menganggap
+     * cukup karena statusnya tidak jadi Close. Tiga akibatnya nyata, dan
+     * ketiganya dibuktikan Maldini di tinjauan PR #32:
+     *
+     *   1. `ReportController` menjumlahkan kompensasi tanpa memandang status,
+     *      jadi Rp 100.000 yang belum disetujui siapa pun sudah terhitung di
+     *      halaman Laporan sejak kasir menekan Simpan.
+     *   2. `ComplaintStatusController::tolakKompensasi()` cabang ketiga
+     *      (`$sekarang > $batas`) mengunci kolom itu dari peran yang barusan
+     *      menulisinya — kasir tidak bisa menariknya kembali sendiri.
+     *   3. Satu kolom, satu peran, dua jawaban berlawanan tergantung pintu
+     *      mana yang dipakai.
+     *
+     * Yang tidak berubah: keputusan MENUTUP tetap melunak jadi Handling.
+     * Yang dikeraskan cuma menuliskan angkanya.
+     */
+    public function test_kasir_mengirim_kompensasi_di_atas_wewenangnya_ditolak_sebelum_tersimpan(): void
     {
         $kasir = $this->userAs('kasir', $this->outlet());
 
@@ -188,15 +209,79 @@ class IntakeSatuLangkahTest extends TestCase
             'compensation_amount' => 100000,
         ]));
 
+        $response->assertSessionHasErrors('compensation_amount');
+
+        // Tidak ada complaint yang lahir membawa angka itu.
+        $this->assertSame(0, Complaint::count());
+
+        // Pesannya menyebut KEDUA angka, bukan galat validasi umum.
+        $pesan = (string) session('errors')->first('compensation_amount');
+        $this->assertStringContainsString('100.000', $pesan);
+        $this->assertStringContainsString('50.000', $pesan);
+        $this->assertStringContainsString('supervisor', mb_strtolower($pesan));
+    }
+
+    /**
+     * Angka yang ditolak tidak pernah sampai ke total Laporan.
+     *
+     * Ini baris yang membuat temuan Maldini menghalangi, bukan sekadar tidak
+     * konsisten: `ReportController.php:49` menjumlahkan seluruh complaint,
+     * bukan hanya yang Close.
+     */
+    public function test_kompensasi_yang_ditolak_tidak_masuk_total_laporan(): void
+    {
+        $outlet = $this->outlet();
+        $kasir = $this->userAs('kasir', $outlet);
+
+        $this->actingAs($kasir)->post('/complaints', $this->formIntake([
+            'tangani_di_tempat' => '1',
+            'resolution' => 'Diganti dengan yang baru.',
+            'tindak_lanjut' => 'compensate',
+            'compensation_amount' => 200000000,
+        ]));
+
+        $this->assertSame(0, (int) Complaint::sum('compensation_amount'));
+
+        $this->actingAs($this->userAs('admin'))
+            ->get('/reports')
+            ->assertOk()
+            ->assertDontSee('200.000.000');
+    }
+
+    /**
+     * Peran yang wewenangnya memang lebih besar tidak ikut terkena.
+     * Batas yang ditegakkan batas PENCATATNYA, bukan angka tetap.
+     */
+    public function test_customer_care_boleh_mencatat_seratus_ribu_lewat_intake(): void
+    {
+        $cc = $this->userAs('customer_care', $this->outlet());
+
+        $this->actingAs($cc)->post('/complaints', $this->formIntake([
+            'tangani_di_tempat' => '1',
+            'resolution' => 'Diganti dengan yang baru.',
+            'tindak_lanjut' => 'compensate',
+            'compensation_amount' => 100000,
+        ]))->assertSessionHasNoErrors();
+
+        $this->assertSame(100000, (int) $this->terbaru()->compensation_amount);
+    }
+
+    /**
+     * Batas hanya berlaku pada jalur penanganan-di-tempat. Tanpa centangnya
+     * kolom kompensasi memang dibuang, dan form biasa tidak boleh ikut macet
+     * karena angka yang tidak akan dipakai.
+     */
+    public function test_tanpa_centang_kolom_kompensasi_dibuang_bukan_ditolak(): void
+    {
+        $kasir = $this->userAs('kasir', $this->outlet());
+
+        $this->actingAs($kasir)->post('/complaints', $this->formIntake([
+            'compensation_amount' => 100000,
+        ]))->assertSessionHasNoErrors();
+
         $complaint = $this->terbaru();
-
-        $this->assertSame('handling', $complaint->status);
-        $this->assertSame(100000, (int) $complaint->compensation_amount);
-
-        // Alasannya menyebut ANGKANYA, bukan pesan galat umum.
-        $alasan = (string) $response->getSession()->get('penutupan_ditolak');
-        $this->assertStringContainsString('50.000', $alasan);
-        $this->assertStringContainsString('100.000', $alasan);
+        $this->assertSame('open', $complaint->status);
+        $this->assertSame(0, (int) $complaint->compensation_amount);
     }
 
     public function test_batas_kompensasi_kasir_tepat_lima_puluh_ribu_masih_boleh(): void
@@ -213,6 +298,12 @@ class IntakeSatuLangkahTest extends TestCase
         $this->assertSame('close', $this->terbaru()->status);
     }
 
+    /**
+     * Batasnya tepat di angkanya: Rp 50.000 lewat, Rp 50.001 tidak. Yang
+     * berubah sejak tinjauan PR #32 bukan letak batasnya, melainkan apa yang
+     * terjadi saat dilewati — dulu tersimpan sebagai Handling berikut
+     * angkanya, sekarang tidak tersimpan sama sekali.
+     */
     public function test_satu_rupiah_di_atas_batas_sudah_tidak_boleh(): void
     {
         $kasir = $this->userAs('kasir', $this->outlet());
@@ -222,9 +313,65 @@ class IntakeSatuLangkahTest extends TestCase
             'resolution' => 'Diganti.',
             'tindak_lanjut' => 'compensate',
             'compensation_amount' => 50001,
-        ]));
+        ]))->assertSessionHasErrors('compensation_amount');
 
-        $this->assertSame('handling', $this->terbaru()->status);
+        $this->assertSame(0, Complaint::count());
+    }
+
+    /**
+     * `PenutupanDiTempat` tetap menolak angka di atas batas, meski hari ini
+     * validasi sudah menyaringnya lebih dulu.
+     *
+     * Kelas ini adalah lapis kedua — pemanggil yang kelak masuk tanpa lewat
+     * StoreComplaintRequest tetap ketemu batas yang sama. Diuji langsung,
+     * bukan lewat HTTP, karena lewat HTTP ia memang tidak akan pernah
+     * tercapai.
+     */
+    public function test_penutupan_di_tempat_menolak_angka_di_atas_batas_sebagai_lapis_kedua(): void
+    {
+        $kasir = $this->userAs('kasir', $this->outlet());
+
+        $complaint = new Complaint(['bobot' => 'ringan', 'outlet_id' => $kasir->outlet_id]);
+
+        $putusan = (new PenutupanDiTempat)->putuskan($kasir, $complaint, 100000);
+
+        $this->assertFalse($putusan['boleh']);
+        $this->assertStringContainsString('50.000', (string) $putusan['alasan']);
+        $this->assertStringContainsString('100.000', (string) $putusan['alasan']);
+
+        // Di dalam batas, keputusannya tetap boleh.
+        $this->assertTrue((new PenutupanDiTempat)->putuskan($kasir, $complaint, 50000)['boleh']);
+    }
+
+    /**
+     * `$tutup` dihitung dari objek PRA-SIMPAN, di luar transaksi, lalu dipakai
+     * di dalamnya. Hari ini aman — `close` cuma membaca `outlet_id` dan
+     * `bobot`, keduanya sudah ada di `$data`. Yang tidak ada sebelumnya:
+     * apa pun yang menjaga itu tetap benar. (Tinjauan PR #32)
+     */
+    public function test_jawaban_can_close_sama_sebelum_dan_sesudah_disimpan(): void
+    {
+        $outlet = $this->outlet();
+        $kasir = $this->userAs('kasir', $outlet);
+
+        foreach (['ringan', 'sedang', 'berat'] as $bobot) {
+            $praSimpan = new Complaint(['bobot' => $bobot, 'outlet_id' => $outlet->id]);
+
+            $this->actingAs($kasir)->post('/complaints', $this->formIntake([
+                'bobot' => $bobot,
+                'tangani_di_tempat' => '1',
+                'resolution' => 'Diganti.',
+                'tindak_lanjut' => 'proses_ulang',
+            ]));
+
+            $tersimpan = $this->terbaru();
+
+            $this->assertSame(
+                $kasir->can('close', $praSimpan),
+                $kasir->can('close', $tersimpan),
+                'jawaban can(close) bergeser antara objek pra-simpan dan objek tersimpan pada bobot '.$bobot
+            );
+        }
     }
 
     public function test_customer_care_menutup_bobot_apa_pun(): void
