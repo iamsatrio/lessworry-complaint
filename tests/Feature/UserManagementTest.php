@@ -247,6 +247,92 @@ class UserManagementTest extends TestCase
         $this->assertFalse($kasir->fresh()->is_active, '"jangan diubah" tidak boleh berarti "hidupkan"');
     }
 
+    /* ---------- Tabrakan huruf besar-kecil ---------- */
+
+    /**
+     * Alamat yang sama dengan huruf berbeda ditolak 422, bukan 500.
+     *
+     * Alamat email disimpan huruf kecil, tapi normalisasinya dulu berjalan
+     * SESUDAH validate(). Akibatnya `Rule::unique` memeriksa `BUDI@...` —
+     * yang memang belum ada — lalu baris yang disimpan `budi@...` menabrak
+     * indeks unik di basis data. Yang sampai ke admin: 500, halaman galat
+     * server, tanpa satu kata pun tentang alamat yang sudah dipakai.
+     * (Temuan tinjauan PR #34.)
+     */
+    public function test_email_yang_sama_beda_huruf_ditolak_dengan_pesan_bukan_500(): void
+    {
+        $admin = $this->userAs('admin');
+
+        $this->actingAs($admin)->post('/users', [
+            'name' => 'Budi', 'email' => 'budi@lessworry.id', 'role' => 'kasir',
+        ])->assertSessionHasNoErrors();
+
+        $this->actingAs($admin)->post('/users', [
+            'name' => 'Budi Lagi', 'email' => 'BUDI@lessworry.id', 'role' => 'kasir',
+        ])->assertSessionHasErrors('email');
+
+        $this->assertSame(1, User::where('email', 'budi@lessworry.id')->count());
+        $this->assertSame(0, User::where('email', 'BUDI@lessworry.id')->count());
+    }
+
+    public function test_email_berspasi_pun_ditangkap_validasi_bukan_basis_data(): void
+    {
+        $admin = $this->userAs('admin');
+
+        $this->actingAs($admin)->post('/users', [
+            'name' => 'Budi', 'email' => 'budi2@lessworry.id', 'role' => 'kasir',
+        ])->assertSessionHasNoErrors();
+
+        // Alamat yang ditempel dari chat sering membawa spasi di ujungnya.
+        $this->actingAs($admin)->post('/users', [
+            'name' => 'Budi Lagi', 'email' => '  Budi2@lessworry.id  ', 'role' => 'kasir',
+        ])->assertSessionHasErrors('email');
+
+        $this->assertSame(1, User::where('email', 'budi2@lessworry.id')->count());
+    }
+
+    public function test_ubah_email_ke_milik_orang_lain_beda_huruf_ditolak_422(): void
+    {
+        $admin = $this->userAs('admin');
+
+        $budi = User::create([
+            'name' => 'Budi', 'email' => 'budi3@lessworry.id',
+            'password' => 'secret123', 'role' => 'kasir',
+        ]);
+
+        $sari = User::create([
+            'name' => 'Sari', 'email' => 'sari@lessworry.id',
+            'password' => 'secret123', 'role' => 'kasir',
+        ]);
+
+        $this->actingAs($admin)->put('/users/'.$sari->id, [
+            'name' => 'Sari', 'role' => 'kasir', 'email' => 'BUDI3@lessworry.id',
+        ])->assertSessionHasErrors('email');
+
+        $this->assertSame('sari@lessworry.id', $sari->fresh()->email);
+        $this->assertSame('budi3@lessworry.id', $budi->fresh()->email);
+    }
+
+    /**
+     * Alamat sendiri dengan huruf berbeda BUKAN tabrakan — `ignore($user->id)`
+     * tetap berlaku sesudah urutannya dibalik.
+     */
+    public function test_membetulkan_huruf_alamat_sendiri_tetap_boleh(): void
+    {
+        $admin = $this->userAs('admin');
+
+        $kasir = User::create([
+            'name' => 'Kasir', 'email' => 'Kasir.Huruf@lessworry.id',
+            'password' => 'secret123', 'role' => 'kasir',
+        ]);
+
+        $this->actingAs($admin)->put('/users/'.$kasir->id, [
+            'name' => 'Kasir', 'role' => 'kasir', 'email' => 'KASIR.HURUF@lessworry.id',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame('kasir.huruf@lessworry.id', $kasir->fresh()->email);
+    }
+
     public function test_is_active_yang_dikirim_tetap_berlaku(): void
     {
         $admin = User::create([
