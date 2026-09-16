@@ -88,6 +88,49 @@ class GerbangVerifikasiEmailTest extends TestCase
         );
     }
 
+    /**
+     * Password yang memuat `@` harus tersensor SELURUHNYA. (API-120)
+     *
+     * Pola sebelumnya berhenti di `@` pertama, jadi `p@ssw0rd` hanya tersensor
+     * sampai `p` dan `ssw0rd` tetap masuk log. Nilai di bawah karangan.
+     */
+    public function test_penyensoran_membuang_password_yang_memuat_at(): void
+    {
+        $this->assertSame(
+            'Failed: smtp://[kredensial-disensor]@smtp.lessworry.id:587 unreachable',
+            PengirimVerifikasiEmail::tanpaKredensial(
+                'Failed: smtp://smtpuser:p@ssw0rd@smtp.lessworry.id:587 unreachable'
+            )
+        );
+
+        // Password tanpa `@` tetap tersensor seperti sebelumnya.
+        $this->assertSame(
+            'smtp://[kredensial-disensor]@smtp.lessworry.id:587',
+            PengirimVerifikasiEmail::tanpaKredensial('smtp://user:simple@smtp.lessworry.id:587')
+        );
+
+        // Alamat email di kalimat yang sama tidak ikut tersensor, sementara
+        // DSN-nya tersensor penuh.
+        $this->assertSame(
+            'Gagal mengirim ke budi@lessworry.id lewat smtp://[kredensial-disensor]@smtp.lessworry.id',
+            PengirimVerifikasiEmail::tanpaKredensial(
+                'Gagal mengirim ke budi@lessworry.id lewat smtp://u:p@ssw0rd@smtp.lessworry.id'
+            )
+        );
+
+        // Tidak ada potongan password yang tersisa di keluaran mana pun.
+        foreach ([
+            'Failed: smtp://smtpuser:p@ssw0rd@smtp.lessworry.id:587 unreachable',
+            'Gagal mengirim ke budi@lessworry.id lewat smtp://u:p@ssw0rd@smtp.lessworry.id',
+        ] as $pesan) {
+            $this->assertStringNotContainsString(
+                'ssw0rd',
+                PengirimVerifikasiEmail::tanpaKredensial($pesan),
+                'Sebagian password lolos ke keluaran.'
+            );
+        }
+    }
+
     /* ---------- 2. Ganti huruf besar-kecil alamat ---------- */
 
     /**

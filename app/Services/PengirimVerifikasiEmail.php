@@ -103,12 +103,15 @@ class PengirimVerifikasiEmail
      */
     public static function tanpaKredensial(string $pesan): string
     {
-        // Menyensor sampai `@` TERAKHIR sebelum pemisah jalur berikutnya
-        // akan salah pada pesan yang memuat alamat email sesudah DSN-nya;
-        // pola ini berhenti di `@` pertama sesudah `//`, sama seperti
-        // pembacaan URL yang sebenarnya.
+        // Berhenti di `@` PERTAMA salah: password yang memuat `@` — penyebab
+        // DSN salah bentuk yang paling umum — hanya tersensor sampai potongan
+        // pertamanya, sisanya masuk log. (API-120)
+        //
+        // Jadi disensor sampai `@` TERAKHIR, tapi dibatasi tidak menyeberangi
+        // spasi dan `/`: alamat email yang muncul di kalimat yang sama berada
+        // di luar potongan DSN, jadi ia tidak ikut tersensor.
         return (string) preg_replace(
-            '#(?<=://)[^/@\s:]+:[^/@\s]*@#',
+            '#(?<=://)[^\s/]*:[^\s/]*@(?![^\s/]*@)#',
             '[kredensial-disensor]@',
             $pesan
         );
