@@ -6,9 +6,12 @@ use App\Models\Complaint;
 use App\Models\Outlet;
 use App\Models\User;
 use App\Services\NeviraGate;
+use FilesystemIterator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use Tests\TestCase;
 
 /**
@@ -276,13 +279,28 @@ class NeviraChokePointTest extends TestCase
 
     public function test_tidak_ada_controller_yang_memegang_nevira_client_langsung(): void
     {
+        $akar = app_path('Http/Controllers');
         $pelanggar = [];
 
-        foreach (glob(app_path('Http/Controllers/*.php')) as $file) {
-            if (str_contains((string) file_get_contents($file), 'NeviraClient')) {
-                $pelanggar[] = basename($file);
+        // Menelusuri rekursif: `glob('*.php')` tidak turun ke subdirektori, jadi
+        // satu `mkdir Admin/` sudah cukup membuat pengaman ini bohong (API-79).
+        $berkas = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($akar, FilesystemIterator::SKIP_DOTS)
+        );
+
+        foreach ($berkas as $file) {
+            if (! $file->isFile() || $file->getExtension() !== 'php') {
+                continue;
+            }
+
+            if (str_contains((string) file_get_contents($file->getPathname()), 'NeviraClient')) {
+                // Jalur relatif, bukan basename: `Admin/ProbeController.php` dan
+                // `Api/ProbeController.php` adalah dua berkas dengan satu basename.
+                $pelanggar[] = str_replace($akar.DIRECTORY_SEPARATOR, '', $file->getPathname());
             }
         }
+
+        sort($pelanggar);
 
         $this->assertSame([], $pelanggar,
             'Controller ini memanggil NeviraClient tanpa lewat NeviraGate — pengamannya bisa dilewati: '
