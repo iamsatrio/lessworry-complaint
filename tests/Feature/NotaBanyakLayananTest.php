@@ -569,4 +569,28 @@ class NotaBanyakLayananTest extends TestCase
         $this->assertNull(LayananNota::dariNama(null));
         $this->assertNull(LayananNota::dariNama(''));
     }
+
+    /**
+     * Potongan yang menunjuk kunci yang tidak ada di `config('complaint.layanan')`
+     * dilewati, bukan menghentikan pencarian. (API-111, lanjutan PR #37)
+     *
+     * Satu salah tulis di `layanan_dari_nevira` dulu mematikan setiap potongan
+     * SESUDAHNYA untuk nama yang sama: yang cocok pertama membalas null
+     * seketika, dan potongan kedua yang benar tidak pernah sempat dicoba.
+     * Di sini "Bedding - Sprei (King)" cocok dua kali — 'sprei' yang menunjuk
+     * kunci karangan, lalu 'bedding' yang menunjuk kunci sungguhan. Yang
+     * dituntut kunci kedua, bukan null.
+     */
+    public function test_potongan_ke_kunci_yang_tidak_ada_dilewati_bukan_menghentikan_pencarian(): void
+    {
+        config(['complaint.layanan_dari_nevira' => [
+            // Cocok duluan, tapi 'satuan_sprei' tidak ada di config('complaint.layanan').
+            'sprei' => 'satuan_sprei',
+            'bedding' => 'satuan_bedding',
+        ]]);
+
+        $this->assertArrayNotHasKey('satuan_sprei', config('complaint.layanan'));
+
+        $this->assertSame('satuan_bedding', LayananNota::dariNama('Bedding - Sprei (King)'));
+    }
 }
