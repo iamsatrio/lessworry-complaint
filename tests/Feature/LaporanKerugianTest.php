@@ -229,6 +229,53 @@ class LaporanKerugianTest extends TestCase
         $this->assertSame(3, $outlet['Cipete']['kasus']);
     }
 
+    /**
+     * Label batang menyebut pembagi yang BENAR — yang punya nilai biaya,
+     * bukan seluruh complaint di kelompok itu.
+     *
+     * Dua kelompok di bawah membawa rupiah yang persis sama dari satu
+     * complaint berbiaya. Bedanya cuma cakupan: yang satu 1 dari 4, yang lain
+     * 1 dari 1. Label lama menulis "Rp 1.000.000 · 4 kasus" untuk yang
+     * pertama — dibaca sebagai rata-rata Rp 250.000 per kasus, padahal
+     * angkanya datang dari satu complaint saja.
+     *
+     * Ini kesalahan nomor 1 di kepala berkas ini, muncul lagi di tempat lain:
+     * kelompok bercakupan rendah terlihat lebih murah per kasus, padahal yang
+     * rendah pengisian kolomnya. (Temuan tinjauan PR #35.)
+     */
+    public function test_label_batang_menyebut_pembagi_yang_punya_nilai(): void
+    {
+        // Cakupan tinggi: 1 dari 1.
+        $this->complaint('2026-06-02', null, ['category' => 'barang_rusak', 'compensation_amount' => 1_000_000, 'tindak_lanjut' => 'compensate']);
+
+        // Cakupan rendah: 1 dari 4, rupiah yang sama.
+        $this->complaint('2026-06-03', null, ['category' => 'kurang_bersih', 'compensation_amount' => 1_000_000, 'tindak_lanjut' => 'compensate']);
+        $this->complaint('2026-06-04', null, ['category' => 'kurang_bersih']);
+        $this->complaint('2026-06-05', null, ['category' => 'kurang_bersih']);
+        $this->complaint('2026-06-06', null, ['category' => 'kurang_bersih']);
+
+        $rekap = $this->rekap();
+        $batang = collect($rekap->batang($rekap->perKategori()))->keyBy('label');
+
+        $this->assertSame(
+            'Rp 1.000.000 · 1 dari 4 kasus bernilai',
+            $batang['Kurang Bersih']['teks'],
+            'label batang harus menyebut yang punya nilai biaya sebagai pembagi, bukan seluruh kasus'
+        );
+
+        $this->assertSame(
+            'Rp 1.000.000 · 1 dari 1 kasus bernilai',
+            $batang['Barang Rusak']['teks'],
+            'cakupan penuh pun ditulis lengkap — pembacanya tidak perlu menebak mana yang disingkat'
+        );
+
+        // Judulnya tetap membawa kalimat cakupan yang penuh.
+        $this->assertStringContainsString(
+            'dari 1 dari 4 complaint yang punya nilai biaya',
+            $batang['Kurang Bersih']['judul']
+        );
+    }
+
     public function test_complaint_tanpa_outlet_tidak_hilang_dari_pengelompokan(): void
     {
         $this->complaint('2026-06-02', null, ['compensation_amount' => 90_000, 'tindak_lanjut' => 'compensate']);

@@ -289,7 +289,15 @@ final class RekapKerugian
         return array_map(fn (array $b) => [
             'label' => $b['label'],
             'nilai' => (float) $b['biaya'],
-            'teks' => NilaiBiaya::rupiah($b['biaya']).' · '.$b['kasus'].' kasus',
+            // Pembaginya yang punya nilai biaya, bukan seluruh kasus di
+            // kelompok ini. Batang Rp 1.000.000 di sebelah "4 kasus" dibaca
+            // sebagai Rp 250.000 per kasus; kalau rupiahnya datang dari satu
+            // complaint, angka yang terbaca itu tidak pernah ada. Kelompok
+            // bercakupan rendah akan selalu terlihat lebih murah per kasus
+            // daripada kelompok bercakupan penuh — padahal yang rendah
+            // pengisian kolomnya, bukan biayanya. (Tinjauan PR #35)
+            'teks' => NilaiBiaya::rupiah($b['biaya']).' · '
+                .$b['terisi'].' dari '.$b['kasus'].' kasus bernilai',
             'judul' => $b['label'].' · '.NilaiBiaya::rupiah($b['biaya']).' · '
                 .NilaiBiaya::cakupanTeks($b['terisi'], $b['kasus']),
         ], array_values(array_filter($baris, fn (array $b) => $b['biaya'] > 0)));
