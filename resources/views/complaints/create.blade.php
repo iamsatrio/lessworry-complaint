@@ -1,5 +1,22 @@
 @extends('layouts.app')
 @section('title','Catat Complaint')
+{{-- Butir ringkasan galat di layout menautkan ke kolomnya lewat peta ini.
+     Nama kolom datang dari StoreComplaintRequest; id-nya dari markup di bawah.
+     (API-86 #1, #2) --}}
+@section('galat-anchor'){!! json_encode([
+  'nevira_transaction_number' => 'nv',
+  'nevira_service_index'      => 'barang',
+  'nota_exemption'            => 'exempt',
+  'outlet_id'                 => 'out',
+  'category'                  => 'cat',
+  'sub_category'              => 'sub',
+  'bobot'                     => 'bob',
+  'layanan'                   => 'lay',
+  'description'               => 'desc',
+  'channel'                   => 'ch',
+  'reporter_name'             => 'rn',
+  'reporter_phone'            => 'rp',
+]) !!}@endsection
 @section('content')
 <div class="eyebrow">Complaint baru</div>
 <h1>Catat keluhan pelanggan</h1>
@@ -58,9 +75,11 @@
   <label for="nv">Nomor nota NEVIRA <span class="req">*</span></label>
   <div style="display:flex;gap:10px">
     <input id="nv" name="nevira_transaction_number" value="{{ $nilai('nevira_transaction_number') }}"
+           @error('nevira_transaction_number') aria-invalid="true" aria-describedby="nv-error" @enderror
            placeholder="Salin dari struk, mis. INV/118/1787749345365/1">
     <button type="button" class="ghost shrink" id="cek">Cek</button>
   </div>
+  @error('nevira_transaction_number')<p class="err-field" id="nv-error">{{ $message }}</p>@enderror
   <div id="nvbox" class="panel" style="display:none"></div>
   <p class="hint">Cek notanya lebih dulu — outlet, nama, dan telepon pelapor terisi sendiri dari data pelanggan pada nota.</p>
 
@@ -79,12 +98,14 @@
   @php $barangDipilih = $nilai('nevira_service_index'); @endphp
   <div id="barang-blok" @style(['display:none' => blank($barangDipilih)])>
     <label for="barang">Keluhannya tentang barang yang mana</label>
-    <select id="barang" name="nevira_service_index">
+    <select id="barang" name="nevira_service_index"
+            @error('nevira_service_index') aria-invalid="true" aria-describedby="barang-error" @enderror>
       <option value="">Seluruh nota</option>
       @if(filled($barangDipilih))
         <option value="{{ $barangDipilih }}" selected>Barang ke-{{ $barangDipilih }}</option>
       @endif
     </select>
+    @error('nevira_service_index')<p class="err-field" id="barang-error">{{ $message }}</p>@enderror
     <p class="hint">
       Bawaannya seluruh nota — tidak perlu diubah kalau sedang buru-buru. Kalau barangnya sudah
       jelas, memilihnya membuat penelusuran pelaku nanti mendahulukan yang mengerjakan barang itu.
@@ -92,19 +113,23 @@
   </div>
 
   <label for="exempt">Kalau tidak ada notanya, pilih alasannya</label>
-  <select id="exempt" name="nota_exemption">
+  <select id="exempt" name="nota_exemption"
+          @error('nota_exemption') aria-invalid="true" aria-describedby="exempt-error" @enderror>
     <option value="">— complaint ini punya nomor nota —</option>
     @foreach(config('complaint.nota_exemptions') as $k=>$v)
       <option value="{{ $k }}" @selected($nilai('nota_exemption')===$k)>{{ $v }}</option>
     @endforeach
   </select>
+  @error('nota_exemption')<p class="err-field" id="exempt-error">{{ $message }}</p>@enderror
 
   @if(!auth()->user()->isKasir())
     <label for="out">Outlet</label>
-    <select id="out" name="outlet_id">
+    <select id="out" name="outlet_id"
+            @error('outlet_id') aria-invalid="true" aria-describedby="out-error" @enderror>
       <option value="">Terisi sendiri dari nota</option>
       @foreach($outlets as $o)<option value="{{ $o->id }}" @selected($nilai('outlet_id')==$o->id)>{{ $o->name }}</option>@endforeach
     </select>
+    @error('outlet_id')<p class="err-field" id="out-error">{{ $message }}</p>@enderror
     <p class="hint" id="out-hint" style="display:none"></p>
   @endif
 </div>
@@ -113,7 +138,8 @@
   <div class="eyebrow">Keluhannya apa</div>
   <div class="row">
     <div><label for="cat">Kategori <span class="req">*</span></label>
-      <select id="cat" name="category" required>
+      <select id="cat" name="category" required
+              @error('category') aria-invalid="true" aria-describedby="cat-error" @enderror>
         {{-- Tanpa opsi kosong, opsi pertama selalu terpilih dan `required`
              tidak menuntut apa pun: complaint salah kategori tersimpan diam-diam.
              Kategori adalah kolom yang menentukan pola keluhan bisa dilihat
@@ -123,34 +149,52 @@
           <option value="{{ $k }}" @selected($nilai('category')===$k)>{{ $v['label'] }}</option>
         @endforeach
       </select>
+      @error('category')<p class="err-field" id="cat-error">{{ $message }}</p>@enderror
     </div>
-    <div><label for="sub">Rincian</label><select id="sub" name="sub_category"></select></div>
+    <div><label for="sub">Rincian</label>
+      <select id="sub" name="sub_category"
+              @error('sub_category') aria-invalid="true" aria-describedby="sub-error" @enderror></select>
+      @error('sub_category')<p class="err-field" id="sub-error">{{ $message }}</p>@enderror
+    </div>
     {{-- Bobot memakai kosakata tim: Ringan / Sedang / Berat. Tidak ada yang
          terpilih lebih dulu — bobot menentukan tenggat DAN siapa yang boleh
          menutup, jadi ia harus dipilih, bukan kebetulan. --}}
     <div><label for="bob">Bobot <span class="req">*</span></label>
-      <select id="bob" name="bobot" required>
+      <select id="bob" name="bobot" required
+              @error('bobot') aria-invalid="true" aria-describedby="bob-error" @enderror>
         <option value="" disabled @selected(blank($nilai('bobot')))>— pilih bobot —</option>
         @foreach(config('complaint.bobot') as $k=>$v)
           <option value="{{ $k }}" @selected($nilai('bobot')===$k)>{{ $v }}</option>
         @endforeach
       </select>
+      @error('bobot')<p class="err-field" id="bob-error">{{ $message }}</p>@enderror
     </div>
     <div><label for="lay">Layanan <span class="req">*</span></label>
-      <select id="lay" name="layanan" required>
+      <select id="lay" name="layanan" required
+              @error('layanan') aria-invalid="true" aria-describedby="lay-error" @enderror>
         <option value="" disabled @selected(blank($nilai('layanan')))>— pilih layanan —</option>
         @foreach(config('complaint.layanan') as $k=>$v)
           <option value="{{ $k }}" @selected($nilai('layanan')===$k)>{{ $v }}</option>
         @endforeach
       </select>
+      @error('layanan')<p class="err-field" id="lay-error">{{ $message }}</p>@enderror
     </div>
   </div>
   <label for="desc">Isi keluhan <span class="req">*</span></label>
-  <textarea id="desc" name="description" required placeholder="Tulis keluhan pelanggan apa adanya, pakai kalimatnya sendiri.">{{ $nilai('description') }}</textarea>
+  <textarea id="desc" name="description" required
+    @error('description') aria-invalid="true" aria-describedby="desc-error" @enderror
+    placeholder="Tulis keluhan pelanggan apa adanya, pakai kalimatnya sendiri.">{{ $nilai('description') }}</textarea>
+  @error('description')<p class="err-field" id="desc-error">{{ $message }}</p>@enderror
   <p class="hint">Tulis apa yang pelanggan katakan, bukan tafsiranmu. Itu yang menolong saat kasusnya ditelusuri nanti.</p>
 
   <label for="att">Foto bukti</label>
-  <input id="att" type="file" name="attachments[]" multiple accept="image/*">
+  <input id="att" type="file" name="attachments[]" multiple accept="image/*"
+    @error('attachments.*') aria-invalid="true" aria-describedby="att-error" @enderror>
+  {{-- Kuncinya attachments.0, attachments.1, ...; tiap berkas bisa gagal
+       sendiri-sendiri, jadi semuanya dicetak di bawah satu kolom. --}}
+  @error('attachments.*')
+    <div id="att-error">@foreach($errors->get('attachments.*') as $pesanBerkas)@foreach($pesanBerkas as $pesan)<p class="err-field">{{ $pesan }}</p>@endforeach @endforeach</div>
+  @enderror
   <p class="hint">Untuk keluhan hasil cuci dan barang rusak, foto hampir selalu menentukan.</p>
 </div>
 
@@ -158,7 +202,8 @@
   <div class="eyebrow">Siapa yang melapor</div>
   @php $kanal = $nilai('channel', auth()->user()->defaultChannel()); @endphp
   <label for="ch">Masuk lewat <span class="req">*</span></label>
-  <select id="ch" name="channel" required>
+  <select id="ch" name="channel" required
+          @error('channel') aria-invalid="true" aria-describedby="ch-error" @enderror>
     {{-- Kanal ada tiga, peran hanya dua: WA Outlet diterima kasir juga.
          Jadi yang disimpulkan dari peran adalah NILAI BAWAANNYA, bukan
          kanalnya — kolomnya tetap tampil, ketiga opsinya tetap bisa
@@ -176,14 +221,20 @@
       <option value="{{ $k }}" @selected($kanal===$k)>{{ $v }}</option>
     @endforeach
   </select>
+  @error('channel')<p class="err-field" id="ch-error">{{ $message }}</p>@enderror
   @if(filled(auth()->user()->defaultChannel()) && blank($nilai('channel')))
     <p class="hint">Terisi dari peranmu. Ganti kalau keluhan ini sebenarnya masuk lewat kanal lain.</p>
   @endif
 
   <label for="rn">Nama pelapor <span class="req">*</span></label>
-  <input id="rn" name="reporter_name" value="{{ $nilai('reporter_name') }}" required>
+  <input id="rn" name="reporter_name" value="{{ $nilai('reporter_name') }}" required
+    @error('reporter_name') aria-invalid="true" aria-describedby="rn-error" @enderror>
+  @error('reporter_name')<p class="err-field" id="rn-error">{{ $message }}</p>@enderror
   <label for="rp">Nomor telepon</label>
-  <input id="rp" name="reporter_phone" value="{{ $nilai('reporter_phone') }}" inputmode="tel" placeholder="08xxxxxxxxxx">
+  <input id="rp" name="reporter_phone" value="{{ $nilai('reporter_phone') }}" inputmode="tel"
+    @error('reporter_phone') aria-invalid="true" aria-describedby="rp-error" @enderror
+    placeholder="08xxxxxxxxxx">
+  @error('reporter_phone')<p class="err-field" id="rp-error">{{ $message }}</p>@enderror
   <div id="pakai" style="display:none;margin-top:10px">
     <button type="button" class="ghost" id="btn-pakai" style="padding:9px 16px;min-height:40px;font-size:13.5px">
       Pakai data pelanggan dari nota
