@@ -55,6 +55,30 @@
      tinggal mengetik keluhannya. (API-38 #5) --}}
 <div class="card">
   <div class="eyebrow">Mulai dari notanya</div>
+
+  {{-- Tempel, jangan ketik. (API-26)
+
+       Alasannya bukan "24 karakter terlalu panjang": dari 500 nomor nota di
+       riwayat complaint, NOL berformat INV/…. Tim menulis angka pendek —
+       4348, "2138 (Juli)", 929/1 — dan angka pendek itu tidak unik; 132
+       baris membubuhkan nama bulan dengan tangan justru untuk membedakannya.
+       Jadi kolom di bawah meminta bentuk yang belum pernah ditulis siapa pun
+       dalam 545 kejadian.
+
+       Pelanggan menerima nota elektronik lewat WhatsApp dan isinya bisa
+       disalin. Kotak ini mengambil pengenalnya sendiri.
+
+       Tanpa atribut name: isi tempelan TIDAK PERNAH dikirim ke server. Di
+       dalamnya ada alamat, telepon outlet, dan saldo deposit pelanggan —
+       yang berangkat hanya nomor notanya. --}}
+  <label for="tempel">Tempel nota WhatsApp di sini</label>
+  <textarea id="tempel" rows="3" autocomplete="off" spellcheck="false"
+            placeholder="Salin seluruh pesan nota dari WhatsApp, tempel di sini. Nomor notanya diambil sendiri."></textarea>
+  <div id="tempel-box" class="panel" style="display:none"></div>
+  <p class="hint">Tidak perlu dirapikan — tempel apa adanya. Isinya tidak ikut tersimpan; yang diambil hanya nomor notanya.</p>
+
+  <input type="hidden" id="webstruk" name="nevira_webstruk_token" value="{{ $nilai('nevira_webstruk_token') }}">
+
   <label for="nv">Nomor nota NEVIRA <span class="req">*</span></label>
   <div style="display:flex;gap:10px">
     <input id="nv" name="nevira_transaction_number" value="{{ $nilai('nevira_transaction_number') }}"
@@ -195,6 +219,58 @@
   </p>
 </div>
 
+{{-- Sudah saya tangani di tempat. (API-26)
+
+     Kasir mencatat SETELAH menangani — status `open` muncul nol kali dari
+     545 baris riwayat, jadi sheet-nya hanya diisi saat perkaranya sudah
+     selesai. Memaksa dua langkah (simpan, cari lagi, buka, isi, tutup)
+     untuk 52% kasus berarti mewarisi kebiasaan yang sama.
+
+     Kolom penyelesaiannya TERTUTUP sampai centangnya dipakai: complaint
+     yang belum selesai adalah jalur lain, dan waktu mengisinya tidak boleh
+     bertambah satu detik pun oleh kolom yang tidak ia perlukan. --}}
+@php $diTempat = (bool) $nilai('tangani_di_tempat'); @endphp
+<div class="card">
+  <div class="eyebrow">Sudah selesai di tempat?</div>
+  <label for="ditempat" style="display:flex;gap:10px;align-items:center;text-transform:none;font-size:15px;color:var(--ink);letter-spacing:0">
+    <input type="checkbox" id="ditempat" name="tangani_di_tempat" value="1" @checked($diTempat)>
+    <span>Sudah saya tangani di tempat</span>
+  </label>
+  <p class="hint">Centang kalau keluhannya sudah beres sebelum kamu mencatatnya. Satu kali simpan, tiketnya langsung tertutup.</p>
+
+  <div id="ditempat-blok" @style(['display:none' => ! $diTempat])>
+    <label for="res">Apa yang kamu lakukan <span class="req">*</span></label>
+    <textarea id="res" name="resolution" placeholder="Mis. Dicuci ulang saat itu juga, pelanggan menunggu dan setuju.">{{ $nilai('resolution') }}</textarea>
+
+    <div class="row">
+      <div><label for="tl">Tindak lanjut <span class="req">*</span></label>
+        <select id="tl" name="tindak_lanjut">
+          <option value="" disabled @selected(blank($nilai('tindak_lanjut')))>— pilih tindak lanjut —</option>
+          @foreach(config('complaint.tindak_lanjut') as $k=>$v)
+            <option value="{{ $k }}" @selected($nilai('tindak_lanjut')===$k)>{{ $v }}</option>
+          @endforeach
+        </select>
+      </div>
+      {{-- Petunjuknya DI LUAR baris: .row meratakan bawah, jadi kolom yang
+           punya hint di bawahnya jadi lebih tinggi dan kolom sebelahnya
+           terdorong turun. --}}
+      <div><label for="komp">Kompensasi (Rp)</label>
+        <input id="komp" name="compensation_amount" inputmode="numeric" value="{{ $nilai('compensation_amount') }}" placeholder="Kosongkan kalau tidak ada">
+      </div>
+    </div>
+
+    {{-- Batasnya disebutkan DI DEPAN, bukan hanya setelah ditolak. Kasir
+         yang tahu batasnya sebelum mengetik tidak perlu mengulang. --}}
+    @if(auth()->user()->isKasir())
+      <p class="hint" id="ditempat-batas">
+        Kasir menutup sendiri complaint berbobot <b>Ringan</b> dengan kompensasi sampai
+        <b>Rp {{ number_format(auth()->user()->compensationLimit(), 0, ',', '.') }}</b>.
+        Di luar itu keluhannya tetap tercatat lengkap dengan catatanmu, dan Customer Care yang menutup.
+      </p>
+    @endif
+  </div>
+</div>
+
 <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
   <button>{{ $gagal ? 'Coba Simpan Lagi' : 'Simpan Complaint' }}</button>
   <a href="{{ route('complaints.index') }}" class="btn ghost">Batal</a>
@@ -255,10 +331,23 @@ function bacaDraft(){
 }
 function buangDraft(){ try{ localStorage.removeItem(KEY); }catch(e){} }
 
+// Checkbox disimpan lewat `checked`, bukan `value`. Nilai sebuah checkbox
+// selalu "1" entah ia tercentang atau tidak, jadi memulihkannya lewat `value`
+// tidak mencentang apa pun. `tangani_di_tempat` adalah checkbox pertama di
+// form ini — sebelum API-26 tidak ada satu pun, jadi celahnya baru.
+//
+// Akibatnya kalau dibiarkan: kasir mencentang, mengetik penyelesaiannya,
+// halamannya hilang. Ia kembali dan memilih "Lanjutkan isian itu"; resolution
+// dan tindak_lanjut terisi DI DALAM BLOK YANG TERSEMBUNYI, controller
+// membuang keduanya karena centangnya tidak ikut terkirim, dan yang
+// diketiknya hilang tanpa sepatah kata. (Tinjauan PR #32)
 function simpanDraft(){
   if (!form) return;
   const isi = {};
-  for (const f of form.elements) if (f.name && f.type !== 'file' && f.type !== 'hidden') isi[f.name] = f.value;
+  for (const f of form.elements) {
+    if (!f.name || f.type === 'file' || f.type === 'hidden') continue;
+    isi[f.name] = f.type === 'checkbox' ? f.checked : f.value;
+  }
   try{ localStorage.setItem(KEY, JSON.stringify({isi, waktu: Date.now()})); }catch(e){}
 }
 
@@ -266,9 +355,14 @@ function pakaiDraft(d){
   if (!d || !d.isi || !form) return;
   for (const [k,v] of Object.entries(d.isi)) {
     const f = form.elements[k];
-    if (f && f.type !== 'file') f.value = v;
+    if (!f || f.type === 'file') continue;
+    if (f.type === 'checkbox') f.checked = !!v; else f.value = v;
   }
   if (d.isi.category && cat) { cat.value = d.isi.category; fillSub(d.isi.sub_category); }
+  // Centang yang pulih tidak memicu event 'change', jadi bloknya harus
+  // dibuka dari sini — kalau tidak, isian yang barusan dipulihkan duduk di
+  // balik blok tertutup.
+  tampilkanPenyelesaian();
 }
 
 if (form) {
@@ -472,5 +566,111 @@ if (nvInput) {
   nvInput.addEventListener('blur', cekNota);
   nvInput.addEventListener('paste', () => setTimeout(cekNota, 60));
 }
+
+/* ---------- Tempel nota WhatsApp (API-26) ----------
+   Pengambilan dilakukan DI SINI, di peramban, bukan di server: teks
+   tempelan memuat alamat, telepon outlet, dan saldo deposit pelanggan, dan
+   yang tidak pernah dikirim tidak bisa bocor, tidak bisa tercatat di log,
+   dan tidak bisa tersimpan karena kelalaian nanti.
+
+   Polanya datang dari App\Support\PolaNota supaya PHP dan peramban tidak
+   punya dua versi yang berbeda diam-diam. */
+const POLA   = @json(\App\Support\PolaNota::untukPeramban());
+const tempel = el('tempel');
+const tempelBox = el('tempel-box');
+const webstruk  = el('webstruk');
+
+// `isi` masuk sebagai innerHTML, dan yang disisipkan pemanggilnya memuat
+// hasil.invoice serta hasil.masuk. Aman selama POLA hanya meloloskan angka,
+// garis miring, dan tanda hubung — keamanannya bergantung pada pola di
+// PolaNota, bukan pada apa pun di fungsi ini. Melonggarkan pola INV di sana
+// berarti membaca ulang baris ini lebih dulu. (Tinjauan PR #32)
+function kabarTempel(kelas, isi){
+  if (!tempelBox) return;
+  tempelBox.style.display = 'block';
+  tempelBox.className = 'panel ' + kelas;
+  tempelBox.innerHTML = isi;
+}
+
+function ambilDariTempelan(teks){
+  // Panjang diperiksa SEBELUM regex apa pun jalan. Tempelan raksasa ditolak
+  // sebagai kalimat, bukan dijalankan sampai halamannya menggantung.
+  if (teks.length > POLA.maks) {
+    return {terlaluPanjang: true};
+  }
+  const satu = (p, k) => { const m = teks.match(new RegExp(p)); return m ? m[k || 1] : null; };
+  return {
+    terlaluPanjang: false,
+    invoice:  satu(POLA.inv),
+    webstruk: satu(POLA.webstruk),
+    masuk:    satu(POLA.masuk),
+  };
+}
+
+function prosesTempelan(){
+  if (!tempel) return;
+  const teks = tempel.value;
+  if (!teks.trim()) { if (tempelBox) tempelBox.style.display = 'none'; return; }
+
+  const hasil = ambilDariTempelan(teks);
+
+  if (hasil.terlaluPanjang) {
+    // Ditolak dengan kalimat, dan kotaknya dikosongkan supaya teks raksasa
+    // itu tidak menggantung di memori halaman.
+    tempel.value = '';
+    kabarTempel('bad', 'Teks yang ditempel terlalu panjang (lebih dari '
+      + POLA.maks.toLocaleString('id-ID') + ' karakter). '
+      + 'Tempel hanya pesan notanya, atau ketik nomor notanya di bawah.');
+    return;
+  }
+
+  if (hasil.invoice) {
+    if (nvInput) nvInput.value = hasil.invoice;
+    if (exempt)  exempt.value = '';
+    if (webstruk) webstruk.value = hasil.webstruk || '';
+    // Teks mentahnya dibuang begitu pengenalnya diambil. Kotaknya tidak
+    // menyimpan alamat dan saldo deposit lebih lama dari yang diperlukan.
+    tempel.value = '';
+    kabarTempel('good', '<b>Nomor nota terambil</b><br>' + hasil.invoice
+      + (hasil.masuk ? ' · masuk ' + hasil.masuk : '')
+      + '<div style="margin-top:6px;font-size:13px">Memeriksa ke NEVIRA…</div>');
+    terakhirDicek = '';
+    cekNota();
+    return;
+  }
+
+  // Tidak ketemu berarti tidak ketemu. Angka pendek TIDAK diterima sebagai
+  // gantinya: 132 baris di riwayat membubuhkan nama bulan dengan tangan
+  // justru karena angka pendek tidak unik, dan menebaknya akan menautkan
+  // complaint ke order orang lain.
+  if (hasil.webstruk && webstruk) webstruk.value = hasil.webstruk;
+  kabarTempel('bad', '<b>Nomor nota tidak ditemukan di teks yang ditempel.</b>'
+    + (hasil.webstruk ? '<br>Tautan webstruk-nya tersimpan sebagai rujukan.' : '')
+    + '<div style="margin-top:6px;font-size:13px">Ketik nomor notanya di kolom bawah.</div>');
+}
+
+if (tempel) {
+  tempel.addEventListener('paste', () => setTimeout(prosesTempelan, 0));
+  tempel.addEventListener('change', prosesTempelan);
+}
+
+/* ---------- Kolom penyelesaian muncul hanya kalau dicentang ---------- */
+const diTempat = el('ditempat');
+const diTempatBlok = el('ditempat-blok');
+
+function tampilkanPenyelesaian(){
+  if (!diTempat || !diTempatBlok) return;
+  const aktif = diTempat.checked;
+  diTempatBlok.style.display = aktif ? 'block' : 'none';
+  // required dipasang lewat skrip, bukan di markup: kolom yang tersembunyi
+  // tapi required membuat peramban menolak kirim tanpa memperlihatkan
+  // kolom mana yang salah — form yang macet tanpa keterangan.
+  for (const id of ['res', 'tl']) {
+    const f = el(id);
+    if (f) f.required = aktif;
+  }
+}
+if (diTempat) diTempat.addEventListener('change', tampilkanPenyelesaian);
+tampilkanPenyelesaian();
 </script>
 @endsection
