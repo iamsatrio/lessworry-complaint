@@ -195,6 +195,10 @@ select[aria-invalid=true],textarea[aria-invalid=true]{border-color:var(--danger)
   margin:0 auto 14px;font-size:24px}
 .empty h3{margin-bottom:6px}
 .empty p{color:var(--muted);font-size:14px;margin:0 0 18px}
+/* Saran cara mengubah kueri di halaman nol hasil: dibaca sebagai daftar,
+   bukan sebagai paragraf yang harus diurai sendiri. (API-38 #1) */
+.empty .saran{list-style:none;margin:0 0 18px;padding:0;color:var(--muted);font-size:14px}
+.empty .saran li{margin:4px 0}
 
 /* ---------- Lain ---------- */
 .muted{color:var(--muted)}
