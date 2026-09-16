@@ -17,6 +17,11 @@ use Tests\TestCase;
  * Keputusan Modrić: yang disimpulkan dari peran adalah NILAI BAWAANNYA, bukan
  * kanalnya. Kanal ada tiga dan peran hanya dua — WA Outlet diterima kasir
  * juga — jadi kolomnya tetap tampil dan pilihan manual menimpa bawaan.
+ *
+ * Kolomnya kini tiga radio, bukan select (API-86 #4). Jaminannya sama persis;
+ * yang berubah hanya bentuk yang diperiksa — `checked` menggantikan
+ * `selected`, dan "belum memilih" tidak lagi butuh opsi kosong: pada radio ia
+ * adalah keadaan yang memang tidak ada centangnya.
  */
 class KanalDariPeranTest extends TestCase
 {
@@ -33,34 +38,46 @@ class KanalDariPeranTest extends TestCase
         ]);
     }
 
-    private function selectKanal(string $role): string
+    /** Grup radio kanal, dipotong dari markup form intake. */
+    private function grupKanal(string $role): string
     {
-        $html = $this->actingAs($this->userAs($role))
-            ->get('/complaints/create')->assertOk()->getContent();
+        return $this->potongGrup(
+            $this->actingAs($this->userAs($role))
+                ->get('/complaints/create')->assertOk()->getContent()
+        );
+    }
 
-        preg_match('/<select id="ch".*?<\/select>/s', $html, $m);
+    private function potongGrup(string $html): string
+    {
+        preg_match('/<fieldset class="pilihan"[^>]*>\s*<legend>Masuk lewat.*?<\/fieldset>/s', $html, $m);
 
         $this->assertNotEmpty($m, 'Kolom kanal tidak ditemukan di form intake.');
 
         return $m[0];
     }
 
+    /** Radio yang tercentang untuk satu kanal. */
+    private function pola(string $kanal): string
+    {
+        return '/<input type="radio" name="channel" value="'.preg_quote($kanal, '/').'"[^>]*\bchecked\b/s';
+    }
+
     public function test_kasir_membuka_form_dengan_kanal_direct_kasir(): void
     {
         $this->assertMatchesRegularExpression(
-            '/<option value="kasir"[^>]*\bselected\b/',
-            $this->selectKanal('kasir')
+            $this->pola('kasir'),
+            $this->grupKanal('kasir')
         );
     }
 
     public function test_customer_care_tidak_lagi_mewarisi_direct_kasir(): void
     {
-        $select = $this->selectKanal('customer_care');
+        $grup = $this->grupKanal('customer_care');
 
-        $this->assertMatchesRegularExpression('/<option value="wa_cc"[^>]*\bselected\b/', $select);
+        $this->assertMatchesRegularExpression($this->pola('wa_cc'), $grup);
         $this->assertDoesNotMatchRegularExpression(
-            '/<option value="kasir"[^>]*\bselected\b/',
-            $select,
+            $this->pola('kasir'),
+            $grup,
             'Customer Care kembali membuka form dengan kanal Direct Kasir.'
         );
     }
@@ -72,10 +89,10 @@ class KanalDariPeranTest extends TestCase
     public function test_ketiga_kanal_tetap_bisa_dipilih(): void
     {
         foreach (['kasir', 'customer_care'] as $role) {
-            $select = $this->selectKanal($role);
+            $grup = $this->grupKanal($role);
 
             foreach (array_keys(config('complaint.channels')) as $kunci) {
-                $this->assertStringContainsString('value="'.$kunci.'"', $select);
+                $this->assertStringContainsString('value="'.$kunci.'"', $grup);
             }
         }
     }
@@ -86,12 +103,12 @@ class KanalDariPeranTest extends TestCase
             ->withSession(['_old_input' => ['channel' => 'wa_outlet']])
             ->get('/complaints/create')->assertOk()->getContent();
 
-        preg_match('/<select id="ch".*?<\/select>/s', $html, $m);
+        $grup = $this->potongGrup($html);
 
-        $this->assertMatchesRegularExpression('/<option value="wa_outlet"[^>]*\bselected\b/', $m[0]);
+        $this->assertMatchesRegularExpression($this->pola('wa_outlet'), $grup);
         $this->assertDoesNotMatchRegularExpression(
-            '/<option value="kasir"[^>]*\bselected\b/',
-            $m[0],
+            $this->pola('kasir'),
+            $grup,
             'Bawaan peran menimpa isian yang sudah dipilih petugas.'
         );
     }
@@ -103,25 +120,29 @@ class KanalDariPeranTest extends TestCase
      */
     public function test_peran_tanpa_bawaan_harus_memilih(): void
     {
-        $select = $this->selectKanal('supervisor');
+        $grup = $this->grupKanal('supervisor');
 
-        $this->assertMatchesRegularExpression('/<option value="" disabled[^>]*\bselected\b/', $select);
-
+        // Tidak ada opsi kosong untuk dipilih: yang dijaga adalah tidak ada
+        // SATU PUN radio yang tercentang, jadi tidak ada kanal yang tersimpan
+        // diam-diam. `required` di tiap radio yang menuntut salah satunya.
         foreach (array_keys(config('complaint.channels')) as $kunci) {
-            $this->assertDoesNotMatchRegularExpression(
-                '/<option value="'.preg_quote($kunci, '/').'"[^>]*\bselected\b/',
-                $select
-            );
+            $this->assertDoesNotMatchRegularExpression($this->pola($kunci), $grup);
         }
+
+        $this->assertSame(
+            count(config('complaint.channels')),
+            substr_count($grup, 'required'),
+            'Radio kanal kehilangan required — supervisor bisa mengirim form tanpa memilih kanal.'
+        );
     }
 
     public function test_peran_yang_punya_bawaan_tidak_dipaksa_memilih(): void
     {
         foreach (['kasir', 'customer_care'] as $role) {
-            $this->assertStringNotContainsString(
-                '— pilih kanal —',
-                $this->selectKanal($role),
-                'Peran yang bawaannya sudah benar tidak perlu dipaksa memilih.'
+            $this->assertSame(
+                1,
+                preg_match_all('/\bchecked\b/', $this->grupKanal($role)),
+                'Peran yang bawaannya sudah benar harus membuka form dengan tepat satu kanal tercentang.'
             );
         }
     }

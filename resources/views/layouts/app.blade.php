@@ -147,6 +147,17 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;flex:
 input[type=radio]{border-radius:50%}
 input[type=checkbox]:focus-visible,input[type=radio]:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 
+/* Grup radio: fieldset supaya pembaca layar mengumumkan pertanyaannya
+   sekali, bukan mengulang tiap barisnya. Legend-nya dibuat menyamai label
+   kolom lain — yang berubah bentuknya, bukan tampilannya. (API-86 #4) */
+fieldset.pilihan{border:0;padding:0;margin:0;min-width:0}
+fieldset.pilihan>legend{display:block;width:100%;padding:0;
+  font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--muted);margin:18px 0 7px}
+fieldset.pilihan .pick{margin-top:0}
+/* Kolom yang salah ditandai di seluruh grupnya, bukan di satu barisnya. */
+fieldset.pilihan[aria-describedby]>legend{color:var(--danger)}
+
 /* Label yang membungkus kotak centang adalah baris pilihan, bukan judul
    kolom — jadi tidak mewarisi huruf kapital dan warna redup dari label. */
 label.pick{display:flex;gap:10px;align-items:center;min-height:44px;margin:0;padding:6px 0;

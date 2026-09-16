@@ -180,19 +180,6 @@
               @error('sub_category') aria-invalid="true" aria-describedby="sub-error" @enderror></select>
       @error('sub_category')<p class="err-field" id="sub-error">{{ $message }}</p>@enderror
     </div>
-    {{-- Bobot memakai kosakata tim: Ringan / Sedang / Berat. Tidak ada yang
-         terpilih lebih dulu — bobot menentukan tenggat DAN siapa yang boleh
-         menutup, jadi ia harus dipilih, bukan kebetulan. --}}
-    <div><label for="bob">Bobot <span class="req">*</span></label>
-      <select id="bob" name="bobot" required
-              @error('bobot') aria-invalid="true" aria-describedby="bob-error" @enderror>
-        <option value="" disabled @selected(blank($nilai('bobot')))>— pilih bobot —</option>
-        @foreach(config('complaint.bobot') as $k=>$v)
-          <option value="{{ $k }}" @selected($nilai('bobot')===$k)>{{ $v }}</option>
-        @endforeach
-      </select>
-      @error('bobot')<p class="err-field" id="bob-error">{{ $message }}</p>@enderror
-    </div>
     <div><label for="lay">Layanan <span class="req">*</span></label>
       <select id="lay" name="layanan" required
               @error('layanan') aria-invalid="true" aria-describedby="lay-error" @enderror>
@@ -204,6 +191,36 @@
       @error('layanan')<p class="err-field" id="lay-error">{{ $message }}</p>@enderror
     </div>
   </div>
+
+  {{-- Bobot memakai kosakata tim: Ringan / Sedang / Berat. Tidak ada yang
+       terpilih lebih dulu — bobot menentukan tenggat DAN siapa yang boleh
+       menutup, jadi ia harus dipilih, bukan kebetulan.
+
+       Radio, bukan select: tiga opsi terpapar seluruhnya seketika dan cuma
+       butuh satu ketukan, sementara select menyembunyikan dua dari tiga
+       sampai dibuka. Untuk kolom yang konsekuensinya perlu dibandingkan
+       — tenggat DAN wewenang penutupan — menyembunyikannya justru mahal.
+
+       Kategori (8 opsi) dan Layanan (6 opsi) sengaja TETAP select: radio
+       sebanyak itu menambah panjang halaman yang sudah jadi masalah
+       tersendiri. Batasnya di sekitar 5 opsi, bukan keseragaman. (API-86 #4)
+
+       Keluar dari .row di atas karena tingginya tiga baris: di dalam flex
+       row yang align-items-nya flex-end, ia menyisakan rongga di atas tiga
+       kolom lainnya. --}}
+  <fieldset class="pilihan" @error('bobot') aria-describedby="bob-error" @enderror>
+    <legend>Bobot <span class="req">*</span></legend>
+    @foreach(config('complaint.bobot') as $k=>$v)
+      <label class="pick">
+        <input type="radio" name="bobot" value="{{ $k }}" required
+               @if($loop->first) id="bob" @endif
+               @checked($nilai('bobot')===$k)>
+        {{ $v }}
+      </label>
+    @endforeach
+  </fieldset>
+  @error('bobot')<p class="err-field" id="bob-error">{{ $message }}</p>@enderror
+
   <label for="desc">Isi keluhan <span class="req">*</span></label>
   <textarea id="desc" name="description" required
     @error('description') aria-invalid="true" aria-describedby="desc-error" @enderror
@@ -225,26 +242,27 @@
 <div class="card">
   <div class="eyebrow">Siapa yang melapor</div>
   @php $kanal = $nilai('channel', auth()->user()->defaultChannel()); @endphp
-  <label for="ch">Masuk lewat <span class="req">*</span></label>
-  <select id="ch" name="channel" required
-          @error('channel') aria-invalid="true" aria-describedby="ch-error" @enderror>
-    {{-- Kanal ada tiga, peran hanya dua: WA Outlet diterima kasir juga.
-         Jadi yang disimpulkan dari peran adalah NILAI BAWAANNYA, bukan
-         kanalnya — kolomnya tetap tampil, ketiga opsinya tetap bisa
-         dipilih, dan pilihan manual menimpa bawaan.
+  {{-- Kanal ada tiga, peran hanya dua: WA Outlet diterima kasir juga.
+       Jadi yang disimpulkan dari peran adalah NILAI BAWAANNYA, bukan
+       kanalnya — kolomnya tetap tampil, ketiga opsinya tetap bisa
+       dipilih, dan pilihan manual menimpa bawaan. (API-38 #4)
 
-         Untuk peran yang bawaannya memang tidak ada (supervisor, admin)
-         opsi kosong tetap dipasang. Tanpa itu opsi pertama — Direct
-         Kasir — terpilih diam-diam, persis kesalahan yang sedang
-         diperbaiki. Yang tidak dilakukan adalah memaksa memilih pada
-         peran yang bawaannya sudah benar. (API-38 #4) --}}
-    @if(blank(auth()->user()->defaultChannel()))
-      <option value="" disabled @selected(blank($kanal))>— pilih kanal —</option>
-    @endif
+       Tiga opsi, jadi radio dan bukan select (API-86 #4). Opsi kosong yang
+       dulu dipasang untuk peran tanpa bawaan tidak diperlukan lagi: pada
+       radio, "belum memilih" adalah keadaan yang memang tidak ada
+       centangnya — tidak ada opsi pertama yang terpilih diam-diam. `required`
+       di tiap radio menuntut satu di antaranya dipilih. --}}
+  <fieldset class="pilihan" @error('channel') aria-describedby="ch-error" @enderror>
+    <legend>Masuk lewat <span class="req">*</span></legend>
     @foreach(config('complaint.channels') as $k=>$v)
-      <option value="{{ $k }}" @selected($kanal===$k)>{{ $v }}</option>
+      <label class="pick">
+        <input type="radio" name="channel" value="{{ $k }}" required
+               @if($loop->first) id="ch" @endif
+               @checked($kanal===$k)>
+        {{ $v }}
+      </label>
     @endforeach
-  </select>
+  </fieldset>
   @error('channel')<p class="err-field" id="ch-error">{{ $message }}</p>@enderror
   @if(filled(auth()->user()->defaultChannel()) && blank($nilai('channel')))
     <p class="hint">Terisi dari peranmu. Ganti kalau keluhan ini sebenarnya masuk lewat kanal lain.</p>
@@ -397,6 +415,10 @@ function simpanDraft(){
   const isi = {};
   for (const f of form.elements) {
     if (!f.name || f.type === 'file' || f.type === 'hidden') continue;
+    // Tiap radio punya value-nya sendiri terlepas dari tercentang atau tidak.
+    // Tanpa saringan ini, radio TERAKHIR dalam grup yang tersimpan ke draft —
+    // kasir memilih Ringan, draftnya pulang sebagai Berat.
+    if (f.type === 'radio' && !f.checked) continue;
     isi[f.name] = f.type === 'checkbox' ? f.checked : f.value;
   }
   try{ localStorage.setItem(KEY, JSON.stringify({isi, waktu: Date.now()})); }catch(e){}
