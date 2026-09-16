@@ -33,6 +33,21 @@
     <a class="btn ghost shrink" href="{{ route('complaints.index', $saringan) }}">Hapus</a>
   @endif
 </form>
+{{-- Cakupan pencarian ditulis, bukan dibiarkan ditebak.
+
+     Papan kerja apa adanya hanya menampilkan complaint terbuka; pencarian
+     sengaja melewati batas itu. Keduanya masuk akal — yang tidak boleh adalah
+     pembacanya tidak tahu yang mana yang sedang berlaku. Kalimat ini yang
+     membedakan "tidak ada hasilnya" dari "tidak dicari di situ". (API-38 #1) --}}
+<p class="hint" id="cakupan-cari" style="margin-top:-8px;margin-bottom:18px">
+  @if(isset($saringan['status']))
+    Pencarian dibatasi ke complaint berstatus "{{ config('complaint.statuses.'.$saringan['status'], $saringan['status']) }}".
+    <a href="{{ route('complaints.index', array_merge(array_diff_key($saringan, ['status' => true]), $mencari ? ['q' => $q] : [])) }}">Cari di seluruh complaint</a>
+  @else
+    Pencarian mencakup seluruh complaint, termasuk yang sudah ditutup.
+    Papan kerja tanpa pencarian hanya menampilkan yang masih terbuka.
+  @endif
+</p>
 
 <details class="filters" @if(filled($saringan)) open @endif>
   <summary>Saringan lain</summary>
@@ -87,9 +102,39 @@
       <div class="mark">🧺</div>
       <h3>Tidak ada complaint yang cocok</h3>
       @if($mencari)
-        <p>Tidak ada complaint dengan "{{ $q }}" — pencarian ini sudah mencakup tiket yang
-          sudah ditutup. Periksa lagi ejaan nomor tiket atau nomor notanya.</p>
-        <a class="btn ghost" href="{{ route('complaints.index') }}">Kembali ke papan kerja</a>
+        {{-- Halaman nol hasil: kueri aslinya dibawa kembali dan tetap bisa
+             disunting di kotak Cari di atas, jalan keluarnya konkret, dan
+             "catat complaint baru" TIDAK ditawarkan di sini — orang yang
+             mencari sedang mencari yang sudah ada, bukan hendak membuat yang
+             baru. Menawarkannya dulu adalah yang membuat halaman ini
+             menyarankan mencatat ulang complaint yang ada di database.
+             (API-38 #1) --}}
+        <p>Tidak ada complaint dengan <b>"{{ $q }}"</b> — pencarian ini sudah mencakup tiket yang sudah ditutup.</p>
+        <ul class="saran">
+          <li>Periksa ejaan nomor tiket atau nomor notanya.</li>
+          <li>Coba sebagiannya saja — potongan nomor, atau nama depan pelapor.</li>
+          @if(filled($saringan))
+            <li>Saringan lain masih menyala dan ikut membatasi hasilnya.</li>
+          @endif
+        </ul>
+        <p>
+          <button type="button" class="btn ghost" id="ubah-kueri">Ubah kata pencarian</button>
+          @if(filled($saringan))
+            <a class="btn ghost" href="{{ route('complaints.index', ['q' => $q]) }}">Cari tanpa saringan lain</a>
+          @endif
+        </p>
+        <a class="muted small" href="{{ route('complaints.index') }}">Kembali ke papan kerja</a>
+        {{-- Kotak Cari sudah membawa kuerinya; tombol di atas memindahkan
+             kursor ke sana dan menyorot isinya, jadi menyunting tinggal
+             mengetik. Penjaganya sama seperti skrip lain di repositori ini:
+             elemen yang hilang tidak boleh mematikan skripnya. --}}
+        <script>
+        (function(){
+          var tombol = document.getElementById('ubah-kueri'), kotak = document.getElementById('q');
+          if(!tombol || !kotak) return;
+          tombol.addEventListener('click', function(){ kotak.focus(); kotak.select(); });
+        })();
+        </script>
       @else
         <p>Ubah saringan di atas, atau catat complaint baru kalau ada keluhan yang masuk.</p>
         @if(auth()->user()->canCreateComplaint())

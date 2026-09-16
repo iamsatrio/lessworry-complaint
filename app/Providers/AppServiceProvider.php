@@ -33,6 +33,15 @@ class AppServiceProvider extends ServiceProvider
          */
         Gate::define('dashboard.view', fn (User $user): bool => $user->canViewDashboard());
 
+        /*
+         * Mengelola tagihan bulanan. (API-73)
+         *
+         * Wewenang KEDUA, bukan turunan dari yang pertama: supervisor membaca
+         * papan alarm yang sama tapi tidak mengubah nominal tagihan dan tidak
+         * menyatakannya sudah dibayar.
+         */
+        Gate::define('dashboard.manage_tagihan', fn (User $user): bool => $user->canManageTagihan());
+
         // Antarmuka berbahasa Indonesia: tanggal dan waktu relatif ikut diterjemahkan.
         Carbon::setLocale('id');
 

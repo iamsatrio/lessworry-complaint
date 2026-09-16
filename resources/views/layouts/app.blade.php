@@ -195,6 +195,10 @@ select[aria-invalid=true],textarea[aria-invalid=true]{border-color:var(--danger)
   margin:0 auto 14px;font-size:24px}
 .empty h3{margin-bottom:6px}
 .empty p{color:var(--muted);font-size:14px;margin:0 0 18px}
+/* Saran cara mengubah kueri di halaman nol hasil: dibaca sebagai daftar,
+   bukan sebagai paragraf yang harus diurai sendiri. (API-38 #1) */
+.empty .saran{list-style:none;margin:0 0 18px;padding:0;color:var(--muted);font-size:14px}
+.empty .saran li{margin:4px 0}
 
 /* ---------- Lain ---------- */
 .muted{color:var(--muted)}
@@ -453,6 +457,14 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
              berbeda, pada hari yang berbeda, dari pertanyaan "berapa
              complaint minggu ini". (API-43) --}}
         <a href="{{ route('reports.kerugian') }}" class="{{ request()->routeIs('reports.kerugian*') ? 'active' : '' }}">Kerugian</a>
+        {{-- Tagihan berdiri di belakang gerbang yang sama dengan Dashboard
+             Operations: yang membaca papan paginya juga yang membaca daftar
+             tagihannya. Mengubahnya butuh wewenang kedua yang lebih sempit,
+             dan itu dijawab tombol di dalam halaman — bukan menu yang hilang.
+             (API-73) --}}
+        @if(auth()->user()->canViewDashboard())
+          <a href="{{ route('tagihan.index') }}" class="{{ request()->routeIs('tagihan.*') ? 'active' : '' }}">Tagihan</a>
+        @endif
         @if(auth()->user()->canManageUsers())
           <a href="{{ route('users.index') }}" class="{{ request()->routeIs('users.*') ? 'active' : '' }}">Pengguna</a>
         @endif

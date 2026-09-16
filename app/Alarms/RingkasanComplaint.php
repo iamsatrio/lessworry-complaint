@@ -32,7 +32,7 @@ final class RingkasanComplaint
      * @param  Builder<Complaint>  $query
      * @param  string  $urutkan  Kolom yang menentukan "terburuk lebih dulu" — naik.
      * @param  callable(Complaint):string  $umur
-     * @return list<array{id:int,tiket:string,outlet:string,umur:string}>
+     * @return list<array{id:int,tiket:string,outlet:string,umur:string,tautan:string}>
      */
     public static function daftar(Builder $query, string $urutkan, callable $umur): array
     {
@@ -45,6 +45,10 @@ final class RingkasanComplaint
             // baris yang nama outletnya tidak punya padanan. (API-28)
             'outlet' => $complaint->outlet->name ?? 'Tanpa outlet',
             'umur' => $umur($complaint),
+            // Tujuan barisnya ikut di dalam barisnya, tidak ditebak kartunya.
+            // Kartu yang menebak "ini pasti complaint" akan menerbitkan
+            // tautan ke complaint untuk baris tagihan. (API-73)
+            'tautan' => route('complaints.show', $complaint->id),
         ])->all());
     }
 

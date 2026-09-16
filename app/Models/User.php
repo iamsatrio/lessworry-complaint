@@ -327,6 +327,28 @@ class User extends Authenticatable
     }
 
     /**
+     * Mengelola tagihan bulanan — wewenang `dashboard.manage_tagihan`.
+     * (API-73)
+     *
+     * TERPISAH dari `dashboard.view`, dan sengaja lebih sempit. Melihat alarm
+     * tagihan adalah membaca pekerjaan hari ini; mengubah nominalnya
+     * menyentuh keuangan jaringan, dan menandainya "sudah dibayar"
+     * memadamkan satu-satunya pengingat yang ada.
+     *
+     * Daftar perannya di `config/complaint.php` → `tagihan_roles`. Yang
+     * menegakkannya middleware `can:dashboard.manage_tagihan` di rutenya;
+     * halaman Tagihan menyembunyikan tombolnya memakai method yang sama,
+     * supaya keduanya tidak bisa berbeda pendapat.
+     */
+    public function canManageTagihan(): bool
+    {
+        /** @var array<int,string> $peran */
+        $peran = (array) config('complaint.tagihan_roles', []);
+
+        return in_array($this->role, $peran, true);
+    }
+
+    /**
      * Penanda draft form intake di penyimpanan perangkat.
      *
      * Perangkat outlet dipakai bergantian, jadi draft harus terikat pengguna:
