@@ -30,6 +30,24 @@ use Throwable;
  *   3. lingkup    — kasir hanya boleh nota outletnya sendiri.
  *
  * Aturan cocok-persis ditegakkan NeviraClient::resolveTransaction().
+ *
+ * ## Gerbang ini khusus jalur HTTP — perintah konsol sengaja di luar
+ *
+ * Ketiga pengaman di atas semuanya berpangkal pada seorang PENGGUNA: perannya
+ * diperiksa, jatah lajunya dihitung per pengguna, dan lingkup outletnya
+ * diambil dari akunnya. Perintah shell tidak punya pengguna — tidak ada peran
+ * yang bisa ditolak, tidak ada akun yang jatahnya dihitung, tidak ada outlet
+ * yang membatasinya. Memaksa `SyncNeviraOutlets` dan `HitungLayananPerNota`
+ * lewat sini menuntut mengarang pengguna palsu berhak penuh, dan gerbang yang
+ * punya jalan pintas resmi berhenti jadi gerbang.
+ *
+ * Batas wewenang perintah konsol adalah akses shell ke server itu sendiri,
+ * dan itu batas yang lebih ketat daripada peran mana pun di aplikasi ini.
+ *
+ * Karena itu NeviraChokePointTest hanya menyusuri app/Http/Controllers/*.php,
+ * dan itu disengaja, bukan celah yang terlewat. Kalau kelak ada jalur ketiga
+ * yang punya pengguna — antrean job yang berjalan atas nama seseorang,
+ * misalnya — jalur itu WAJIB lewat sini. (Keputusan API-58 nomor 2)
  */
 class NeviraGate
 {
