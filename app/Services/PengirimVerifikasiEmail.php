@@ -88,6 +88,33 @@ class PengirimVerifikasiEmail
     }
 
     /**
+     * Buang kredensial dari pesan galat sebelum ia masuk log. (API-37 nomor 1)
+     *
+     * Kegagalan koneksi biasa hanya memuat nama host. Yang membawa DSN utuh
+     * adalah galat dari DSN yang salah bentuk dan beberapa jalur
+     * TransportException lain — jarang, tapi persis jalur yang muncul saat
+     * seseorang baru salah menulis `.env`, yaitu saat orang paling mungkin
+     * menempelkan isi log ke tempat lain untuk minta tolong.
+     *
+     * Nama host sengaja DIBIARKAN: itu yang berguna saat menelusuri, dan ia
+     * bukan rahasia. Yang dibuang bagian `user:pass` saja, diganti penanda
+     * yang terlihat supaya pembacanya tahu ada yang disensor dan tidak
+     * mengira DSN-nya memang tidak berkredensial.
+     */
+    public static function tanpaKredensial(string $pesan): string
+    {
+        // Menyensor sampai `@` TERAKHIR sebelum pemisah jalur berikutnya
+        // akan salah pada pesan yang memuat alamat email sesudah DSN-nya;
+        // pola ini berhenti di `@` pertama sesudah `//`, sama seperti
+        // pembacaan URL yang sebenarnya.
+        return (string) preg_replace(
+            '#(?<=://)[^/@\s:]+:[^/@\s]*@#',
+            '[kredensial-disensor]@',
+            $pesan
+        );
+    }
+
+    /**
      * Dua sumber, dua penghitung — sengaja.
      *
      * Batas 3 per 10 menit di issue adalah batas untuk PERMINTAAN KIRIM ULANG.
@@ -116,12 +143,19 @@ class PengirimVerifikasiEmail
                 new VerifikasiEmail($user, $this->tautan($user), self::UMUR_MENIT)
             );
         } catch (Throwable $e) {
-            // Pesan galat SMTP bisa memuat nama host dan kredensial. Ia boleh
-            // masuk log server; ia tidak pernah boleh sampai ke layar orang.
+            // Pesan galat SMTP bisa memuat nama host dan kredensial. Ia tidak
+            // pernah boleh sampai ke layar orang — dan, sejak API-37 nomor 1,
+            // juga tidak boleh masuk log apa adanya. Aturan repositori ini
+            // tidak membuat pengecualian untuk log server.
             Log::error('Gagal mengirim email verifikasi.', [
                 'user_id' => $user->id,
                 'sumber' => $sumber,
-                'error' => $e->getMessage(),
+                // Jenis dan kode galat yang menelusuri, bukan kalimatnya:
+                // keduanya cukup membedakan "SMTP tidak bisa dihubungi" dari
+                // "alamat ditolak", dan tidak satu pun bisa memuat rahasia.
+                'jenis' => get_class($e),
+                'kode' => $e->getCode(),
+                'error' => self::tanpaKredensial($e->getMessage()),
             ]);
 
             $this->catatHasil(gagal: true);

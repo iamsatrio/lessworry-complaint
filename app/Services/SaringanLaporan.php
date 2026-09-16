@@ -35,7 +35,15 @@ final class SaringanLaporan
         public readonly bool $satuanDipilih,
     ) {}
 
-    public static function dariPermintaan(LaporanFilterRequest $request): self
+    /**
+     * @param  Carbon|null  $bawaanDari  awal rentang kalau tidak ada `from` di
+     *                                   permintaannya. Halaman Laporan menjawab
+     *                                   "bagaimana bulan ini" dan cukup dengan
+     *                                   30 hari; halaman Kerugian menjawab
+     *                                   "berapa yang keluar sejak awal" dan
+     *                                   bawaannya 12 bulan. (API-43)
+     */
+    public static function dariPermintaan(LaporanFilterRequest $request, ?Carbon $bawaanDari = null): self
     {
         /** @var User $user */
         $user = $request->user();
@@ -48,7 +56,8 @@ final class SaringanLaporan
         // bisa menampilkan apa pun. `startOfDay()` di sisi `from` menjaga
         // ujung yang sama tetap benar kalau yang masuk berisi jam.
         // (Tinjauan Maldini PR #27, dan API-56)
-        $dari = $request->date('from')?->startOfDay() ?? now()->subDays(30)->startOfDay();
+        $dari = $request->date('from')?->startOfDay()
+            ?? ($bawaanDari?->copy()->startOfDay() ?? now()->subDays(30)->startOfDay());
         $sampai = $request->date('to')?->endOfDay() ?? now()->endOfDay();
 
         // Satuan waktunya ditentukan rentang tanggalnya sendiri KECUALI

@@ -447,7 +447,12 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
         @endif
         <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">Ringkasan</a>
         <a href="{{ route('complaints.index') }}" class="{{ request()->routeIs('complaints.index') ? 'active' : '' }}">Papan Kerja</a>
-        <a href="{{ route('reports.index') }}" class="{{ request()->routeIs('reports.*') ? 'active' : '' }}">Laporan</a>
+        <a href="{{ route('reports.index') }}" class="{{ request()->routeIs('reports.index') || request()->routeIs('reports.export*') ? 'active' : '' }}">Laporan</a>
+        {{-- Kerugian berdiri sendiri di navigasi, bukan bagian di dalam
+             Laporan: pertanyaan "berapa uang yang keluar" dibawa orang yang
+             berbeda, pada hari yang berbeda, dari pertanyaan "berapa
+             complaint minggu ini". (API-43) --}}
+        <a href="{{ route('reports.kerugian') }}" class="{{ request()->routeIs('reports.kerugian*') ? 'active' : '' }}">Kerugian</a>
         @if(auth()->user()->canManageUsers())
           <a href="{{ route('users.index') }}" class="{{ request()->routeIs('users.*') ? 'active' : '' }}">Pengguna</a>
         @endif
@@ -470,6 +475,9 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
 <main>
   @if(session('status'))<div class="flash">{{ session('status') }}</div>@endif
   @if(session('warning'))<div class="flash warn">{{ session('warning') }}</div>@endif
+  {{-- Kenapa tiketnya belum tertutup padahal kasir sudah menanganinya. Punya
+       kunci sendiri supaya tidak saling menimpa dengan peringatan nota kembar. --}}
+  @if(session('penutupan_ditolak'))<div class="flash warn" id="penutupan-ditolak">{{ session('penutupan_ditolak') }}</div>@endif
   @if($errors->any())
     @php
       /* Peta nama-kolom => id kontrolnya, diumumkan halaman lewat
