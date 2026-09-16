@@ -172,4 +172,58 @@ class EksporCsvRumusTest extends TestCase
         $this->assertSame('Nomor Tiket', $baris[0][0]);
         $this->assertNotContains("'Nomor Tiket", $baris[0]);
     }
+
+    /* ---------- Permukaan kedua: unduhan halaman Kerugian (API-99) ---------- */
+
+    /**
+     * Rekap kedua, penulis yang sama.
+     *
+     * `RekapBiaya` (unduhan `/reports/kerugian`, API-43) masuk lewat
+     * `EksporCsv` persis seperti `RekapEkspor` — perisainya duduk di penulis,
+     * bukan di penyusun rekapnya, jadi permukaan ini ikut tertutup tanpa
+     * tambahan apa pun. Yang dikunci di sini bukan perbaikan baru, melainkan
+     * kenyataan itu: rekap ketiga nanti tidak boleh menuntut perisai ketiga.
+     *
+     * `Nomor Nota` yang dipilih karena ia satu-satunya kolom di rekap ini
+     * yang isinya diketik kasir (`max:64`, tanpa pola).
+     *
+     * @return list<list<string>>
+     */
+    private function unduhKerugian(User $user): array
+    {
+        $csv = $this->actingAs($user)
+            ->get('/reports/kerugian/export?from=2026-08-01&to=2026-08-31')
+            ->assertOk()
+            ->streamedContent();
+
+        return array_map('str_getcsv', array_filter(explode("\n", trim($csv))));
+    }
+
+    public function test_nomor_nota_berawalan_rumus_tidak_lolos_telanjang_di_unduhan_kerugian(): void
+    {
+        $this->complaint(['nevira_transaction_number' => '=1+1']);
+
+        $baris = $this->unduhKerugian($this->supervisor());
+        $kolom = array_flip($baris[0]);
+        $sel = $baris[1][$kolom['Nomor Nota']];
+
+        $this->assertNotSame('=1+1', $sel, 'Nomor nota berawalan `=` ditulis telanjang ke unduhan Kerugian.');
+        $this->assertSame("'=1+1", $sel);
+    }
+
+    /**
+     * Kolom Biaya bertipe RUPIAH, dan rekap ini justru dibuat supaya totalnya
+     * bisa dijumlah ulang di luar sistem. Perisai yang ikut menyentuhnya
+     * membuat kolom itu berhenti jadi bilangan.
+     */
+    public function test_kolom_biaya_di_unduhan_kerugian_tetap_bilangan_telanjang(): void
+    {
+        $this->complaint(['nevira_transaction_number' => '@SUM(A1:A9)']);
+
+        $baris = $this->unduhKerugian($this->supervisor());
+        $kolom = array_flip($baris[0]);
+
+        $this->assertSame("'@SUM(A1:A9)", $baris[1][$kolom['Nomor Nota']]);
+        $this->assertSame('30881208', $baris[1][$kolom['Biaya']]);
+    }
 }
