@@ -1,4 +1,20 @@
 @extends('layouts.app')
+{{-- Butir ringkasan galat di layout menautkan ke kolomnya lewat peta ini.
+
+     `note` sengaja TIDAK dipetakan: halaman ini punya dua form yang sama-sama
+     berkolom `note` — catatan perubahan di form status dan catatan
+     penanganan di bawahnya. Satu nama kolom tidak bisa menunjuk dua elemen,
+     dan menebak salah satunya menaruh pesan galat di kolom yang keliru.
+     Pesannya tetap muncul di ringkasan, hanya tidak jadi tautan. (API-86 #1) --}}
+@section('galat-anchor'){!! json_encode([
+  'status'              => 'st',
+  'pause_reason'        => 'pz',
+  'close_reason'        => 'cr',
+  'tindak_lanjut'       => 'tl',
+  'resolution'          => 'res',
+  'root_cause'          => 'rc',
+  'compensation_amount' => 'komp',
+]) !!}@endsection
 @section('title',$complaint->ticket_number)
 @section('content')
 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;margin-bottom:6px">
@@ -92,11 +108,13 @@
              select ke status LAMA: petugas yang memilih Close tanpa alasan
              harus memilih Close lagi sebelum bisa mengisi alasannya. --}}
         <label for="st">Status</label>
-        <select id="st" name="status" required>
+        <select id="st" name="status" required
+                @error('status') aria-invalid="true" aria-describedby="st-error" @enderror>
           @foreach(config('complaint.statuses') as $k=>$v)
             <option value="{{ $k }}" @selected(old('status', $complaint->status)===$k)>{{ $v }}</option>
           @endforeach
         </select>
+        @error('status')<p class="err-field" id="st-error">{{ $message }}</p>@enderror
 
         {{-- Jeda: penanda pada tiket Handling, bukan status keenam. Selama
              dijeda, hitungan SLA berhenti dan tenggatnya mundur sebanyak lama
@@ -108,20 +126,24 @@
              dibiarkan apa adanya. Penjaganya tetap server. --}}
         @if(auth()->user()->canPause($complaint))
           <label for="pz">Jeda SLA</label>
-          <select id="pz" name="pause_reason">
+          <select id="pz" name="pause_reason"
+                  @error('pause_reason') aria-invalid="true" aria-describedby="pz-error" @enderror>
             <option value="">Tidak dijeda — hitungan SLA berjalan</option>
             @foreach(config('complaint.pause_reasons') as $k=>$v)
               <option value="{{ $k }}" @selected(old('pause_reason', $complaint->pause_reason)===$k)>{{ $v }}</option>
             @endforeach
           </select>
+          @error('pause_reason')<p class="err-field" id="pz-error">{{ $message }}</p>@enderror
         @elseif($complaint->isPaused())
           {{-- Tetap bisa melanjutkan: arahnya aman, ia mengembalikan tiket ke
                hitungan SLA alih-alih menyembunyikannya. --}}
           <label for="pz">Jeda SLA</label>
-          <select id="pz" name="pause_reason">
+          <select id="pz" name="pause_reason"
+                  @error('pause_reason') aria-invalid="true" aria-describedby="pz-error" @enderror>
             <option value="menunggu_pelanggan" selected>Tetap dijeda — {{ $complaint->pauseReasonLabel() }}</option>
             <option value="">Lanjutkan, jalankan lagi hitungan SLA</option>
           </select>
+          @error('pause_reason')<p class="err-field" id="pz-error">{{ $message }}</p>@enderror
         @endif
         @if($complaint->isPaused())
           <p class="hint">Dijeda sejak {{ $complaint->paused_at->translatedFormat('d M Y, H:i') }}
@@ -136,29 +158,39 @@
              Close; laporan tetap bisa memisahkan yang selesai dari yang tidak
              berdasar. --}}
         <label for="cr" id="cr-label">Alasan penutupan <span class="req" id="cr-req" style="display:none">*</span></label>
-        <select id="cr" name="close_reason">
+        <select id="cr" name="close_reason"
+                @error('close_reason') aria-invalid="true" aria-describedby="cr-error" @enderror>
           <option value="" id="cr-kosong">— hanya diisi kalau statusnya Close —</option>
           @foreach(config('complaint.close_reasons') as $k=>$v)
             <option value="{{ $k }}" @selected(old('close_reason', $complaint->close_reason)===$k)>{{ $v }}</option>
           @endforeach
         </select>
+        @error('close_reason')<p class="err-field" id="cr-error">{{ $message }}</p>@enderror
 
         <label for="tl">Tindak lanjut</label>
-        <select id="tl" name="tindak_lanjut">
+        <select id="tl" name="tindak_lanjut"
+                @error('tindak_lanjut') aria-invalid="true" aria-describedby="tl-error" @enderror>
           <option value="">— belum ditentukan —</option>
           @foreach(config('complaint.tindak_lanjut') as $k=>$v)
             <option value="{{ $k }}" @selected(old('tindak_lanjut', $complaint->tindak_lanjut)===$k)>{{ $v }}</option>
           @endforeach
         </select>
+        @error('tindak_lanjut')<p class="err-field" id="tl-error">{{ $message }}</p>@enderror
 
         <label for="res">Tindakan penyelesaian</label>
         <textarea id="res" name="resolution" style="min-height:76px"
+          @error('resolution') aria-invalid="true" aria-describedby="res-error" @enderror
           placeholder="Apa yang dilakukan untuk menyelesaikan keluhan ini?">{{ $complaint->resolution }}</textarea>
+        @error('resolution')<p class="err-field" id="res-error">{{ $message }}</p>@enderror
         <label for="rc">Penyebab akar</label>
         <input id="rc" name="root_cause" value="{{ $complaint->root_cause }}"
+          @error('root_cause') aria-invalid="true" aria-describedby="rc-error" @enderror
           placeholder="Kenapa ini bisa terjadi?">
+        @error('root_cause')<p class="err-field" id="rc-error">{{ $message }}</p>@enderror
         <label for="komp">Kompensasi (Rp)</label>
-        <input id="komp" type="number" name="compensation_amount" min="0" inputmode="numeric" value="{{ $complaint->compensation_amount }}">
+        <input id="komp" type="number" name="compensation_amount" min="0" inputmode="numeric" value="{{ $complaint->compensation_amount }}"
+          @error('compensation_amount') aria-invalid="true" aria-describedby="komp-error" @enderror>
+        @error('compensation_amount')<p class="err-field" id="komp-error">{{ $message }}</p>@enderror
         <p class="hint">
           Batas wewenangmu:
           {{ auth()->user()->compensationLimit() === PHP_INT_MAX ? 'tanpa batas' : 'Rp '.number_format(auth()->user()->compensationLimit(),0,',','.') }}.

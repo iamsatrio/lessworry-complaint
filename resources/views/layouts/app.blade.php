@@ -173,6 +173,21 @@ button:hover,.btn:hover{background:var(--teal-deep);color:#fff}
 .err{background:var(--danger-soft);border-color:#f3c4c4;color:#a32e2e}
 .err b{font-family:var(--display)}
 .err ul{margin:6px 0 0 18px;padding:0}
+.err ul a{color:inherit;text-decoration:underline;text-underline-offset:3px}
+.err ul a:hover{text-decoration-thickness:2px}
+/* Ringkasan galat menerima fokus begitu halaman dimuat ulang dengan galat.
+   Tanpa penanda fokus, pengguna keyboard tidak melihat ke mana ia berpindah. */
+.err:focus{outline:2px solid var(--danger);outline-offset:3px}
+
+/* Pesan galat di kolomnya sendiri. Kalimatnya sama persis dengan butir di
+   ringkasan, supaya yang membaca ringkasan mengenali kalimat yang sama saat
+   sampai di kolomnya. Ringkasan sendirian memaksa orang menebak kolom mana
+   yang salah — di halaman complaint jaraknya empat layar. (API-86 #1) */
+.err-field{color:#a32e2e;font-size:13.5px;font-weight:600;margin:7px 0 0}
+/* Bentuk pemilihnya menyamai aturan kolom di atas dan datang setelahnya,
+   jadi border merahnya menang tanpa !important. */
+input:not([type=checkbox]):not([type=radio])[aria-invalid=true],
+select[aria-invalid=true],textarea[aria-invalid=true]{border-color:var(--danger)}
 
 /* ---------- Kosong ---------- */
 .empty{text-align:center;padding:44px 20px}
@@ -273,6 +288,13 @@ details.filters .body{padding:0 22px 20px}
   .fab{display:flex;position:fixed;left:16px;right:16px;bottom:16px;z-index:30;
     box-shadow:0 10px 30px -8px rgba(20,124,114,.55)}
   nav a.cta{display:none}
+  /* main{padding-bottom} di bawah mengurus penggulungan yang DILAKUKAN ORANG.
+     Yang ini mengurus penggulungan yang dilakukan PERAMBAN saat fokus keyboard
+     pindah ke elemen di luar layar: peramban menempelkannya pas ke tepi bawah
+     viewport, yaitu tepat di balik .fab (fixed, bottom:16px, tinggi 49px).
+     WCAG 2.2 SC 2.4.11 menyebut footer lengket sebagai contoh kegagalannya.
+     (API-86 #3) */
+  html{scroll-padding-bottom:84px}
 }
 
 /* Kartu untuk layar kecil — tabel 9 kolom tidak terpakai di HP */
@@ -457,7 +479,38 @@ try{ localStorage.removeItem(window.LW_DRAFT_KEY); }catch(e){}
        kunci sendiri supaya tidak saling menimpa dengan peringatan nota kembar. --}}
   @if(session('penutupan_ditolak'))<div class="flash warn" id="penutupan-ditolak">{{ session('penutupan_ditolak') }}</div>@endif
   @if($errors->any())
-    <div class="err"><b>Periksa lagi sebelum lanjut</b><ul>@foreach($errors->all() as $e)<li>{{ $e }}</li>@endforeach</ul></div>
+    @php
+      /* Peta nama-kolom => id kontrolnya, diumumkan halaman lewat
+         @section('galat-anchor'){!! json_encode([...]) !!}@endsection.
+         Halaman yang belum mengumumkannya tetap dapat ringkasannya, hanya
+         butirnya tidak jadi tautan.
+
+         Petanya per halaman, bukan satu peta global: halaman complaint punya
+         dua form yang sama-sama berkolom `note`, jadi nama kolom saja tidak
+         cukup untuk menunjuk satu elemen.
+
+         Bentuk bloknya penting: @section('x', $isi) yang sebaris melewatkan
+         isinya ke e(), dan tanda kutip JSON-nya pulang sebagai &quot;. */
+      $galatAnchor = json_decode(trim($__env->yieldContent('galat-anchor')) ?: '[]', true) ?: [];
+    @endphp
+    {{-- role="alert" supaya pembaca layar mengumumkannya, tabindex="-1" +
+         .focus() supaya fokus benar-benar mendarat di sini setelah halaman
+         dimuat ulang. Sebelumnya ini <div class="err"> polos: petugas menekan
+         Simpan, halaman dimuat ulang, dan tidak ada yang diumumkan sama
+         sekali — fokus kembali ke puncak dokumen. (API-86 #2) --}}
+    <div class="err" id="galat-ringkas" role="alert" tabindex="-1">
+      <b>Periksa lagi sebelum lanjut</b>
+      <ul>
+        @foreach($errors->messages() as $kolom => $pesanKolom)
+          @foreach($pesanKolom as $pesan)
+            <li>@isset($galatAnchor[$kolom])<a href="#{{ $galatAnchor[$kolom] }}">{{ $pesan }}</a>@else{{ $pesan }}@endisset</li>
+          @endforeach
+        @endforeach
+      </ul>
+    </div>
+    {{-- Skripnya ikut di dalam @if, jadi elemen dan pemanggilnya selalu
+         muncul bersama dan getElementById tidak pernah mengembalikan null. --}}
+    <script>document.getElementById('galat-ringkas').focus();</script>
   @endif
   @yield('content')
 </main>
