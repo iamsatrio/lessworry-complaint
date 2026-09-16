@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\TanggalPengambilan;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -26,6 +27,8 @@ use Illuminate\Support\Carbon;
  * @property array<string,mixed>|null $nevira_snapshot
  * @property Carbon|null $nevira_synced_at
  * @property string|null $nevira_sync_error
+ * @property Carbon|null $tanggal_pengambilan
+ * @property string $sumber_tanggal_pengambilan
  * @property string|null $nota_exemption
  * @property int|null $outlet_id
  * @property string $category
@@ -95,6 +98,9 @@ class Complaint extends Model
             'nevira_snapshot' => 'array',
             'nevira_service_index' => 'integer',
             'nevira_synced_at' => 'datetime',
+            // Tanggal, bukan datetime: dua sumbernya punya ketelitian berbeda
+            // dan yang dipakai hanya selisih HARI. Lihat migrasinya. (API-48)
+            'tanggal_pengambilan' => 'date',
             'due_response_at' => 'datetime',
             'due_resolution_at' => 'datetime',
             'first_response_at' => 'datetime',
@@ -310,6 +316,7 @@ class Complaint extends Model
     /** Kunci yang selalu ada di satu baris perjalanan kurir. */
     private const BENTUK_PENGANTARAN = [
         'id' => null, 'date' => null, 'status_code' => null, 'status' => null,
+        'initial_status' => null,
         'cancel_reason' => null, 'courier_name' => null, 'courier_nip' => null,
         'courier_id' => null, 'queue_no' => null, 'distance' => null,
         'notes' => null, 'courier_notes' => null, 'proof_count' => 0,
@@ -337,6 +344,54 @@ class Complaint extends Model
             ->filter(fn ($row) => is_array($row))
             ->map(fn (array $row) => array_merge(self::BENTUK_PENGANTARAN, $row))
             ->values()->all();
+    }
+
+    /* ---------- Tanggal pengambilan ---------- */
+
+    /** Tanggalnya diketahui dari sumber mana pun selain "tidak diketahui". */
+    public function tanggalPengambilanDiketahui(): bool
+    {
+        return $this->tanggal_pengambilan !== null
+            && $this->sumber_tanggal_pengambilan !== TanggalPengambilan::TIDAK_DIKETAHUI;
+    }
+
+    public function sumberTanggalPengambilanLabel(): string
+    {
+        return (string) config(
+            'complaint.sumber_tanggal_pengambilan.'.$this->sumber_tanggal_pengambilan,
+            $this->sumber_tanggal_pengambilan,
+        );
+    }
+
+    /**
+     * Berapa hari setelah pengambilan complaint ini masuk.
+     *
+     * null kalau tanggal pengambilannya tidak diketahui — BUKAN nol. Nol
+     * berarti "masuk di hari yang sama", dan itu jawaban yang berbeda.
+     *
+     * Bisa NEGATIF, dan itu bukan cacat: keluhan "cucian saya belum selesai"
+     * memang masuk sebelum barangnya diambil. Yang menampilkannya harus
+     * menyebut keadaan itu apa adanya, bukan memampatkannya jadi nol.
+     *
+     * Dihitung di zona operasional outlet, bukan UTC: complaint yang masuk
+     * pukul 06.00 WIB masih hari yang sama bagi kasir yang mencatatnya.
+     */
+    public function jarakKomplainHari(): ?int
+    {
+        if (! $this->tanggalPengambilanDiketahui() || $this->created_at === null) {
+            return null;
+        }
+
+        $zona = (string) config('complaint.zona_operasional');
+
+        // Dibandingkan sebagai TANGGAL, bukan sebagai dua Carbon berzona
+        // berbeda: tengah malam WIB dan tengah malam UTC terpaut tujuh jam,
+        // dan diffInDays atas keduanya pulang sebagai pecahan yang dibulatkan
+        // ke bawah — jarak dua hari terbaca satu hari.
+        $masuk = Carbon::parse($this->created_at->copy()->setTimezone($zona)->toDateString());
+        $ambil = Carbon::parse($this->tanggal_pengambilan->toDateString());
+
+        return (int) $ambil->diffInDays($masuk, false);
     }
 
     /** Umur transaksi NEVIRA dalam hari; null kalau tanggalnya tidak diketahui. */

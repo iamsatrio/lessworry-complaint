@@ -253,3 +253,37 @@ Tiga hal yang perlu diketahui sebelum menjalankannya:
   yang ditahan sebagai ambigu ditahan juga di sana. Impor tidak bisa mencetak
   apa pun ke layar, jadi penahanan itu muncul sebagai **anomali** di laporan
   impor: `uraiannya menyebut … tapi tidak di klausa pertama`.
+
+## Mengisi tanggal pengambilan pada baris yang sudah masuk (API-48)
+
+Kolom `Cucian Diterima Cust` di spreadsheet terisi **84 dari 545 baris**, dan
+hanya di tiga bulan: April 2026 (45/50), Mei (13/36), Agustus (26/32). Yang 84
+itu tetap yang paling tahu — orang yang mengetiknya melihat pelanggannya pulang
+membawa cucian.
+
+Impor sekarang memetakan kolom itu ke `tanggal_pengambilan` dengan sumber
+`manual`. Baris yang **sudah telanjur masuk sebelum kolomnya ada** tidak
+tersentuh oleh impor ulang — `complaint:import` sengaja melewati baris yang
+sidik jarinya sudah ada, dan itulah yang membuatnya aman dijalankan dua kali.
+Untuk baris itu ada perintah tersendiri:
+
+```bash
+php artisan complaint:backfill-pengambilan berkas.csv          # hitung saja
+php artisan complaint:backfill-pengambilan berkas.csv --tulis  # simpan
+```
+
+Berkasnya harus **berkas yang sama** dengan yang dipakai `complaint:import`:
+yang mempertemukan baris berkas dengan complaint-nya adalah sidik jari isi
+barisnya. `Cucian Diterima Cust` tidak ikut dihitung dalam sidik jari, jadi
+menambah kolom ini tidak mengubah satu pun sidik jari yang sudah tersimpan.
+
+Yang perlu diketahui:
+
+- **Tidak pernah menimpa tanggal dari sumber lain.** Complaint yang tanggalnya
+  sudah datang dari jejak serah terima NEVIRA lebih tahu daripada spreadsheet,
+  dan dilewati — dihitung tersendiri di ringkasannya.
+- **Tanggal yang tidak terbaca dihitung, bukan ditebak.** Formatnya `M/D/YYYY`,
+  sama dengan kolom `Date`.
+- **Baris yang complaint-nya tidak ditemukan dihitung tersendiri.** Biasanya
+  berarti berkasnya bukan berkas yang diimpor, atau barisnya memang belum
+  pernah masuk.

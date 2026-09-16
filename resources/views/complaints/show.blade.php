@@ -439,6 +439,8 @@
       </details>
     </div>
 
+    @include('complaints._pengambilan')
+
     @include('complaints._deliveries')
 
     {{-- Penugasan dan penerusan ke divisi adalah wewenang, bukan pencatatan:

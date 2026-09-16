@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\NeviraNotFound;
 use App\Exceptions\NeviraRequestFailed;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -242,6 +243,12 @@ class NeviraClient
                     'id' => $row['id_deliveries_transaction'] ?? null,
                     'date' => $row['delivery_date'] ?? null,
                     'status_code' => $status,
+                    // Perjalanan ini ANTAR atau JEMPUT. Keduanya berakhir
+                    // dengan status yang sama, jadi tanpa kunci ini tanggal
+                    // cucian kotor dijemput tidak bisa dibedakan dari tanggal
+                    // cucian bersih diterima pelanggan. Lihat
+                    // config('nevira.delivery_initial_antar'). (API-48)
+                    'initial_status' => isset($row['initial_status']) ? (string) $row['initial_status'] : null,
                     'status' => config('nevira.delivery_status.'.$status, 'Kode '.$status),
                     'cancel_reason' => ($status === 6 && filled($row['cancel_type'] ?? null))
                         ? config('nevira.delivery_cancel_type.'.$row['cancel_type'], $row['cancel_type'])
@@ -395,8 +402,55 @@ class NeviraClient
                 ])->all(),
             'created_at' => $d['created_at'] ?? null,
             'estimated_done' => $d['estimated_completion_date'] ?? null,
+
+            // TIDAK dipakai sebagai tanggal serah terima, walau namanya
+            // menjanjikan begitu: kosong di 953 dari 953 transaksi yang
+            // diperiksa April–September 2026, termasuk 702 berstatus
+            // COMPLETED. Tetap disimpan apa adanya supaya kalau suatu hari
+            // NEVIRA mulai mengisinya, itu terlihat. (Gerbang bukti API-48)
             'completed_at' => $d['completion_date'] ?? null,
+
+            'handovers' => $this->ringkasSerahTerima($services),
         ];
+    }
+
+    /**
+     * Kapan barang berpindah dari outlet ke pelanggan, menurut jejak
+     * pengerjaan NEVIRA. (API-48)
+     *
+     * Dua kejadian yang dicatat NEVIRA, keduanya dengan foto bukti:
+     * `diambil_customer` ("Diambil oleh Customer") dan `diantar_kurir`
+     * ("Diantar kurir oleh <nama>").
+     *
+     * Yang disalin hanya baris layanan, nama kejadian, dan stempel waktunya.
+     * Nama petugas dan tautan fotonya sengaja DITINGGAL: fotonya foto serah
+     * terima pelanggan, dan snapshot ini dirender ke halaman complaint.
+     *
+     * Stempelnya UTC — perhatikan akhiran Z-nya — sedangkan `delivery_date`
+     * di baris pengantaran memakai waktu setempat. Yang mengubahnya jadi
+     * tanggal operasional adalah TanggalPengambilan, bukan di sini: snapshot
+     * menyimpan apa yang dikatakan NEVIRA, apa adanya.
+     *
+     * @param  Collection<int,array<mixed,mixed>>  $services
+     * @return array<int,array{service_index:int,activity:string,at:string}>
+     */
+    private function ringkasSerahTerima(Collection $services): array
+    {
+        $dicari = (array) config('nevira.handover_activities');
+
+        return $services
+            ->flatMap(fn ($service, $i) => collect($service['service_process_log'] ?? [])
+                ->filter(fn ($log) => is_array($log)
+                    && in_array($log['activity_name'] ?? null, $dicari, true)
+                    && filled($log['created_at'] ?? null))
+                ->map(fn ($log) => [
+                    'service_index' => $i + 1,
+                    'activity' => (string) $log['activity_name'],
+                    'at' => (string) $log['created_at'],
+                ])
+                ->values()->all())
+            ->sortBy('at')
+            ->values()->all();
     }
 
     /**

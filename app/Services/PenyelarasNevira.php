@@ -20,7 +20,10 @@ use App\Models\User;
  */
 class PenyelarasNevira
 {
-    public function __construct(private NeviraGate $nevira) {}
+    public function __construct(
+        private NeviraGate $nevira,
+        private TanggalPengambilan $tanggal,
+    ) {}
 
     /**
      * Penolakan yang bersifat wewenang dilempar ke atas sebagai 403; sisanya
@@ -54,6 +57,12 @@ class PenyelarasNevira
             $this->isiPelapor($complaint, $summary);
             $this->isiOutlet($complaint, $summary);
             $this->buangBarangYangTidakAda($complaint);
+
+            // Terakhir, dan itu disengaja: tanggal pengambilan dibaca dari
+            // snapshot yang baru saja tersimpan DAN dari nomor baris layanan
+            // yang baru saja dibersihkan. Menghitungnya lebih awal memakai
+            // penunjukan barang yang sudah tidak ada. (API-48)
+            $this->isiTanggalPengambilan($complaint);
         } catch (NeviraAccessDenied) {
             // abort() di dalam service memang tidak lazim, tapi ini menjaga
             // perilaku yang sudah diuji: peran yang tidak berhak menerima
@@ -64,6 +73,29 @@ class PenyelarasNevira
                 'nevira_sync_error' => mb_substr($e->userMessage(), 0, 190),
             ])->save();
         }
+    }
+
+    /**
+     * Isi tanggal barang diterima pelanggan, dan dari mana tanggal itu
+     * diketahui. (API-48)
+     *
+     * Form intake tidak bertambah satu kolom pun: nomor notanya sudah ada,
+     * jadi tanggalnya datang tanpa menambah satu langkah untuk kasir. Kolom
+     * yang sama di spreadsheet tim mati dua kali karena harus diketik
+     * manual — 84 dari 545 baris.
+     *
+     * Dipanggil di setiap sinkron, termasuk tarik ulang: order yang belum
+     * diambil saat complaint dibuat akan punya tanggalnya setelah pelanggan
+     * datang.
+     */
+    private function isiTanggalPengambilan(Complaint $complaint): void
+    {
+        $hasil = $this->tanggal->untuk($complaint);
+
+        $complaint->forceFill([
+            'tanggal_pengambilan' => $hasil['tanggal'],
+            'sumber_tanggal_pengambilan' => $hasil['sumber'],
+        ])->save();
     }
 
     /**

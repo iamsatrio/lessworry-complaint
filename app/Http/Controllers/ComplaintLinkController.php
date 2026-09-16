@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Complaint;
 use App\Services\JejakComplaint;
 use App\Services\PenyelarasNevira;
+use App\Services\TanggalPengambilan;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -93,6 +94,33 @@ class ComplaintLinkController extends Controller
             'nevira_customer_id' => null,
             'nevira_synced_at' => null,
             'nevira_sync_error' => null,
+        ])->save();
+
+        $this->lepasTanggalDariNevira($complaint);
+    }
+
+    /**
+     * Tanggal pengambilan yang berasal dari nota lama ikut dilepas. (API-48)
+     *
+     * Kalau tautannya dipasang ke nota lain, sinkron berikutnya menimpanya —
+     * tapi kalau tautannya DILEPAS, tidak ada sinkron berikutnya, dan halaman
+     * complaint akan terus menyebut tanggal serah terima milik order yang
+     * sudah tidak ada hubungannya.
+     *
+     * Tanggal yang diketik orang dari spreadsheet lama tidak disentuh: itu
+     * tidak pernah datang dari nota mana pun.
+     */
+    private function lepasTanggalDariNevira(Complaint $complaint): void
+    {
+        $dariNevira = [TanggalPengambilan::AMBIL_SENDIRI, TanggalPengambilan::ANTAR];
+
+        if (! in_array($complaint->sumber_tanggal_pengambilan, $dariNevira, true)) {
+            return;
+        }
+
+        $complaint->forceFill([
+            'tanggal_pengambilan' => null,
+            'sumber_tanggal_pengambilan' => TanggalPengambilan::TIDAK_DIKETAHUI,
         ])->save();
     }
 }

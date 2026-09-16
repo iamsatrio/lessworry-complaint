@@ -9,6 +9,7 @@ use App\Services\EksporXlsx;
 use App\Services\GrafikLaporan;
 use App\Services\RekapEkspor;
 use App\Services\SaringanLaporan;
+use App\Services\SebaranJarakKomplain;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
@@ -64,6 +65,9 @@ class ReportController extends Controller
             // yang ditolak" berhenti berarti "masih terbuka".
             'stillOpen' => $complaints->filter->isOpen()->count(),
             'avgMinutes' => $resolved->isEmpty() ? null : (int) round($resolved->avg(fn ($c) => $c->resolutionMinutes())),
+            // Sebaran jarak hari pengambilan -> complaint masuk. Dihitung
+            // dari koleksi yang sama seperti seluruh halaman ini. (API-48)
+            'jarak' => new SebaranJarakKomplain($complaints),
             'byCategory' => $complaints->groupBy('category')->map->count()->sortDesc(),
             'byBobot' => $complaints->groupBy('bobot')->map->count()->sortDesc(),
             // Layanan dan tindak lanjut ada supaya bisa DIKELOMPOKKAN, bukan

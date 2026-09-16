@@ -321,6 +321,53 @@
   </x-slot:tabel>
 </x-grafik.garis>
 
+{{--
+  Jarak hari antara barang diambil pelanggan dan complaint masuk. (API-48)
+
+  Cakupannya ditulis di atas angkanya, bukan di catatan kaki: tanpa itu
+  sebaran dari 15% baris terbaca persis seperti sebaran dari 100%. Yang
+  tanggalnya tidak diketahui dan yang masuk sebelum pengambilan dihitung
+  terpisah — keduanya jawaban, bukan kekosongan yang boleh dibuang.
+--}}
+<div class="card">
+  <div class="eyebrow">Jarak complaint dari tanggal pengambilan</div>
+  <p class="muted small" style="margin:0 0 10px">
+    Terukur dari <b>{{ $jarak->terukur() }}</b> dari {{ $jarak->total() }} complaint
+    ({{ $jarak->cakupanPersen() }}%) — sisanya tanggal pengambilannya tidak diketahui.
+  </p>
+
+  @if($jarak->kosong())
+    <p class="muted" style="margin:0">
+      Belum ada complaint pada rentang ini yang tanggal pengambilannya diketahui.
+      Tanggal itu terisi sendiri saat nota ditarik dari NEVIRA.
+    </p>
+  @else
+    @php $puncak = collect($jarak->rentang())->max('jumlah'); @endphp
+    @foreach($jarak->rentang() as $r)
+      <div class="meter-row">
+        <div class="lab">
+          <span>{{ $r['label'] }}</span>
+          <b>{{ $r['jumlah'] }}</b>
+        </div>
+        <div class="bar"><i style="width:{{ $puncak ? ($r['jumlah'] / $puncak * 100) : 0 }}%"></i></div>
+      </div>
+    @endforeach
+  @endif
+
+  <div class="small" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+    <div style="display:flex;justify-content:space-between;gap:12px">
+      <span class="muted">Tanggal pengambilan tidak diketahui</span>
+      <b>{{ $jarak->tidakDiketahui() }}</b>
+    </div>
+    @if($jarak->sebelumPengambilan())
+      <div style="display:flex;justify-content:space-between;gap:12px;margin-top:4px">
+        <span class="muted">Complaint masuk sebelum barang diambil</span>
+        <b>{{ $jarak->sebelumPengambilan() }}</b>
+      </div>
+    @endif
+  </div>
+</div>
+
 <div class="grid g2">
   @foreach([
     ['Kategori keluhan',$byCategory,'complaint.categories'],

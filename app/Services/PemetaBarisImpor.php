@@ -123,6 +123,18 @@ class PemetaBarisImpor
             $anomali[] = ['kolom' => 'Date status close', 'alasan' => 'Close tanpa tanggal tutup'];
         }
 
+        // Kolom yang mati dua kali: terisi 84 dari 545 baris, dan hanya di
+        // tiga bulan. Yang terisi tetap yang paling tahu — orang yang
+        // mengetiknya melihat pelanggannya pulang membawa cucian. Sumbernya
+        // ditandai `manual` supaya tidak pernah tertukar dengan tanggal yang
+        // datang dari jejak NEVIRA. (API-48)
+        $mentahDiambil = $this->ambil($baris, 'Cucian Diterima Cust');
+        $diambil = $this->tanggal($mentahDiambil);
+
+        if ($mentahDiambil !== '' && $diambil === null) {
+            $anomali[] = ['kolom' => 'Cucian Diterima Cust', 'alasan' => 'tanggal tidak terbaca'];
+        }
+
         $uraian = $this->ambil($baris, 'Issue');
 
         if ($uraian === '') {
@@ -153,6 +165,10 @@ class PemetaBarisImpor
             // Nomor nota lama TIDAK pernah ke kolom NEVIRA. Angkanya tidak
             // unik; menautkannya berarti menempelkan keluhan ini ke order
             // pelanggan lain. (API-28 bagian 3)
+            'tanggal_pengambilan' => $diambil,
+            'sumber_tanggal_pengambilan' => $diambil !== null
+                ? TanggalPengambilan::MANUAL
+                : TanggalPengambilan::TIDAK_DIKETAHUI,
             'legacy_nota_number' => $this->ambil($baris, 'Nomor Nota') ?: null,
             'legacy_pelaku' => $this->pelaku($this->ambil($baris, 'Pelaku')),
         ];

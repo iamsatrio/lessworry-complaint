@@ -6,6 +6,7 @@ use App\Models\Complaint;
 use App\Services\BerkasMasukan;
 use App\Services\JejakComplaint;
 use App\Services\LaporanImpor;
+use App\Services\PembacaCsvImpor;
 use App\Services\PemetaBarisImpor;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -206,55 +207,23 @@ class ImporComplaint extends Command
     /* ---------- baca ---------- */
 
     /**
+     * Pembacaan CSV-nya ada di PembacaCsvImpor, dipakai bersama perintah
+     * backfill supaya sidik jari baris yang sama tidak bisa berbeda di antara
+     * keduanya. (API-48)
+     *
      * @return array<int,array<string,string>>|null nomor baris berkas => isi
      */
     private function baca(string $berkas): ?array
     {
-        $fh = fopen($berkas, 'r');
+        $hasil = (new PembacaCsvImpor)->baca($berkas);
 
-        if ($fh === false) {
-            $this->error('Berkas tidak bisa dibuka: '.$berkas);
-
-            return null;
-        }
-
-        $judul = fgetcsv($fh, 0, ',', '"', '');
-
-        if (! is_array($judul)) {
-            fclose($fh);
-            $this->error('Berkas kosong atau tanpa baris judul.');
+        if ($hasil['galat'] !== null) {
+            $this->error($hasil['galat']);
 
             return null;
         }
 
-        // BOM dari ekspor spreadsheet menempel pada nama kolom PERTAMA, dan
-        // membuat pencarian kolom `Date` gagal untuk seluruh berkas.
-        $judul = array_map(fn ($k) => trim((string) preg_replace('/^\x{FEFF}/u', '', (string) $k)), $judul);
-
-        $hasil = [];
-        $nomor = 1;
-
-        while (($data = fgetcsv($fh, 0, ',', '"', '')) !== false) {
-            $nomor++;
-
-            // Baris kosong di ujung berkas: fgetcsv mengembalikannya sebagai
-            // satu kolom berisi null, bukan sebagai larik kosong.
-            if ($data === [null]) {
-                continue;
-            }
-
-            $isi = [];
-
-            foreach ($judul as $i => $kolom) {
-                $isi[$kolom] = (string) ($data[$i] ?? '');
-            }
-
-            $hasil[$nomor] = $isi;
-        }
-
-        fclose($fh);
-
-        return $hasil;
+        return $hasil['baris'];
     }
 
     /* ---------- olah satu baris ---------- */

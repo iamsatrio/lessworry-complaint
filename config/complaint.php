@@ -273,6 +273,53 @@ return [
     'nota_max_age_days' => 30,
 
     /*
+    | Zona waktu operasional outlet. Dipakai untuk menentukan TANGGAL sebuah
+    | kejadian — bukan jamnya.
+    |
+    | Aplikasi berjalan di UTC (config/app.php), sementara NEVIRA mencatat
+    | jejak serah terima dalam UTC dan tanggal pengantaran dalam waktu
+    | setempat. Barang yang diserahkan 16 September 06.00 WIB tercatat
+    | 15 September 23.00 UTC: tanpa konversi ini, "komplain masuk N hari
+    | setelah pengambilan" meleset satu hari untuk setiap serah terima
+    | sebelum pukul 07.00 pagi. (API-48)
+    |
+    | Alarm punya kuncinya sendiri (`alarms.zona_waktu`) karena yang
+    | ditentukannya berbeda: kapan "besok" mulai bagi papan alarm.
+    */
+    'zona_operasional' => env('ZONA_OPERASIONAL', 'Asia/Jakarta'),
+
+    /*
+    | Dari mana tanggal pengambilan sebuah complaint diketahui. Nilainya
+    | terbatas, dan SELALU ikut ditampilkan bersama tanggalnya: angka "3 hari
+    | setelah pengambilan" berarti lain kalau tanggalnya diketik orang
+    | daripada kalau diambil dari jejak serah terima NEVIRA. (API-48)
+    */
+    'sumber_tanggal_pengambilan' => [
+        'diambil_customer' => 'Diambil sendiri di outlet (jejak NEVIRA)',
+        'antar' => 'Diantar kurir (jejak NEVIRA)',
+        'manual' => 'Diketik di spreadsheet lama',
+        'tidak_diketahui' => 'Tidak diketahui',
+    ],
+
+    /*
+    | Rentang jarak hari antara pengambilan dan complaint masuk, untuk
+    | sebaran di halaman Laporan.
+    |
+    | Yang dicari BUKAN mediannya — dari 26 baris data lama yang punya kedua
+    | tanggal, 20 di antaranya masuk dalam <= 1 hari. Yang perlu terlihat
+    | adalah ekornya: komplain yang datang berminggu-minggu setelah barang
+    | diambil, karena itu yang butuh keputusan berbeda. (API-48)
+    */
+    'jarak_komplain_rentang' => [
+        ['kunci' => '0', 'label' => 'Hari yang sama', 'min' => 0, 'max' => 0],
+        ['kunci' => '1', 'label' => '1 hari', 'min' => 1, 'max' => 1],
+        ['kunci' => '2_3', 'label' => '2–3 hari', 'min' => 2, 'max' => 3],
+        ['kunci' => '4_7', 'label' => '4–7 hari', 'min' => 4, 'max' => 7],
+        ['kunci' => '8_30', 'label' => '8–30 hari', 'min' => 8, 'max' => 30],
+        ['kunci' => '30_plus', 'label' => 'Lebih dari 30 hari', 'min' => 31, 'max' => null],
+    ],
+
+    /*
     | Peran seorang pelaku DALAM SATU KEJADIAN — bukan jabatannya
     | sehari-hari. Kasir yang kebetulan ikut mengantar tercatat sebagai
     | kurir untuk complaint itu. (API-19)

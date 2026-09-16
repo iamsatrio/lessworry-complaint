@@ -51,6 +51,56 @@ return [
     ],
 
     /*
+    | Kode status yang berarti perjalanan kurir SELESAI.
+    |
+    | Peta di atas menyebut 71 "Selesai Diantar", dan itulah kode yang dulu
+    | diasumsikan menandai order antar yang sudah sampai. Data hidup tidak
+    | memakainya: 800 baris /deliveries-transactions (4 halaman terpisah,
+    | diperiksa 16 September 2026) berisi status 7, 1, 5, 6, dan 3 — tidak
+    | satu pun 71 atau 73. Menyaring dengan 71 saja mengembalikan nol baris,
+    | dan SELURUH order antar akan tercatat "tanggal pengambilan tidak
+    | diketahui" tanpa ada yang tahu kenapa.
+    |
+    | 71 tetap diterima kalau-kalau ada baris lama yang memakainya. Yang
+    | menentukan sekarang adalah 7. (API-48)
+    */
+    'delivery_done_status' => [7, 71],
+
+    /*
+    | Satu nota bisa punya dua perjalanan kurir: MENJEMPUT cucian kotor dari
+    | pelanggan, dan MENGANTAR cucian bersih kembali. Keduanya berakhir
+    | dengan status 7, jadi statusnya saja tidak cukup untuk membedakan.
+    | Yang membedakan `initial_status`:
+    |
+    |   '1' (Siap Diantar)  -> perjalanan ANTAR; selesainya berarti barang
+    |                          sampai ke pelanggan
+    |   '3' (Siap Dijemput) -> perjalanan JEMPUT; selesainya berarti barang
+    |                          tiba di outlet
+    |
+    | Dari 800 baris yang diperiksa: 509 berawal '1', 291 berawal '3'. Salah
+    | membaca ini mencatat tanggal barang MASUK sebagai tanggal barang
+    | DITERIMA pelanggan — dan jarak harinya jadi negatif atau nol untuk
+    | complaint yang sebenarnya datang berminggu-minggu kemudian. (API-48)
+    */
+    'delivery_initial_antar' => '1',
+
+    /*
+    | Jejak serah terima barang, di `services[].service_process_log`.
+    |
+    | Inilah satu-satunya tempat NEVIRA mencatat kapan barang berpindah dari
+    | outlet ke pelanggan:
+    |
+    |   diambil_customer -> "Diambil oleh Customer", dengan foto bukti
+    |   diantar_kurir    -> "Diantar kurir oleh <nama>", barang keluar outlet
+    |
+    | `data.completion_date` pada transaksi TIDAK dipakai dan tidak boleh
+    | dipakai: kosong di 953 dari 953 transaksi yang diperiksa (April–September
+    | 2026), termasuk 702 yang berstatus COMPLETED. Kolomnya ada di skema dan
+    | tidak pernah diisi. (Gerbang bukti API-48)
+    */
+    'handover_activities' => ['diambil_customer', 'diantar_kurir'],
+
+    /*
     | Alasan pembatalan, dipakai saat status = 6.
     */
     'delivery_cancel_type' => [

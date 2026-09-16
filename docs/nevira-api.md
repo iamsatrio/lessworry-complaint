@@ -59,7 +59,44 @@ Diambil dari peta di back office NEVIRA sendiri, bukan tebakan:
 
 Saat status 6, `cancel_type` menjelaskan sebabnya: `SYSTEM`, `COURIER`, `COURIER_RESCHEDULE`.
 
-Kolom `type` (1 atau 2) **belum diketahui artinya** — peta labelnya tidak ditemukan di bundle back office, jadi sengaja tidak ditampilkan daripada ditebak.
+Kolom `type` (1, 2, atau 3) **belum diketahui artinya** — peta labelnya tidak ditemukan di bundle back office, jadi sengaja tidak ditampilkan daripada ditebak.
+
+**Yang dipakai data hidup bukan 71.** Diperiksa 16 September 2026 atas 800 baris `/deliveries-transactions` (4 halaman terpisah): statusnya 7, 1, 5, 6, dan 3 — **tidak satu pun 71 atau 73**. Menyaring pengantaran selesai dengan 71 saja mengembalikan nol baris. Sistem ini menerima 7 dan 71 (`config('nevira.delivery_done_status')`); yang menentukan di lapangan adalah 7.
+
+### Antar dan jemput dibedakan oleh `initial_status`, bukan `status`
+
+Satu nota bisa punya dua perjalanan: kurir **menjemput** cucian kotor, dan kurir **mengantar** cucian bersih. Keduanya berakhir dengan status 7.
+
+| `initial_status` | Arti | Selesainya berarti |
+|---|---|---|
+| `'1'` | Siap Diantar | barang sampai ke pelanggan |
+| `'3'` | Siap Dijemput | barang tiba di outlet |
+
+Dari 800 baris: 509 berawal `'1'`, 291 berawal `'3'`. Membaca baris jemput sebagai serah terima mencatat tanggal barang **masuk** sebagai tanggal barang **diterima pelanggan**.
+
+`delivery_date` hanya tanggal (10 karakter), tanpa jam — di seluruh 800 baris.
+
+## Kapan barang diserahkan ke pelanggan
+
+`data.completion_date` **kosong dan tidak boleh dipakai**. Diperiksa 16 September 2026 atas 953 transaksi (5 halaman tersebar April–September 2026): terisi **0 dari 953**, termasuk **0 dari 702** yang berstatus `COMPLETED`. Kolomnya ada di skema dan tidak pernah diisi.
+
+Yang mencatat serah terima adalah `services[].service_process_log[]`:
+
+| `activity_name` | `description` | Artinya |
+|---|---|---|
+| `diambil_customer` | "Diambil oleh Customer" | pelanggan mengambil sendiri di outlet, dengan foto bukti |
+| `diantar_kurir` | "Diantar kurir oleh <nama>" | barang keluar outlet dibawa kurir |
+
+Stempelnya `created_at`, **UTC** (berakhiran `Z`) — berbeda dari `processes[].completed_at` di payload yang sama, yang memakai waktu setempat.
+
+Dua pemeriksaan silang atas 35 transaksi COMPLETED:
+
+- `diambil_customer` berbanding `transactions.updated_at`: **10 dari 11 terpaut <= 4 detik, 11 dari 11 di tanggal yang sama**. NEVIRA menutup transaksinya persis saat barang diserahkan.
+- `diantar_kurir` berbanding `delivery_date` baris antar yang selesai: **19 dari 21 di tanggal yang sama**. Dua sisanya terpaut 10 dan 15 hari — barang keluar outlet jauh sebelum pelanggan menerimanya.
+
+Karena itu sistem complaint memakai **jejak `diambil_customer`** untuk order ambil-sendiri dan **`delivery_date` baris antar yang selesai** untuk order antar. Stempel `diantar_kurir` tidak dipakai sebagai tanggal penerimaan. (API-48)
+
+Kalau tidak satu pun jejak itu ada, tanggalnya `tidak_diketahui` — bukan perkiraan, bukan `created_at`.
 
 Catatan: endpoint detail adalah `/api/transactions/{id}` (jamak). Tidak ada `/api/transaction/detail/{id}`.
 
