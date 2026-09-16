@@ -131,6 +131,116 @@ class GerbangVerifikasiEmailTest extends TestCase
         }
     }
 
+    /**
+     * Password yang memuat `/` atau spasi harus tersensor SELURUHNYA. (API-122)
+     *
+     * Gagal dengan pola sebelumnya: `[^\s/]` membatasi bagian password juga,
+     * jadi password ber-`/` hanya tersensor sampai potongan pertama, dan
+     * password berspasi tidak cocok sama sekali — seluruh DSN lolos utuh ke
+     * log tanpa satu pun tanda bahwa penyensoran gagal. Nilai di bawah
+     * karangan.
+     */
+    public function test_penyensoran_membuang_password_ber_garis_miring_dan_berspasi(): void
+    {
+        // Password ber-`/`. Pola lama menyisakan `ss/w0rd` di log.
+        $this->assertSame(
+            'smtp://[kredensial-disensor]@smtp.lessworry.id',
+            PengirimVerifikasiEmail::tanpaKredensial('smtp://user:p@ss/w0rd@smtp.lessworry.id')
+        );
+
+        // Password berspasi. Pola lama tidak cocok sama sekali.
+        $this->assertSame(
+            'smtp://[kredensial-disensor]@smtp.lessworry.id',
+            PengirimVerifikasiEmail::tanpaKredensial('smtp://user:pa ss@smtp.lessworry.id')
+        );
+
+        // Spasi lebih dari satu, dan `/` bersama spasi.
+        $this->assertSame(
+            'smtp://[kredensial-disensor]@smtp.lessworry.id',
+            PengirimVerifikasiEmail::tanpaKredensial('smtp://user:my secret pass@smtp.lessworry.id')
+        );
+        $this->assertSame(
+            'smtp://[kredensial-disensor]@smtp.lessworry.id',
+            PengirimVerifikasiEmail::tanpaKredensial('smtp://user:pa ss/w0rd@smtp.lessworry.id')
+        );
+
+        // `@` dan spasi sekaligus: pola lama menyisakan ` s` di log.
+        $this->assertSame(
+            'smtp://[kredensial-disensor]@smtp.host',
+            PengirimVerifikasiEmail::tanpaKredensial('smtp://user:p@ s@smtp.host')
+        );
+
+        // Tidak ada potongan password yang tersisa di keluaran mana pun.
+        foreach ([
+            'smtp://user:p@ss/w0rd@smtp.lessworry.id' => ['w0rd', 'ss/'],
+            'smtp://user:pa ss@smtp.lessworry.id' => ['pa ss', 'ss@smtp'],
+            'smtp://user:my secret pass@smtp.lessworry.id' => ['secret', 'pass@'],
+            'smtp://user:p@ s@smtp.host' => [' s@'],
+        ] as $pesan => $potongan) {
+            $keluaran = PengirimVerifikasiEmail::tanpaKredensial($pesan);
+
+            foreach ($potongan as $bagian) {
+                $this->assertStringNotContainsString(
+                    $bagian,
+                    $keluaran,
+                    'Sebagian password lolos ke keluaran: '.$pesan
+                );
+            }
+        }
+    }
+
+    /**
+     * Pagar arah sebaliknya. (API-122)
+     *
+     * Melepas pembatas `/` membuat polanya lebih longgar, jadi risikonya
+     * bergeser dari "kurang menyensor" ke "menelan alamat penerima". Alamat
+     * penerima bukan kredensial: kalau ia hilang dari log, itu regresi meski
+     * lognya terlihat lebih aman.
+     */
+    public function test_penyensoran_tidak_menelan_alamat_penerima_atau_host(): void
+    {
+        // Alamat surel di kalimat yang sama, DSN-nya berpassword spasi.
+        $this->assertSame(
+            'Gagal: smtp://[kredensial-disensor]@smtp.lessworry.id - alamat budi@lessworry.id ditolak',
+            PengirimVerifikasiEmail::tanpaKredensial(
+                'Gagal: smtp://user:pa ss@smtp.lessworry.id - alamat budi@lessworry.id ditolak'
+            )
+        );
+
+        // Alamat surel SESUDAH DSN-nya, tanpa spasi di kredensial.
+        $this->assertSame(
+            'smtp://[kredensial-disensor]@host lalu ke budi@lessworry.id',
+            PengirimVerifikasiEmail::tanpaKredensial('smtp://u:p@host lalu ke budi@lessworry.id')
+        );
+
+        // DSN tanpa kredensial tidak berubah — `:587` nomor port, bukan
+        // password, meski ada alamat surel di kalimat yang sama.
+        $this->assertSame(
+            'smtp://mail.example:587',
+            PengirimVerifikasiEmail::tanpaKredensial('smtp://mail.example:587')
+        );
+        $this->assertSame(
+            'Could not connect to smtp://mail.example:587 for user budi@lessworry.id',
+            PengirimVerifikasiEmail::tanpaKredensial(
+                'Could not connect to smtp://mail.example:587 for user budi@lessworry.id'
+            )
+        );
+
+        // Penyensoran tidak melompati baris.
+        $this->assertSame(
+            "smtp://mail.example:587\nAddress budi@lessworry.id rejected",
+            PengirimVerifikasiEmail::tanpaKredensial(
+                "smtp://mail.example:587\nAddress budi@lessworry.id rejected"
+            )
+        );
+
+        // Jalur pada DSN yang sah tetap terbaca.
+        $this->assertSame(
+            'smtp://[kredensial-disensor]@host/path',
+            PengirimVerifikasiEmail::tanpaKredensial('smtp://user:pass@host/path')
+        );
+    }
+
     /* ---------- 2. Ganti huruf besar-kecil alamat ---------- */
 
     /**
