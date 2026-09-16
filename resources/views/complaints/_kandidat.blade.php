@@ -15,8 +15,10 @@
     </label>
     <select name="peran[{{ $item['key'] }}]" style="max-width:190px;margin:0">
       @foreach(config('complaint.responsible_roles') as $k=>$v)
-        {{-- Dibaca sebagai indeks array, bukan lewat notasi titik:
-             kunci kandidat bisa memuat titik (nama disingkat). --}}
+        {{-- Dibaca sebagai indeks array, bukan lewat notasi titik: notasi
+             titik memperlakukan kunci sebagai jalur bersarang. Kuncinya
+             sendiri heksa HMAC (KandidatPelaku::kunciPublik), bukan
+             identitas karyawan. --}}
         <option value="{{ $k }}" @selected((old('peran', [])[$item['key']] ?? $item['role'])===$k)>{{ $v }}</option>
       @endforeach
     </select>

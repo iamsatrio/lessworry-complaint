@@ -6,6 +6,7 @@ use App\Models\Complaint;
 use App\Models\ComplaintResponsible;
 use App\Models\Outlet;
 use App\Models\User;
+use App\Services\KandidatPelaku;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -23,6 +24,18 @@ use Tests\TestCase;
 class MultiResponsibleTest extends TestCase
 {
     use RefreshDatabase;
+
+    /**
+     * Kunci kandidat sebagaimana peramban melihatnya. Sejak API-58 nomor 1
+     * yang dirender bukan `staff:<id_staff>` melainkan HMAC-nya — id NEVIRA
+     * tidak boleh sampai ke DOM. Test ini memanggil helper yang sama dengan
+     * yang dipakai halaman, bukan menyalin heksanya, supaya ia tetap menuntut
+     * perilaku dan bukan menghafal nilai.
+     */
+    private function kunci(string $staffId): string
+    {
+        return KandidatPelaku::kunciPublik('staff:'.$staffId);
+    }
 
     private const KARYAWAN_OUTLET = 'Siti Nur Aisyah';
 
@@ -117,7 +130,7 @@ class MultiResponsibleTest extends TestCase
         $complaint = $this->complaint();
 
         $this->tetapkan($cc, $complaint, [
-            'pelaku' => ['staff:535', 'staff:244', 'staff:196'],
+            'pelaku' => [$this->kunci('535'), $this->kunci('244'), $this->kunci('196')],
             'alasan' => 'Noda tidak dicek saat serah terima, dan pengantaran telat sehari.',
         ])->assertRedirect()->assertSessionHasNoErrors();
 
@@ -139,7 +152,7 @@ class MultiResponsibleTest extends TestCase
         // Hanya kunci kandidat dan alasan. Identitas karyawannya diambil
         // server dari daftarnya sendiri — itu inti dari mengurangi klik.
         $this->tetapkan($cc, $complaint, [
-            'pelaku' => ['staff:244'],
+            'pelaku' => [$this->kunci('244')],
             'alasan' => 'Noda kerah masih ada setelah tahap cuci.',
         ])->assertSessionHasNoErrors();
 
@@ -160,8 +173,8 @@ class MultiResponsibleTest extends TestCase
         $complaint = $this->complaint();
 
         $this->tetapkan($cc, $complaint, [
-            'pelaku' => ['staff:'.self::ID_KARYAWAN_OUTLET],
-            'peran' => ['staff:'.self::ID_KARYAWAN_OUTLET => 'produksi'],
+            'pelaku' => [$this->kunci(self::ID_KARYAWAN_OUTLET)],
+            'peran' => [$this->kunci(self::ID_KARYAWAN_OUTLET) => 'produksi'],
             'alasan' => 'Mengerjakan ulang cucian ini di luar catatan NEVIRA.',
         ])->assertSessionHasNoErrors();
 
@@ -208,8 +221,8 @@ class MultiResponsibleTest extends TestCase
         $cc = $this->userAs('customer_care');
         $complaint = $this->complaint();
 
-        $this->tetapkan($cc, $complaint, ['pelaku' => ['staff:244'], 'alasan' => 'Noda.']);
-        $this->tetapkan($cc, $complaint, ['pelaku' => ['staff:244'], 'alasan' => 'Noda lagi.']);
+        $this->tetapkan($cc, $complaint, ['pelaku' => [$this->kunci('244')], 'alasan' => 'Noda.']);
+        $this->tetapkan($cc, $complaint, ['pelaku' => [$this->kunci('244')], 'alasan' => 'Noda lagi.']);
 
         $this->assertSame(1, $complaint->responsibles()->count(),
             'orang yang sama tercatat dua kali sebagai pelaku di complaint yang sama');
@@ -231,7 +244,7 @@ class MultiResponsibleTest extends TestCase
         $cc = $this->userAs('customer_care');
         $complaint = $this->complaint();
 
-        $this->tetapkan($cc, $complaint, ['pelaku' => ['staff:244']])
+        $this->tetapkan($cc, $complaint, ['pelaku' => [$this->kunci('244')]])
             ->assertSessionHasErrors('alasan');
 
         $this->assertSame(0, $complaint->responsibles()->count());
@@ -263,7 +276,7 @@ class MultiResponsibleTest extends TestCase
     {
         $cc = $this->userAs('customer_care');
         $complaint = $this->complaint();
-        $this->tetapkan($cc, $complaint, ['pelaku' => ['staff:244'], 'alasan' => 'Awal.']);
+        $this->tetapkan($cc, $complaint, ['pelaku' => [$this->kunci('244')], 'alasan' => 'Awal.']);
         $pelaku = $complaint->responsibles()->sole();
 
         $this->actingAs($cc)
@@ -281,7 +294,7 @@ class MultiResponsibleTest extends TestCase
         $complaint = $this->complaint();
 
         $this->tetapkan($cc, $complaint, [
-            'pelaku' => ['staff:244'],
+            'pelaku' => [$this->kunci('244')],
             'alasan' => 'Noda kerah masih ada setelah tahap cuci.',
         ]);
 
@@ -295,7 +308,7 @@ class MultiResponsibleTest extends TestCase
     {
         $cc = $this->userAs('customer_care');
         $complaint = $this->complaint();
-        $this->tetapkan($cc, $complaint, ['pelaku' => ['staff:244'], 'alasan' => 'Awal.']);
+        $this->tetapkan($cc, $complaint, ['pelaku' => [$this->kunci('244')], 'alasan' => 'Awal.']);
         $pelaku = $complaint->responsibles()->sole();
 
         $this->actingAs($cc)->put('/complaints/'.$complaint->id.'/pelaku/'.$pelaku->id, [
@@ -314,7 +327,7 @@ class MultiResponsibleTest extends TestCase
     {
         $cc = $this->userAs('customer_care');
         $complaint = $this->complaint();
-        $this->tetapkan($cc, $complaint, ['pelaku' => ['staff:244'], 'alasan' => 'Awal.']);
+        $this->tetapkan($cc, $complaint, ['pelaku' => [$this->kunci('244')], 'alasan' => 'Awal.']);
         $pelaku = $complaint->responsibles()->sole();
 
         $this->actingAs($cc)
@@ -333,7 +346,7 @@ class MultiResponsibleTest extends TestCase
         $kasir = $this->userAs('kasir', $outlet);
         $complaint = $this->complaint(['outlet_id' => $outlet->id]);
 
-        $this->tetapkan($kasir, $complaint, ['pelaku' => ['staff:244'], 'alasan' => 'coba-coba'])
+        $this->tetapkan($kasir, $complaint, ['pelaku' => [$this->kunci('244')], 'alasan' => 'coba-coba'])
             ->assertForbidden();
 
         $this->assertSame(0, $complaint->responsibles()->count());
@@ -357,7 +370,7 @@ class MultiResponsibleTest extends TestCase
         $kasir = $this->userAs('kasir', $outlet);
         $cc = $this->userAs('customer_care');
         $complaint = $this->complaint(['outlet_id' => $outlet->id]);
-        $this->tetapkan($cc, $complaint, ['pelaku' => ['staff:244'], 'alasan' => 'Noda.']);
+        $this->tetapkan($cc, $complaint, ['pelaku' => [$this->kunci('244')], 'alasan' => 'Noda.']);
 
         $this->actingAs($kasir)->get('/complaints/'.$complaint->id)
             ->assertOk()
@@ -370,7 +383,7 @@ class MultiResponsibleTest extends TestCase
         $kasir = $this->userAs('kasir', $outlet);
         $cc = $this->userAs('customer_care');
         $complaint = $this->complaint(['outlet_id' => $outlet->id]);
-        $this->tetapkan($cc, $complaint, ['pelaku' => ['staff:244'], 'alasan' => 'Noda.']);
+        $this->tetapkan($cc, $complaint, ['pelaku' => [$this->kunci('244')], 'alasan' => 'Noda.']);
         $pelaku = $complaint->responsibles()->sole();
 
         $this->actingAs($kasir)->delete('/complaints/'.$complaint->id.'/pelaku/'.$pelaku->id)
@@ -385,7 +398,7 @@ class MultiResponsibleTest extends TestCase
         $satu = $this->complaint();
         $dua = $this->complaint();
 
-        $this->tetapkan($cc, $satu, ['pelaku' => ['staff:244'], 'alasan' => 'Noda.']);
+        $this->tetapkan($cc, $satu, ['pelaku' => [$this->kunci('244')], 'alasan' => 'Noda.']);
         $pelaku = $satu->responsibles()->sole();
 
         $this->actingAs($cc)->delete('/complaints/'.$dua->id.'/pelaku/'.$pelaku->id)
@@ -402,7 +415,7 @@ class MultiResponsibleTest extends TestCase
         $complaint = $this->complaint();
 
         $this->tetapkan($supervisor, $complaint, [
-            'pelaku' => ['staff:244', 'staff:196'],
+            'pelaku' => [$this->kunci('244'), $this->kunci('196')],
             'alasan' => 'Noda dan telat antar.',
         ]);
 
@@ -418,7 +431,7 @@ class MultiResponsibleTest extends TestCase
         $complaint = $this->complaint();
 
         $this->tetapkan($supervisor, $complaint, [
-            'pelaku' => ['staff:244', 'staff:196'],
+            'pelaku' => [$this->kunci('244'), $this->kunci('196')],
             'alasan' => 'Noda dan telat antar.',
         ]);
 
@@ -435,7 +448,7 @@ class MultiResponsibleTest extends TestCase
         $kasir = $this->userAs('kasir', $outlet);
         $complaint = $this->complaint(['outlet_id' => $outlet->id]);
 
-        $this->tetapkan($cc, $complaint, ['pelaku' => ['staff:244'], 'alasan' => 'Noda.']);
+        $this->tetapkan($cc, $complaint, ['pelaku' => [$this->kunci('244')], 'alasan' => 'Noda.']);
 
         $this->actingAs($kasir)->get('/reports')
             ->assertOk()
@@ -451,7 +464,7 @@ class MultiResponsibleTest extends TestCase
     {
         $cc = $this->userAs('customer_care');
         $complaint = $this->complaint();
-        $this->tetapkan($cc, $complaint, ['pelaku' => ['staff:244'], 'alasan' => 'Noda.']);
+        $this->tetapkan($cc, $complaint, ['pelaku' => [$this->kunci('244')], 'alasan' => 'Noda.']);
 
         $complaint->delete();
 

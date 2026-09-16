@@ -40,7 +40,9 @@ Satu saja cukup untuk menahan merge. Tidak ada pengecualian karena "cuma masalah
 
 **Khusus repositori ini** — semua ini pernah bocor di sini:
 
-- Controller memegang `NeviraClient` langsung. Semua akses NEVIRA lewat satu gerbang; `tests/Feature/NeviraChokePointTest.php` menjaganya dan harus tetap ada serta lulus.
+- Controller memegang `NeviraClient` langsung. Semua akses NEVIRA dari jalur HTTP lewat satu gerbang; `tests/Feature/NeviraChokePointTest.php` menjaganya dan harus tetap ada serta lulus.
+
+  **Perintah konsol sengaja di luar gerbang itu**, dan bukan karena terlewat. `NeviraGate` memeriksa peran, jatah laju per pengguna, dan lingkup outlet — ketiganya berpangkal pada seorang pengguna, dan perintah shell tidak punya pengguna. Wewenangnya dibatasi akses shell ke server, yang lebih ketat daripada peran mana pun di aplikasi ini. Alasan lengkapnya di docblock `NeviraGate`. Jalur baru yang PUNYA pengguna — job antrean atas nama seseorang, misalnya — tetap wajib lewat gerbang.
 - Token NEVIRA dikirim lewat `withToken()`. Token itu dikirim mentah tanpa `Bearer`; salah kirim membuat NEVIRA membalas 500, bukan 401, dan itu menyesatkan berjam-jam.
 - Id internal NEVIRA sampai ke browser — termasuk lewat ekspor CSV dan pesan error.
 - Lampiran pindah dari disk privat.
