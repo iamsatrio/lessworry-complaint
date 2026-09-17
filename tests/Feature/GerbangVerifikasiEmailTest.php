@@ -241,6 +241,60 @@ class GerbangVerifikasiEmailTest extends TestCase
         );
     }
 
+    /**
+     * Password yang memuat `,`, `)`, atau `"` harus tersensor PENUH. (API-122)
+     *
+     * Gagal dengan percobaan pertama API-122: ketiga karakter itu dipakai
+     * sebagai pembatas kelas, jadi polanya putus dan DSN lolos utuh — termasuk
+     * nama penggunanya. Pola sebelum API-122 sudah menutup ketiganya, jadi ini
+     * pagar regresi, bukan fitur baru. Ketiganya lazim di password buatan
+     * generator. Nilai di bawah karangan.
+     */
+    public function test_penyensoran_membuang_password_ber_koma_kurung_dan_kutip(): void
+    {
+        foreach ([
+            'smtp://user:pa,ss@smtp.lessworry.id',
+            'smtp://user:pa)ss@smtp.lessworry.id',
+            'smtp://user:pa"ss@smtp.lessworry.id',
+            'smtp://user:pa, ss@smtp.lessworry.id',
+        ] as $pesan) {
+            $keluaran = PengirimVerifikasiEmail::tanpaKredensial($pesan);
+
+            $this->assertSame('smtp://[kredensial-disensor]@smtp.lessworry.id', $keluaran, $pesan);
+
+            // Nama pengguna ikut kredensial, bukan cuma passwordnya.
+            $this->assertStringNotContainsString('user', $keluaran, $pesan);
+            $this->assertStringNotContainsString('pa', $keluaran, $pesan);
+        }
+    }
+
+    /**
+     * `:` diikuti teks non-angka tidak boleh menelan host dan alamat. (API-122)
+     *
+     * Gagal dengan percobaan pertama API-122: pagar port hanya menahan angka,
+     * jadi `scheme://host:teks` membuat lintasan kedua menyeberangi spasi
+     * sampai `@` mana pun yang diikuti host masuk akal — dan yang ia temukan
+     * alamat penerima. Tidak ada kredensial yang bocor di situ; yang hilang
+     * justru nama host dan isi pesan galatnya, dua hal yang sengaja disisakan.
+     */
+    public function test_penyensoran_tidak_menelan_kalimat_saat_titik_dua_diikuti_teks(): void
+    {
+        foreach ([
+            'Failed to connect to smtp://mail.example: timeout - beritahu budi@lessworry.id',
+            'smtp://mail.example:sesuatu gagal kirim ke budi@lessworry.id',
+            'smtp://mail.example:587000 gagal kirim ke budi@lessworry.id',
+            // Nama pengguna DSN tidak pernah memuat `/`: yang ini JALUR.
+            'Connection to https://api.nevira.id/v1:abc failed contact budi@lessworry.id',
+            'GET https://api.nevira.id/v1/outlets:ok gagal budi@lessworry.id',
+        ] as $pesan) {
+            $this->assertSame(
+                $pesan,
+                PengirimVerifikasiEmail::tanpaKredensial($pesan),
+                'Teks di luar kredensial ikut tertelan: '.$pesan
+            );
+        }
+    }
+
     /* ---------- 2. Ganti huruf besar-kecil alamat ---------- */
 
     /**

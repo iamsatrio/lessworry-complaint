@@ -101,56 +101,69 @@ class PengirimVerifikasiEmail
      * yang terlihat supaya pembacanya tahu ada yang disensor dan tidak
      * mengira DSN-nya memang tidak berkredensial.
      *
-     * Batas yang masih ada, sengaja: password yang memuat `,`, `)`, atau
-     * `"` tidak tersensor penuh. Ketiganya dipakai sebagai penanda akhir
-     * DSN di dalam kalimat galat, dan melepasnya membuat penyensoran
-     * menelan teks di sekitarnya — termasuk alamat surel penerima, yang
-     * bukan kredensial dan harus tetap terbaca di log.
+     * BENTUK YANG MASIH LOLOS UTUH — tidak tersensor sama sekali, bukan
+     * tersensor sebagian. Ditulis apa adanya supaya pembaca berikutnya tidak
+     * mengira fungsi ini menjamin lebih dari yang ia lakukan:
+     *
+     *   - Password yang memuat LEBIH DARI TIGA spasi. Lintasan kedua dibatasi
+     *     tiga spasi; di atas itu ia menolak, dan seluruh DSN masuk log.
+     *   - `smtp://user:587 @host` — password yang seluruhnya angka lalu spasi.
+     *     Pagar nomor port membacanya sebagai port. Sudah begitu sejak sebelum
+     *     API-122 dan tidak diubah di sini.
+     *
+     * Arah sebaliknya juga belum tertutup rapat: `scheme://host:teks` yang
+     * diikuti alamat surel dalam tiga spasi masih bisa tertelan, sehingga nama
+     * host hilang dari log padahal tidak ada kredensial di situ. Bukan
+     * kebocoran, tapi melawan alasan fungsi ini menyisakan host. (API-124)
      */
     public static function tanpaKredensial(string $pesan): string
     {
         // Dua lintasan, dan urutannya menentukan. Lintasan pertama menangani
-        // kredensial yang tidak memuat spasi — itu bentuk yang lazim — dan
-        // karena ia berjalan lebih dulu, DSN normal tidak pernah sampai ke
-        // pola kedua yang lebih longgar.
+        // kredensial yang tidak memuat spasi — bentuk yang lazim — sehingga
+        // DSN normal tidak pernah sampai ke lintasan kedua yang lebih longgar.
         //
-        // Batasnya spasi dan `,`, `)`, `"`; `/` sengaja TIDAK lagi membatasi.
-        // Pembatas `/` yang lama membuat password ber-`/` lolos separuh:
-        // `smtp://user:p@ss/w0rd@host` hanya tersensor sampai `p`, sisanya
-        // masuk log. Argumen "DSN yang sah menulis `/` sebagai `%2F`" benar
-        // tapi tidak menolong — yang dihadapi penyensoran ini justru DSN
-        // salah bentuk, dan DSN salah bentuk tidak menuruti aturan encoding.
-        // (API-122)
+        // Batasnya SPASI saja. Sebelum API-122 `/` ikut membatasi, dan itu
+        // membuat password ber-`/` lolos separuh: `smtp://user:p@ss/w0rd@host`
+        // hanya tersensor sampai `p`. Percobaan pertama API-122 menukarnya
+        // dengan `,`, `)`, `"` sebagai pembatas — itu regresi yang lebih buruk:
+        // ketiga karakter itu lazim di password buatan generator, dan hasilnya
+        // nol penyensoran, termasuk nama penggunanya. Yang menjaga alamat
+        // surel di kalimat yang sama tetap terbaca adalah batas spasi plus
+        // syarat host di bawah, bukan ketiga karakter itu.
         //
         // `(?=[\w.\-]|$)` mensyaratkan ada host sesudah `@` yang dipilih.
         // Tanpa itu, password seperti `p@ s` membuat pola berhenti di `@`
-        // pertama — karena `@` berikutnya berada di seberang spasi, di luar
+        // pertama — karena `@` berikutnya ada di seberang spasi, di luar
         // jangkauannya — dan menyisakan ` s` di log. Dengan syarat itu,
-        // lintasan pertama menolak, dan lintasan kedua yang menanganinya.
+        // lintasan pertama menolak dan lintasan kedua yang menanganinya.
         $pesan = (string) preg_replace(
-            '#(?<=://)[^\s,)"]*:[^\s,)"]*@(?![^\s,)"]*@)(?=[\w.\-]|$)#',
+            '#(?<=://)\S*:\S*@(?!\S*@)(?=[\w.\-]|$)#',
             '[kredensial-disensor]@',
             $pesan
         );
 
-        // Lintasan kedua: password yang MEMUAT SPASI. Pola lama tidak cocok
-        // sama sekali pada bentuk ini, jadi seluruh DSN lolos utuh ke
-        // `storage/logs` tanpa satu pun tanda bahwa penyensoran gagal.
+        // Lintasan kedua: password yang MEMUAT SPASI. Lintasan pertama tidak
+        // menyeberangi spasi sama sekali, jadi tanpa lintasan ini seluruh DSN
+        // lolos utuh ke `storage/logs` tanpa satu pun tanda bahwa penyensoran
+        // gagal — kegagalan yang tak bersuara.
         //
         // Menyeberangi spasi berarti risikonya bergeser: yang tadinya kurang
-        // menyensor jadi berpotensi menelan alamat surel penerima yang
-        // kebetulan ada di kalimat yang sama. Tiga pagar menahannya:
+        // menyensor jadi berpotensi menelan nama host dan alamat surel
+        // penerima yang kebetulan ada di kalimat yang sama. Keduanya bukan
+        // kredensial dan harus tetap terbaca. Empat pagar menahannya:
         //
-        //   1. `(?!\d{1,5}(?:[\s/,)"]|$))` — kalau sesudah `:` hanya ada
-        //      angka lalu pembatas, itu NOMOR PORT, bukan password. Ini yang
-        //      menjaga `smtp://mail.example:587 kirim ke budi@lessworry.id`
-        //      tetap utuh: DSN tanpa kredensial tidak punya yang perlu
-        //      disensor, dan alamat penerima bukan kredensial.
-        //   2. lazy `*?` berhenti di `@` PERTAMA yang diikuti host yang masuk
-        //      akal, bukan di `@` terakhir di baris itu.
-        //   3. `\r\n` di luar kelas — penyensoran tidak pernah melompati baris.
+        //   1. `[^\s/\r\n]+?` sebelum `:` — nama pengguna DSN tidak pernah
+        //      memuat `/`; kalau ada `/`, yang dibaca itu JALUR, bukan
+        //      kredensial. Ini yang menjaga
+        //      `https://api.nevira.id/v1:abc gagal budi@lessworry.id` utuh.
+        //   2. `(?!\d{1,5}(?:[\s/,)"]|$))` — angka lalu pembatas sesudah `:`
+        //      adalah NOMOR PORT, bukan password.
+        //   3. paling tiga spasi. Tanpa batas ini satu kalimat galat penuh
+        //      tertelan sampai alamat surel di ujungnya. Password lebih dari
+        //      tiga spasi jadi tidak tersensor — disebut di docblock.
+        //   4. `\r\n` di luar kelas — penyensoran tidak melompati baris.
         $pesan = (string) preg_replace(
-            '#(?<=://)[^\s,)"]+:(?!\d{1,5}(?:[\s/,)"]|$))[^,)"\r\n]*?@(?=[\w.\-]+(?::\d+)?(?:[\s/,)"]|$))#',
+            '#(?<=://)[^\s/\r\n]+?:(?!\d{1,5}(?:[\s/,)"]|$))[^\s\r\n]*(?:[ ][^\s\r\n]*){0,3}?@(?=[\w.\-]+(?::\d+)?(?:[\s/,)"]|$))#',
             '[kredensial-disensor]@',
             $pesan
         );
