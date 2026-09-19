@@ -15,6 +15,12 @@
     {{ NilaiBiaya::rupiah($ringkasan['biaya']) }} tercatat
     {{ NilaiBiaya::cakupanTeks($ringkasan['terisi'], $ringkasan['total']) }}
     pada periode ini.
+    @if($belumPasti['nilai'] > 0)
+      {{-- Totalnya tetap menjumlahkan semuanya; yang belum pasti disebut,
+           bukan dibuang. Membuangnya menyembunyikan paparan yang sedang
+           berjalan. (API-106) --}}
+      Angka itu {{ NilaiBiaya::belumPastiTeks($belumPasti['nilai'], $belumPasti['tiket']) }}.
+    @endif
   @endif
 </p>
 

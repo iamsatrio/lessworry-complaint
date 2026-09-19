@@ -51,6 +51,10 @@ class KerugianController extends Controller
             'rentangTerbaca' => $saringan->rentangTerbaca(),
             'rekap' => $rekap,
             'ringkasan' => $rekap->ringkasan(),
+            // Total halaman ini TIDAK berubah oleh API-106 — yang ditambah
+            // hanya kalimat yang menyebut bagian mana dari total itu yang
+            // nilainya belum pasti.
+            'belumPasti' => $rekap->belumPasti(),
             'golongan' => $rekap->golongan(),
             'kategori' => $kategori,
             'outletBaris' => $outletBaris,
