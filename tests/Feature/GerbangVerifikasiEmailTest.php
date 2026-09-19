@@ -603,6 +603,98 @@ class GerbangVerifikasiEmailTest extends TestCase
         }
     }
 
+    /**
+     * Satu kata di antara host dan alamat penerima. (API-126)
+     *
+     * Yang membuat `test_penyensoran_tidak_menelan_alamat_penerima_atau_host`
+     * lulus di `7cac3e2` bukan pagarnya, tapi jumlah kata kalimatnya: contoh
+     * `... - alamat budi@...` butuh EMPAT spasi untuk sampai ke alamatnya,
+     * jadi ia jatuh di luar batas tiga spasi. Ganti `- alamat` jadi satu kata
+     * dan pola yang sama menelan nama host DAN alamat penerima sekaligus, lalu
+     * menstempel barisnya `[kredensial-disensor]` sehingga tampak sudah
+     * ditangani dengan benar.
+     *
+     * Sebabnya: `{0,3}?` memang lazy pada JUMLAH pengulangan, tapi
+     * `[^\s\r\n]*` di dalam tiap pengulangan greedy. PCRE menambah pengulangan
+     * sebelum memundurkan bintang di pengulangan sebelumnya, jadi yang
+     * terpilih `@` TERJAUH yang masih terjangkau — bukan yang pertama.
+     *
+     * Nol sampai dua kata dikunci satu per satu. Di tiga spasi ke atas polanya
+     * menolak karena batas jangkauan, dan test yang lulus karena batas itu
+     * tidak membuktikan apa pun soal `@` mana yang dipilih.
+     */
+    public function test_penyensoran_menyisakan_host_meski_satu_kata_memisah_alamat(): void
+    {
+        foreach ([
+            // Nol kata: alamatnya langsung sesudah host.
+            'budi@lessworry.id',
+            // Satu kata — bentuk yang gagal di `7cac3e2`.
+            'hubungi budi@lessworry.id',
+            // Dua kata, masih di dalam jangkauan tiga spasi.
+            'kirim ke budi@lessworry.id',
+        ] as $ekor) {
+            $pesan = 'smtp://user:pa ss@smtp.lessworry.id '.$ekor;
+
+            $keluaran = PengirimVerifikasiEmail::tanpaKredensial($pesan);
+
+            $this->assertSame(
+                'smtp://[kredensial-disensor]@smtp.lessworry.id '.$ekor,
+                $keluaran,
+                $pesan
+            );
+
+            // Kredensialnya tetap hilang — perbaikannya tidak menukar satu
+            // kesalahan dengan kesalahan yang lebih buruk.
+            $this->assertStringNotContainsString('user', $keluaran, $pesan);
+            $this->assertStringNotContainsString('pa ss', $keluaran, $pesan);
+        }
+
+        // Password yang memuat `@` DAN spasi, dengan satu kata sebelum alamat.
+        $this->assertSame(
+            'smtp://[kredensial-disensor]@smtp.host hubungi budi@lessworry.id',
+            PengirimVerifikasiEmail::tanpaKredensial(
+                'smtp://user:p@ s@smtp.host hubungi budi@lessworry.id'
+            )
+        );
+    }
+
+    /**
+     * Password berspasi yang juga memuat `@` tetap tersensor PENUH. (API-126)
+     *
+     * Pagar arah sebaliknya untuk test di atas, dan alasan perbaikannya bukan
+     * dua karakter. Membuat bintangnya lazy saja memilih `@` PERTAMA yang
+     * lolos lookahead; pada `pa ss@w0rd@host` `@` pertama itu ada di TENGAH
+     * password, dan `w0rd` tertinggal di log. Diukur di korpus 15.552 bentuk:
+     * lazy saja membocorkan 1.728 bentuk yang pola greedy sensor.
+     *
+     * Yang menahannya `@` di kelas pembatas sesudah host — host yang langsung
+     * diikuti `@` bukan host, jadi kandidatnya ditolak dan pola memundur ke
+     * `@` berikutnya. Kedua perubahan itu sepasang; melepas salah satunya
+     * mengembalikan salah satu dari dua kesalahan.
+     */
+    public function test_penyensoran_tidak_berhenti_di_at_tengah_password_berspasi(): void
+    {
+        foreach ([
+            'smtp://user:pa ss@w0rd@smtp.lessworry.id' => ['w0rd', 'pa ss'],
+            'smtp://user:pa ss@w0rd@smtp.lessworry.id:587' => ['w0rd', 'pa ss'],
+            'smtp://user:a b@c@smtp.lessworry.id' => ['b@c', 'a b'],
+            'Gagal: smtp://user:pa ss@w0rd@smtp.lessworry.id hubungi budi@lessworry.id' => ['w0rd', 'pa ss'],
+        ] as $pesan => $potongan) {
+            $keluaran = PengirimVerifikasiEmail::tanpaKredensial($pesan);
+
+            // Nama host tetap ada: sensornya penuh, bukan menelan.
+            $this->assertStringContainsString('smtp.lessworry.id', $keluaran, $pesan);
+
+            foreach ($potongan as $bagian) {
+                $this->assertStringNotContainsString(
+                    $bagian,
+                    $keluaran,
+                    'Sebagian password lolos ke keluaran: '.$pesan
+                );
+            }
+        }
+    }
+
     /* ---------- 2. Ganti huruf besar-kecil alamat ---------- */
 
     /**

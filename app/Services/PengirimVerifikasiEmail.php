@@ -195,6 +195,15 @@ class PengirimVerifikasiEmail
      *     Pagar nomor port membacanya sebagai port. Sudah begitu sejak sebelum
      *     API-122 dan tidak diubah di sini.
      *
+     * TERSENSOR SEBAGIAN — potongan password tertinggal di log:
+     *
+     *   - Password yang memuat tanda at, lalu spasi, lalu tanda at lagi.
+     *     Masukan `smtp://user:pa@ss w0rd@host` menyisakan `ss w0rd` di log.
+     *     Milik LINTASAN PERTAMA, ada sejak API-120, dan TIDAK tertutup oleh
+     *     perbaikan lintasan kedua di API-126 — alasannya ditulis di komentar
+     *     lintasan pertama, di bawah. Diukur, bukan diperkirakan; belum ada
+     *     issue-nya.
+     *
      * Arah sebaliknya — menelan teks yang BUKAN kredensial — masih terbuka,
      * dan sengaja dibiarkan terbuka. `scheme://host:teks` yang diikuti alamat
      * surel dalam tiga spasi tetap tertelan: `smtp://mail.example:abc gagal
@@ -209,6 +218,15 @@ class PengirimVerifikasiEmail
      * `smtp://budi.santoso:pa ss@host` lolos utuh; itu dibatalkan di sini.
      * Menutup arah ini butuh pembeda yang tidak ada di teksnya — misalnya
      * daftar host yang sah dari konfigurasi. (API-124)
+     *
+     * Kelas itu TIDAK sama dengan yang ditutup API-126. Yang ditutup API-126
+     * terjadi pada DSN yang MEMANG berkredensial, dan akar sebabnya urutan
+     * backtracking, bukan pembeda yang tidak ada: `smtp://user:pa
+     * ss@smtp.lessworry.id hubungi budi@lessworry.id` dulu kehilangan nama
+     * host padahal tidak ada yang ambigu di situ. Keputusan "kalau ambigu,
+     * SENSOR" di atas tidak berubah karenanya. Alasannya ditulis di sini dan
+     * bukan cuma dirujuk ke nomor issue: API-124 sudah `cancelled`, dan
+     * rujukan ke issue yang tertutup tidak bisa dibaca sebagai penjelasan.
      */
     public static function tanpaKredensial(string $pesan): string
     {
@@ -230,6 +248,19 @@ class PengirimVerifikasiEmail
         // pertama — karena `@` berikutnya ada di seberang spasi, di luar
         // jangkauannya — dan menyisakan ` s` di log. Dengan syarat itu,
         // lintasan pertama menolak dan lintasan kedua yang menanganinya.
+        //
+        // BATAS YANG MASIH TERBUKA di lintasan ini, disebut juga di docblock:
+        // `(?!\S*@)` hanya melihat `@` di dalam deretan tanpa spasi yang
+        // sedang dibaca. Pada `smtp://user:pa@ss w0rd@host`, `@` sesudah `pa`
+        // lolos kedua syarat — `@` berikutnya ada di seberang spasi, dan
+        // sesudahnya ada `ss` yang terbaca sebagai host — jadi lintasan ini
+        // menyensor sampai situ dan `ss w0rd` tertinggal. Sesudah itu barisnya
+        // sudah berubah, jadi lintasan kedua tidak punya `://` berkredensial
+        // lagi untuk dipegang; melazy-kan lintasan kedua (API-126) tidak
+        // menolong untuk bentuk ini. Menutupnya butuh keputusan yang belum
+        // ada: di `A@B C@D@host` tidak ada tanda yang membedakan `B` (masih
+        // password) dari host sebenarnya, dan aturan yang sama juga memutuskan
+        // nasib `smtp://host:teks hubungi budi@lessworry.id`.
         $pesan = (string) preg_replace(
             '#(?<=://)\S*:\S*@(?!\S*@)(?=[\w.\-]|$)#',
             '[kredensial-disensor]@',
@@ -267,12 +298,41 @@ class PengirimVerifikasiEmail
         //      menggantikan daftar `[\s/,)"]`; daftar itu diam-diam
         //      mensyaratkan tanda baca tertentu, sehingga `mail.example:587!`
         //      tidak dikenali sebagai port dan seluruh kalimat tertelan.
-        //   3. paling tiga spasi. Tanpa batas ini satu kalimat galat penuh
-        //      tertelan sampai alamat surel di ujungnya. Password lebih dari
-        //      tiga spasi jadi tidak tersensor — disebut di docblock.
+        //   3. paling tiga spasi. Ini batas JANGKAUAN, bukan pagar yang
+        //      menjaga nama host dan alamat penerima — di dalam tiga spasi
+        //      keduanya tetap tertelan, dan sampai API-126 memang tertelan.
+        //      Yang menjaganya pagar 5. Password lebih dari tiga spasi jadi
+        //      tidak tersensor — disebut di docblock.
         //   4. `\r\n` di luar kelas — penyensoran tidak melompati baris.
+        //   5. semua bintang LAZY, dan `@` ikut jadi pembatas sesudah host.
+        //      Dua perubahan, satu pasang: melepas salah satunya mengembalikan
+        //      salah satu dari dua kesalahan. (API-126)
+        //
+        //      Sebelum API-126 bintang di dalam `(?:[ ]...)` greedy. `{0,3}?`
+        //      lazy pada JUMLAH pengulangan, tapi PCRE menambah pengulangan
+        //      dulu sebelum memundurkan bintang di pengulangan sebelumnya —
+        //      jadi yang terpilih `@` TERJAUH yang terjangkau, bukan yang
+        //      pertama, dan `smtp://user:pa ss@smtp.lessworry.id hubungi
+        //      budi@lessworry.id` kehilangan nama host DAN alamat penerima
+        //      sekaligus. Pagar 3 tidak menahannya: ia hanya membatasi
+        //      jangkauan, dan satu kata masih di dalam jangkauan.
+        //
+        //      Lazy sendiri tidak cukup. Ia memilih `@` PERTAMA yang lolos
+        //      lookahead, dan pada `pa ss@w0rd@host` `@` pertama itu ada di
+        //      TENGAH password: `w0rd` tertinggal di log. Diukur di korpus
+        //      15.552 bentuk, lazy tanpa `@` di kelas pembatas membocorkan
+        //      1.728 bentuk yang pola greedy sensor — regresi keamanan, bukan
+        //      perbaikan. Di jalur log sungguhan `amanUntukLog()` kebocoran itu
+        //      tertutup kebetulan, karena `tanpaAlamatEmail()` ikut membuang
+        //      `potongan@host` — dan NAMA HOST-nya ikut terbuang bersamanya,
+        //      jadi bentuk itu tetap lebih buruk di kedua arah. Fungsi ini juga
+        //      publik dan bisa dipanggil tanpa lintasan alamat. `@` di
+        //      `[^\w.\-@]` menolak kandidat yang "host"-nya
+        //      langsung diikuti `@` — host yang diikuti `@` bukan host — jadi
+        //      pola memundur ke `@` berikutnya. Dengan keduanya: penelanan
+        //      nol, kebocoran sama dengan greedy.
         $pesan = (string) preg_replace(
-            '#(?<=://)[^\s/\r\n]+?:(?!\d{1,5}(?:[^\w.\-]|$))[^\s\r\n]*(?:[ ][^\s\r\n]*){0,3}?@(?=[\w.\-]+(?::\d+)?(?:[^\w.\-]|$))#',
+            '#(?<=://)[^\s/\r\n]+?:(?!\d{1,5}(?:[^\w.\-]|$))[^\s\r\n]*?(?:[ ][^\s\r\n]*?){0,3}?@(?=[\w.\-]+(?::\d+)?(?:[^\w.\-@]|$))#',
             '[kredensial-disensor]@',
             $pesan
         );
