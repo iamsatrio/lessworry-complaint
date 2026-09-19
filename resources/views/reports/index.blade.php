@@ -112,13 +112,26 @@
   <div class="stat"><div class="n">{{ $total }}</div><div class="l">Total Complaint</div></div>
   <div class="stat ok"><div class="n">{{ $closedDone }}</div><div class="l">Ditutup Selesai</div></div>
   <div class="stat {{ $overdue > 0 ? 'danger' : '' }}"><div class="n">{{ $overdue }}</div><div class="l">Lewat Tenggat</div></div>
-  {{-- Setiap total biaya membawa cakupannya. Kolom biaya terisi 96% pada
-       2025 dan 38% pada 2026; angka telanjang di sini akan dibaca sebagai
-       penghematan, padahal yang turun pencatatannya. (API-52) --}}
+  {{-- Dua angka, bukan satu. "Dibayar" dulu menjumlah semua nilai tercatat,
+       termasuk tiket yang masih berjalan dan tiket yang ditutup ditolak —
+       label yang menjanjikan lebih dari yang dijamin datanya. Yang berjalan
+       tidak dibuang, karena membuangnya menyembunyikan paparan yang sedang
+       berjalan. (API-106) --}}
   <div class="stat accent"><div class="n">Rp {{ number_format($compensation,0,',','.') }}</div>
     <div class="l">Kompensasi Dibayar</div>
-    <div class="c">{{ $grafik->cakupanTeks($cakupan['terisi'], $cakupan['total']) }}</div></div>
+    <div class="c">{{ $tiketPasti }} tiket ditutup dan tidak ditolak</div></div>
+  <div class="stat"><div class="n">Rp {{ number_format($compensationBelumPasti,0,',','.') }}</div>
+    <div class="l">Belum Pasti</div>
+    <div class="c">{{ $tiketBelumPasti }} tiket masih berjalan atau ditutup ditolak</div></div>
 </div>
+
+{{-- Setiap total biaya membawa cakupannya. Kolom biaya terisi 96% pada 2025
+     dan 38% pada 2026; angka telanjang akan dibaca sebagai penghematan,
+     padahal yang turun pencatatannya. Berlaku untuk kedua angka di atas,
+     jadi kalimatnya satu dan di bawah keduanya. (API-52) --}}
+<p class="muted small" style="margin:-8px 0 18px">
+  Kedua angka kompensasi di atas dihitung {{ $grafik->cakupanTeks($cakupan['terisi'], $cakupan['total']) }}.
+</p>
 
 {{-- "Ditolak" bukan lagi status tersendiri, tapi kemampuan memisahkannya
      tidak boleh hilang — hanya pindah ke alasan penutupan. (API-18 #6) --}}

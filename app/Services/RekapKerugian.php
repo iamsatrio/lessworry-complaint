@@ -93,6 +93,25 @@ final class RekapKerugian
         ];
     }
 
+    /**
+     * Bagian dari total yang nilainya BELUM PASTI — tiket yang masih berjalan,
+     * dan tiket yang ditutup dengan alasan ditolak.
+     *
+     * Halaman ini tetap menjumlahkan semuanya: totalnya tidak berubah dan
+     * golongannya tidak berubah. Yang ditambahkan hanya kalimat yang menyebut
+     * berapa bagian dari total itu yang belum tentu terjadi — sama seperti
+     * cakupan, sebuah total di sini tidak pernah tampil tanpa syaratnya.
+     * Aturan statusnya di NilaiBiaya, bukan di sini. (API-106)
+     *
+     * @return array{nilai:int,tiket:int}
+     */
+    public function belumPasti(): array
+    {
+        $pisah = NilaiBiaya::pisah($this->complaints);
+
+        return ['nilai' => $pisah['belumPasti'], 'tiket' => $pisah['tiketBelumPasti']];
+    }
+
     /* ---------- Uang keluar vs kerja ulang ---------- */
 
     /**

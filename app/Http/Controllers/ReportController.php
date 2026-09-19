@@ -7,6 +7,7 @@ use App\Models\ComplaintResponsible;
 use App\Services\EksporCsv;
 use App\Services\EksporXlsx;
 use App\Services\GrafikLaporan;
+use App\Services\NilaiBiaya;
 use App\Services\RekapEkspor;
 use App\Services\SaringanLaporan;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -20,6 +21,10 @@ class ReportController extends Controller
         $complaints = $saringan->complaints();
 
         $resolved = $complaints->whereNotNull('resolved_at');
+
+        // Biaya dipecah menurut kepastiannya, bukan disaring. Aturan statusnya
+        // ada di NilaiBiaya, bukan di sini. (API-106)
+        $biaya = NilaiBiaya::pisah($complaints);
 
         $pelaku = $user->canSeeStaffAttribution()
             ? ComplaintResponsible::whereIn('complaint_id', $complaints->modelKeys())->get()
@@ -46,7 +51,16 @@ class ReportController extends Controller
             'total' => $complaints->count(),
             'resolved' => $resolved->count(),
             'overdue' => $complaints->filter->isOverdue()->count(),
-            'compensation' => $complaints->sum('compensation_amount'),
+            // Dua angka, bukan satu. Menjumlah semuanya lalu menamainya
+            // "Dibayar" memasukkan tiket open/handling yang belum disetujui
+            // siapa pun dan tiket close beralasan ditolak yang tidak membayar
+            // apa pun — label itu menjanjikan lebih dari yang dijamin
+            // datanya. Yang berjalan tidak dibuang, hanya dipisah: paparan
+            // yang sedang berjalan tetap terlihat. (API-106)
+            'compensation' => $biaya['pasti'],
+            'compensationBelumPasti' => $biaya['belumPasti'],
+            'tiketPasti' => $biaya['tiketPasti'],
+            'tiketBelumPasti' => $biaya['tiketBelumPasti'],
             // Tiket Close tetap bisa dipisah: yang benar-benar selesai dan
             // yang ditolak. Kemampuannya tidak hilang bersama statusnya —
             // hanya pindah ke close_reason. (API-18 #6)
