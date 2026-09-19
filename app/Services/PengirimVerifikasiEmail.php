@@ -156,14 +156,17 @@ class PengirimVerifikasiEmail
         //      memuat `/`; kalau ada `/`, yang dibaca itu JALUR, bukan
         //      kredensial. Ini yang menjaga
         //      `https://api.nevira.id/v1:abc gagal budi@lessworry.id` utuh.
-        //   2. `(?!\d{1,5}(?:[\s/,)"]|$))` — angka lalu pembatas sesudah `:`
-        //      adalah NOMOR PORT, bukan password.
+        //   2. `(?!\d{1,5}(?:[^\w.\-]|$))` — angka lalu apa pun yang BUKAN
+        //      karakter host adalah NOMOR PORT, bukan password. Kelas ini
+        //      menggantikan daftar `[\s/,)"]`; daftar itu diam-diam
+        //      mensyaratkan tanda baca tertentu, sehingga `mail.example:587!`
+        //      tidak dikenali sebagai port dan seluruh kalimat tertelan.
         //   3. paling tiga spasi. Tanpa batas ini satu kalimat galat penuh
         //      tertelan sampai alamat surel di ujungnya. Password lebih dari
         //      tiga spasi jadi tidak tersensor — disebut di docblock.
         //   4. `\r\n` di luar kelas — penyensoran tidak melompati baris.
         $pesan = (string) preg_replace(
-            '#(?<=://)[^\s/\r\n]+?:(?!\d{1,5}(?:[\s/,)"]|$))[^\s\r\n]*(?:[ ][^\s\r\n]*){0,3}?@(?=[\w.\-]+(?::\d+)?(?:[\s/,)"]|$))#',
+            '#(?<=://)[^\s/\r\n]+?:(?!\d{1,5}(?:[^\w.\-]|$))[^\s\r\n]*(?:[ ][^\s\r\n]*){0,3}?@(?=[\w.\-]+(?::\d+)?(?:[^\w.\-]|$))#',
             '[kredensial-disensor]@',
             $pesan
         );
