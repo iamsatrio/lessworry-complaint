@@ -295,6 +295,81 @@ class GerbangVerifikasiEmailTest extends TestCase
         }
     }
 
+    /**
+     * Tanda baca kalimat sesudah DSN tidak boleh membatalkan penyensoran. (API-122)
+     *
+     * Kegagalan yang ditemukan Maldini di gerbang merge, 19 Sep 2026. Kedua
+     * pagar di lintasan kedua memakai daftar pembatas `[\s/,)"]`. Daftar itu
+     * memuat tanda baca yang kebetulan terpikir, bukan aturan; `!` `;` `?`
+     * `>` `]` tidak ada di dalamnya. Akibatnya DSN yang diakhiri salah satu
+     * tanda itu — bentuk yang lazim di pesan galat dan di kutipan log — lolos
+     * utuh, nama pengguna dan password sekaligus.
+     *
+     * Satu baris per tanda, supaya yang berikutnya tahu tanda mana yang
+     * dikunci dan tidak mengira daftarnya masih bisa dipendekkan.
+     */
+    public function test_penyensoran_tidak_dibatalkan_tanda_baca_sesudah_host(): void
+    {
+        foreach ([
+            'smtp://user:pa ss@smtp.lessworry.id!',
+            'smtp://user:pa ss@smtp.lessworry.id;',
+            'smtp://user:pa ss@smtp.lessworry.id?',
+            'smtp://user:pa ss@smtp.lessworry.id>',
+            'smtp://user:pa ss@smtp.lessworry.id]',
+        ] as $pesan) {
+            $keluaran = PengirimVerifikasiEmail::tanpaKredensial($pesan);
+            $tanda = substr($pesan, -1);
+
+            $this->assertSame(
+                'smtp://[kredensial-disensor]@smtp.lessworry.id'.$tanda,
+                $keluaran,
+                $pesan
+            );
+
+            $this->assertStringNotContainsString('user', $keluaran, $pesan);
+            $this->assertStringNotContainsString('pa ss', $keluaran, $pesan);
+        }
+
+        // Nomor port di antara host dan tanda bacanya tidak mengubah apa pun.
+        foreach (['!', ';', '?', '>', ']'] as $tanda) {
+            $pesan = 'Gagal: smtp://user:my secret pass@smtp.lessworry.id:587'.$tanda;
+
+            $this->assertSame(
+                'Gagal: smtp://[kredensial-disensor]@smtp.lessworry.id:587'.$tanda,
+                PengirimVerifikasiEmail::tanpaKredensial($pesan),
+                $pesan
+            );
+        }
+    }
+
+    /**
+     * Tanda baca sesudah nomor port tidak boleh membuat port dibaca password. (API-122)
+     *
+     * Sisi sebaliknya dari daftar pembatas yang sama, dan lebih berbahaya
+     * daripada terlihat: `smtp://mail.example:587!` tidak memuat kredensial
+     * sama sekali, tapi pagar port menolak mengenali `587` sebagai port karena
+     * `!` bukan anggota daftar. Lintasan kedua lalu menyeberang sampai `@`
+     * pada alamat penerima, membuang nama host DAN alamatnya, lalu menstempel
+     * `[kredensial-disensor]` di atasnya. Barisnya tampak sudah ditangani
+     * padahal yang dibuang justru satu-satunya keterangan yang berguna.
+     */
+    public function test_penyensoran_mengenali_port_meski_diikuti_tanda_baca(): void
+    {
+        foreach (['!', ';', '?', '>', ']'] as $tanda) {
+            foreach ([
+                'smtp://mail.example:587'.$tanda,
+                'smtp://mail.example:587'.$tanda.' untuk budi@lessworry.id',
+                'Gagal: smtp://mail.example:587'.$tanda.' hubungi budi@lessworry.id',
+            ] as $pesan) {
+                $this->assertSame(
+                    $pesan,
+                    PengirimVerifikasiEmail::tanpaKredensial($pesan),
+                    'DSN tanpa kredensial ikut tersensor: '.$pesan
+                );
+            }
+        }
+    }
+
     /* ---------- 2. Ganti huruf besar-kecil alamat ---------- */
 
     /**
