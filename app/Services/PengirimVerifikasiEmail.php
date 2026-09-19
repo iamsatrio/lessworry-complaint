@@ -88,6 +88,84 @@ class PengirimVerifikasiEmail
     }
 
     /**
+     * Satu-satunya bentuk pesan galat yang boleh masuk log. (API-121)
+     *
+     * Dua hal berbeda harus hilang dari kalimat galat SMTP, dan alasannya
+     * berbeda: kredensial karena ia rahasia, alamat email karena ia data
+     * pribadi. Digabung di sini supaya tidak ada pemanggil yang mendapat
+     * separuhnya — sebelum ini `kirim()` memanggil `tanpaKredensial()`
+     * langsung, dan alamat email penerima lolos ke `storage/logs`.
+     *
+     * URUTANNYA MENENTUKAN. Kredensial dulu, alamat email sesudahnya:
+     * `smtp://user:pa ss@smtp.lessworry.id` memuat potongan yang berbentuk
+     * alamat email (`ss@smtp.lessworry.id`). Kalau penyensoran alamat
+     * berjalan lebih dulu, potongan itu diganti penanda, DSN-nya tidak lagi
+     * cocok dengan pola kredensial, dan `user:pa ` tertinggal di log.
+     *
+     * Penanda yang dipakai keduanya BERBEDA — `[kredensial-disensor]` dan
+     * `[email-disensor]` — dan itu bukan hiasan. Kalau satu lintasan meluber
+     * ke wilayah lintasan lain, yang muncul di log satu penanda dua kali,
+     * bukan satu dari masing-masing. Penanda yang salah pada baris yang
+     * bocor lebih buruk daripada tidak ada penanda sama sekali: baris yang
+     * tampak sudah ditangani tidak akan diperiksa siapa pun lagi. Itu juga
+     * alasan lintasan kredensial dibiarkan MENYENSOR BERLEBIH pada bentuk
+     * ambigu, bukan melewatkannya — lihat pagar 1 di `tanpaKredensial()`.
+     */
+    public static function amanUntukLog(string $pesan): string
+    {
+        return self::tanpaAlamatEmail(self::tanpaKredensial($pesan));
+    }
+
+    /**
+     * Buang setiap alamat email dari pesan galat. (API-121)
+     *
+     * `Mail::to($user->email)` membuat alamat penerima muncul di kalimat
+     * galat pada jalur "address rejected" — jalur yang paling sering dipakai
+     * — dan dari sana ia masuk `storage/logs`. Alamat itu milik anggota tim
+     * (pelanggan tidak punya akun dan tidak pernah dikirimi surat dari jalur
+     * ini), tapi ia tetap data pribadi dan tetap tidak boleh masuk log.
+     *
+     * Dua keputusan di API-121, keduanya sengaja, keduanya bukan selera:
+     *
+     *   1. DISENSOR PENUH, bukan disamarkan sebagian (`b***@lessworry.id`).
+     *      Entri lognya sudah memuat `user_id` di baris yang sama, jadi
+     *      "siapa yang gagal dikirimi" sudah terjawab dan domainnya bisa
+     *      ditarik dari catatan pengguna itu. Penyamaran sebagian menyisakan
+     *      data pribadi sambil menambah nol informasi yang belum ada.
+     *   2. SEMUA alamat, tanpa daftar kecualian — termasuk alamat sistem
+     *      seperti `noreply@lessworry.id`. Membedakan alamat sistem dari
+     *      alamat orang menuntut aturan yang bisa diperiksa mesin; tanpa itu
+     *      yang berlaku pendapat per-tinjauan. Alamat sistem yang ikut
+     *      tersensor tidak menghilangkan apa pun — ia konstanta dari
+     *      konfigurasi, bukan temuan.
+     *
+     * Nama host tetap DIBIARKAN, alasan yang sama dengan `tanpaKredensial()`:
+     * `mail.example:587` bukan alamat email dan tidak punya `@`, jadi ia di
+     * luar jangkauan pola ini.
+     *
+     * Batas yang disengaja: alamat tanpa titik di domain (`mailer@localhost`)
+     * tidak disensor. Syarat titik itu yang menjaga lintasan ini tidak
+     * menelan `user@host` di tengah kalimat galat. Jalur yang jadi alasan
+     * issue ini tertutup penuh — kolom `email` divalidasi, jadi alamat
+     * anggota tim selalu berdomain bertitik.
+     */
+    public static function tanpaAlamatEmail(string $pesan): string
+    {
+        // Bagian lokal TIDAK memuat `[` dan `]`, dan itu yang menjaga penanda
+        // kredensial tetap utuh: sesudah `tanpaKredensial()`, pesannya memuat
+        // `smtp://[kredensial-disensor]@smtp.lessworry.id`. Karakter tepat
+        // sebelum `@` di situ adalah `]`, yang tidak bisa jadi bagian lokal,
+        // jadi polanya tidak cocok dan NAMA HOST-nya tidak ikut terbuang.
+        // Hilangnya nama host adalah regresi, bukan penyensoran yang lebih
+        // aman — itu satu-satunya petunjuk yang tersisa untuk menelusuri.
+        return (string) preg_replace(
+            '#[\w.%+\-]+@[\w\-]+(?:\.[\w\-]+)*\.[A-Za-z]{2,}#',
+            '[email-disensor]',
+            $pesan
+        );
+    }
+
+    /**
      * Buang kredensial dari pesan galat sebelum ia masuk log. (API-37 nomor 1)
      *
      * Kegagalan koneksi biasa hanya memuat nama host. Yang membawa DSN utuh
@@ -101,6 +179,12 @@ class PengirimVerifikasiEmail
      * yang terlihat supaya pembacanya tahu ada yang disensor dan tidak
      * mengira DSN-nya memang tidak berkredensial.
      *
+     * Fungsi ini menangani KREDENSIAL saja, dan itu sengaja: alamat email
+     * dibuang terpisah oleh `tanpaAlamatEmail()`. Yang dipanggil sebelum
+     * menulis log adalah `amanUntukLog()`, yang menjalankan keduanya dengan
+     * urutan yang benar. Jangan memanggil yang ini langsung untuk sesuatu
+     * yang akan masuk log — separuh penyensoran bukan penyensoran. (API-121)
+     *
      * BENTUK YANG MASIH LOLOS UTUH — tidak tersensor sama sekali, bukan
      * tersensor sebagian. Ditulis apa adanya supaya pembaca berikutnya tidak
      * mengira fungsi ini menjamin lebih dari yang ia lakukan:
@@ -111,10 +195,20 @@ class PengirimVerifikasiEmail
      *     Pagar nomor port membacanya sebagai port. Sudah begitu sejak sebelum
      *     API-122 dan tidak diubah di sini.
      *
-     * Arah sebaliknya juga belum tertutup rapat: `scheme://host:teks` yang
-     * diikuti alamat surel dalam tiga spasi masih bisa tertelan, sehingga nama
-     * host hilang dari log padahal tidak ada kredensial di situ. Bukan
-     * kebocoran, tapi melawan alasan fungsi ini menyisakan host. (API-124)
+     * Arah sebaliknya — menelan teks yang BUKAN kredensial — masih terbuka,
+     * dan sengaja dibiarkan terbuka. `scheme://host:teks` yang diikuti alamat
+     * surel dalam tiga spasi tetap tertelan: `smtp://mail.example:abc gagal
+     * budi@lessworry.id` keluar sebagai `smtp://[kredensial-disensor]@lessworry.id`,
+     * jadi nama host hilang dari log padahal tidak ada kredensial di situ.
+     *
+     * Itu HARGA, bukan kelalaian. Bentuk itu tidak bisa dibedakan dari
+     * `pengguna:password` yang nama penggunanya bertitik, dan dari dua
+     * kegagalan yang mungkin — kehilangan nama host, atau membocorkan
+     * kredensial — hanya satu yang boleh dipilih. Percobaan pertama API-124
+     * memilih yang lain (pagar titik di lintasan kedua) dan hasilnya
+     * `smtp://budi.santoso:pa ss@host` lolos utuh; itu dibatalkan di sini.
+     * Menutup arah ini butuh pembeda yang tidak ada di teksnya — misalnya
+     * daftar host yang sah dari konfigurasi. (API-124)
      */
     public static function tanpaKredensial(string $pesan): string
     {
@@ -156,6 +250,18 @@ class PengirimVerifikasiEmail
         //      memuat `/`; kalau ada `/`, yang dibaca itu JALUR, bukan
         //      kredensial. Ini yang menjaga
         //      `https://api.nevira.id/v1:abc gagal budi@lessworry.id` utuh.
+        //
+        //      TITIK TIDAK ikut dilarang di sini, dan itu keputusan yang
+        //      dibalik dari percobaan pertama API-124. Melarang titik memang
+        //      menyelamatkan `smtp://mail.example:abc gagal budi@lessworry.id`
+        //      dari tertelan — tapi `host:teks` dan `pengguna:password` TIDAK
+        //      BISA dibedakan dari teksnya, dan titik bukan pembeda: nama
+        //      pengguna SMTP justru lazim bertitik karena ia biasanya alamat
+        //      surel. Harga pagar titik adalah `smtp://budi.santoso:pa ss@host`
+        //      lolos utuh — nama pengguna dan password sekaligus. Menukar
+        //      kebocoran kredensial yang lazim dengan keterbacaan host pada
+        //      bentuk yang jarang adalah pertukaran ke arah yang salah.
+        //      Yang dipilih di sini: kalau ambigu, SENSOR. (API-124)
         //   2. `(?!\d{1,5}(?:[^\w.\-]|$))` — angka lalu apa pun yang BUKAN
         //      karakter host adalah NOMOR PORT, bukan password. Kelas ini
         //      menggantikan daftar `[\s/,)"]`; daftar itu diam-diam
@@ -203,10 +309,12 @@ class PengirimVerifikasiEmail
                 new VerifikasiEmail($user, $this->tautan($user), self::UMUR_MENIT)
             );
         } catch (Throwable $e) {
-            // Pesan galat SMTP bisa memuat nama host dan kredensial. Ia tidak
-            // pernah boleh sampai ke layar orang — dan, sejak API-37 nomor 1,
-            // juga tidak boleh masuk log apa adanya. Aturan repositori ini
-            // tidak membuat pengecualian untuk log server.
+            // Pesan galat SMTP bisa memuat nama host, kredensial, DAN alamat
+            // email penerima. Ia tidak pernah boleh sampai ke layar orang —
+            // dan, sejak API-37 nomor 1, juga tidak boleh masuk log apa
+            // adanya. Aturan repositori ini tidak membuat pengecualian untuk
+            // log server, dan data pribadi anggota tim tidak lebih boleh
+            // masuk log daripada kredensial. (API-121)
             Log::error('Gagal mengirim email verifikasi.', [
                 'user_id' => $user->id,
                 'sumber' => $sumber,
@@ -215,7 +323,7 @@ class PengirimVerifikasiEmail
                 // "alamat ditolak", dan tidak satu pun bisa memuat rahasia.
                 'jenis' => get_class($e),
                 'kode' => $e->getCode(),
-                'error' => self::tanpaKredensial($e->getMessage()),
+                'error' => self::amanUntukLog($e->getMessage()),
             ]);
 
             $this->catatHasil(gagal: true);

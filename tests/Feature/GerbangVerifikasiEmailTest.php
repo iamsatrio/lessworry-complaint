@@ -26,6 +26,216 @@ class GerbangVerifikasiEmailTest extends TestCase
         ]);
     }
 
+    /* ---------- 1a. Tabel penyensoran: satu tempat, semua kasusnya ---------- */
+
+    /**
+     * Enam kasus penyensoran, berdampingan, lewat jalur log yang sungguhan.
+     *
+     * Penyensoran ini sudah tiga kali diperbaiki sepotong-sepotong — API-37,
+     * API-120, API-122 — dan tiap kali perbaikannya melebarkan atau
+     * menyempitkan pola tanpa ada satu tempat yang memperlihatkan akibatnya
+     * pada kasus-kasus lain. Tabel ini tempat itu. Lintasan keempat, kalau
+     * suatu hari perlu, dibuka dengan menambah baris di sini lebih dulu.
+     *
+     * Tiap baris melewati `kirim()` yang sebenarnya, bukan fungsi
+     * penyensornya langsung: yang menentukan aman-tidaknya adalah apa yang
+     * benar-benar ditulis `Log::error`, bukan keluaran satu lintasan.
+     *
+     * @return array<string, array{pesan: string, harapan: string}>
+     */
+    public static function kasusPenyensoran(): array
+    {
+        return [
+            // 1. Alamat email tersensor PENUH. (API-121)
+            'alamat email' => [
+                'pesan' => 'Address penerima@example.test was rejected',
+                'harapan' => 'Address [email-disensor] was rejected',
+            ],
+
+            // 2. Password ber-`@` tersensor SELURUHNYA. (API-120)
+            'password ber-@' => [
+                'pesan' => 'Failed: smtp://smtpuser:p@ssw0rd@smtp.example.test:587 unreachable',
+                'harapan' => 'Failed: smtp://[kredensial-disensor]@smtp.example.test:587 unreachable',
+            ],
+
+            // 3. Password ber-`/` tersensor SELURUHNYA. (API-122)
+            'password ber-/' => [
+                'pesan' => 'smtp://user:p@ss/w0rd@smtp.example.test gagal',
+                'harapan' => 'smtp://[kredensial-disensor]@smtp.example.test gagal',
+            ],
+
+            // 4. Password BERSPASI tersensor SELURUHNYA. (API-122)
+            'password berspasi' => [
+                'pesan' => 'smtp://user:pa ss@smtp.example.test gagal',
+                'harapan' => 'smtp://[kredensial-disensor]@smtp.example.test gagal',
+            ],
+
+            // 5. Baris TANPA kredensial IKUT tertelan — harga yang dipilih
+            //    sadar, bukan cacat yang terlewat. (API-124)
+            //
+            // `mail.example` nama host, `abc` teks galat, `:` di antaranya
+            // bukan pemisah password. Lintasan kedua menyeberangi spasi
+            // sampai `@` milik alamat di ujung kalimat dan menelan ketiganya
+            // jadi satu penanda kredensial, padahal tidak ada kredensial di
+            // baris ini. Nama host hilang dari log.
+            //
+            // Itu dipilih karena bentuk ini TIDAK BISA dibedakan dari
+            // `smtp://budi.santoso:pa ss@host` — nama pengguna SMTP lazim
+            // bertitik karena biasanya ia alamat surel. Percobaan pertama
+            // API-124 melarang titik di nama pengguna supaya baris ini utuh;
+            // harganya kredensial bertitik + password berspasi lolos utuh ke
+            // log. Dari dua kegagalan itu hanya satu yang boleh dipilih, dan
+            // kehilangan nama host bukan kebocoran.
+            //
+            // Jarak alamatnya SENGAJA dua spasi dari `:`. Lintasan kedua
+            // dibatasi paling tiga spasi (API-122), jadi kalimat yang lebih
+            // panjang tidak tertelan karena kebetulan terlalu jauh. Baris ini
+            // harus berada di dalam jangkauan itu supaya yang diuji
+            // perilakunya, bukan jaraknya.
+            'baris tanpa kredensial' => [
+                'pesan' => 'smtp://mail.example:abc gagal penerima@example.test',
+                'harapan' => 'smtp://[kredensial-disensor]@example.test',
+            ],
+
+            // 6. Kredensial DAN alamat di satu kalimat: dua penanda yang
+            //    BERBEDA, dan nama host tetap terbaca di antaranya. Kalau
+            //    salah satu lintasan meluber ke wilayah lintasan lain, yang
+            //    muncul di sini satu penanda dua kali — bukan satu dari
+            //    masing-masing.
+            'kredensial dan alamat bersama' => [
+                'pesan' => 'Gagal: smtp://user:pa ss@smtp.example.test - alamat penerima@example.test ditolak',
+                'harapan' => 'Gagal: smtp://[kredensial-disensor]@smtp.example.test - alamat [email-disensor] ditolak',
+            ],
+        ];
+    }
+
+    /**
+     * Tabel di atas, dijalankan lewat `kirim()` yang sebenarnya.
+     *
+     * Satu pengguna per baris: `RateLimiter` memakai kunci per-pengguna, jadi
+     * enam baris atas satu pengguna akan kena batas 3 dan baris keempat
+     * seterusnya tidak pernah sampai ke `Log::error`.
+     *
+     * Nilai di tabel semuanya karangan: alamat memakai TLD `.test` yang
+     * dicadangkan RFC 2606, dan tidak satu pun password di situ pernah
+     * dipakai di mana pun.
+     */
+    public function test_tabel_penyensoran_pesan_galat_yang_masuk_log(): void
+    {
+        $kasus = self::kasusPenyensoran();
+
+        $ditulis = [];
+
+        Log::shouldReceive('error')->andReturnUsing(function ($pesan, $konteks = []) use (&$ditulis) {
+            $ditulis[] = $konteks;
+        });
+
+        Mail::shouldReceive('to->send')->andThrowExceptions(array_map(
+            fn (array $baris) => new TransportException($baris['pesan']),
+            array_values($kasus)
+        ));
+
+        $pengguna = [];
+
+        foreach (array_keys($kasus) as $i => $nama) {
+            $user = User::create([
+                'name' => 'Staf '.$i,
+                'email' => 'staf'.$i.'@example.test',
+                'password' => 'secret123',
+                'role' => 'kasir',
+            ]);
+
+            $pengguna[$nama] = $user;
+
+            app(PengirimVerifikasiEmail::class)->kirim($user, 'permintaan');
+        }
+
+        $this->assertCount(count($kasus), $ditulis,
+            'Tidak semua baris tabel sampai ke Log::error.');
+
+        foreach (array_values($kasus) as $i => $baris) {
+            $nama = array_keys($kasus)[$i];
+            $konteks = $ditulis[$i];
+
+            // Kasus 1-5: bentuk pesannya, persis.
+            $this->assertSame($baris['harapan'], $konteks['error'], $nama);
+
+            // Kriteria 4: yang membuat entri ini berguna tetap utuh di SETIAP
+            // baris. Ini juga yang membuat penyensoran penuh cukup — siapa
+            // yang gagal dikirimi sudah terjawab `user_id` di baris yang sama.
+            $this->assertSame($pengguna[$nama]->id, $konteks['user_id'], $nama);
+            $this->assertSame(TransportException::class, $konteks['jenis'], $nama);
+            $this->assertArrayHasKey('kode', $konteks, $nama);
+        }
+
+        // Tidak ada satu pun alamat atau potongan password yang tersisa di
+        // seluruh keluaran, dilihat sekaligus.
+        $seluruhnya = json_encode($ditulis);
+
+        foreach (['penerima@', 'staf0@', 'ssw0rd', 'ss/w0rd', 'pa ss', 'smtpuser'] as $potongan) {
+            $this->assertStringNotContainsString($potongan, (string) $seluruhnya,
+                'Potongan yang seharusnya tersensor lolos ke log: '.$potongan);
+        }
+
+        // Nama host tetap terbaca pada DSN yang bentuknya jelas — itu
+        // satu-satunya petunjuk yang tersisa, dan lintasan kredensial tidak
+        // boleh meluber melewatinya.
+        $this->assertStringContainsString('smtp.example.test', (string) $seluruhnya);
+    }
+
+    /**
+     * Batas yang diketahui, dikunci supaya terlihat. (API-121, API-124)
+     *
+     * Test ini TIDAK menyatakan keduanya benar. Ia menyatakan keduanya
+     * diketahui: keluaran di bawah yang akan ditemukan orang di
+     * `storage/logs`, dan alasan tiap batas ada di docblock fungsinya. Kalau
+     * salah satunya ditutup nanti, test ini yang berubah — bukan sesuatu yang
+     * diam-diam bergeser.
+     */
+    public function test_batas_penyensoran_yang_diketahui(): void
+    {
+        // `host:teks` dan `pengguna:password` tidak bisa dibedakan sebelum
+        // spasi pertama. Yang dipilih saat ambigu: SENSOR. Nama pengguna
+        // bertitik dengan password berspasi tersensor penuh — kalau baris
+        // pertama ini suatu hari berubah jadi `budi.santoso:pa ...`, yang
+        // terjadi kebocoran kredensial, bukan pergeseran gaya keluaran.
+        $this->assertSame(
+            'smtp://[kredensial-disensor]@smtp.example.test',
+            PengirimVerifikasiEmail::amanUntukLog('smtp://budi.santoso:pa ss@smtp.example.test')
+        );
+        $this->assertSame(
+            'smtp://[kredensial-disensor]@smtp.example.test',
+            PengirimVerifikasiEmail::amanUntukLog('smtp://budi.santoso:rahasia@smtp.example.test')
+        );
+
+        // Sisi harga dari pilihan yang sama: baris tanpa kredensial ikut
+        // tersensor dan nama host-nya hilang. Dikunci supaya terlihat — kalau
+        // suatu hari ada pembeda yang sah (misalnya daftar host dari
+        // konfigurasi), baris inilah yang berubah.
+        $this->assertSame(
+            'smtp://[kredensial-disensor]@example.test',
+            PengirimVerifikasiEmail::amanUntukLog('smtp://mail.example:abc gagal penerima@example.test')
+        );
+
+        // Penanda yang muncul harus `[kredensial-disensor]`, bukan
+        // `[email-disensor]`: baris yang ditandai sebagai alamat tersensor
+        // tidak akan diperiksa lagi oleh siapa pun.
+        $this->assertStringNotContainsString(
+            '[email-disensor]',
+            PengirimVerifikasiEmail::amanUntukLog('smtp://budi.santoso:pa ss@smtp.example.test')
+        );
+
+        // Domain tanpa titik bukan alamat yang dikenali. Syarat titik itu yang
+        // menjaga penyensoran alamat tidak menelan `user@host` di tengah
+        // kalimat galat. Alamat anggota tim selalu berdomain bertitik —
+        // kolom `email` divalidasi — jadi jalur yang jadi alasan API-121
+        // tertutup penuh.
+        $this->assertSame(
+            'mailer@localhost gagal',
+            PengirimVerifikasiEmail::amanUntukLog('mailer@localhost gagal')
+        );
+    }
+
     /* ---------- 1. Kredensial SMTP tidak masuk log ---------- */
 
     /**
@@ -81,10 +291,22 @@ class GerbangVerifikasiEmailTest extends TestCase
             PengirimVerifikasiEmail::tanpaKredensial('Connection refused to mail.example:587')
         );
 
-        // Alamat email di dalam pesan bukan kredensial, dan tidak ikut disensor.
+        // Alamat email bukan kredensial, jadi lintasan INI tidak menyentuhnya
+        // — dan itu yang dikunci di sini, di lapisan yang benar.
+        //
+        // Sampai API-121 assertion ini memakai `tanpaKredensial()` untuk
+        // menyatakan alamatnya boleh lewat ke log. Yang berubah bukan
+        // lapisan ini melainkan apa yang boleh sampai ke log: alamat anggota
+        // tim data pribadi, dan `tanpaAlamatEmail()` yang membuangnya
+        // sesudah lintasan ini. Bentuk yang benar-benar ditulis ke log ada
+        // di `kasusPenyensoran()`, baris `alamat email`.
         $this->assertSame(
-            'Address budi@lessworry.id was rejected',
-            PengirimVerifikasiEmail::tanpaKredensial('Address budi@lessworry.id was rejected')
+            'Address penerima@example.test was rejected',
+            PengirimVerifikasiEmail::tanpaKredensial('Address penerima@example.test was rejected')
+        );
+        $this->assertSame(
+            'Address [email-disensor] was rejected',
+            PengirimVerifikasiEmail::amanUntukLog('Address penerima@example.test was rejected')
         );
     }
 
@@ -109,19 +331,24 @@ class GerbangVerifikasiEmailTest extends TestCase
             PengirimVerifikasiEmail::tanpaKredensial('smtp://user:simple@smtp.lessworry.id:587')
         );
 
-        // Alamat email di kalimat yang sama tidak ikut tersensor, sementara
-        // DSN-nya tersensor penuh.
+        // DSN dan alamat di satu kalimat. Assertion ini ditambahkan PR #56
+        // untuk mengunci alamatnya tetap utuh saat DSN di kalimat yang sama
+        // tersensor. API-121 membalik bagian itu — alamat anggota tim tidak
+        // boleh masuk log — tapi apa yang sebenarnya dijaga tidak berubah:
+        // penyensoran kredensial tidak boleh meluber. Dua penanda yang
+        // BERBEDA membuktikannya; kalau pola kredensial menelan alamatnya,
+        // yang muncul `[kredensial-disensor]` dua kali.
         $this->assertSame(
-            'Gagal mengirim ke budi@lessworry.id lewat smtp://[kredensial-disensor]@smtp.lessworry.id',
-            PengirimVerifikasiEmail::tanpaKredensial(
-                'Gagal mengirim ke budi@lessworry.id lewat smtp://u:p@ssw0rd@smtp.lessworry.id'
+            'Gagal mengirim ke [email-disensor] lewat smtp://[kredensial-disensor]@smtp.example.test',
+            PengirimVerifikasiEmail::amanUntukLog(
+                'Gagal mengirim ke penerima@example.test lewat smtp://u:p@ssw0rd@smtp.example.test'
             )
         );
 
         // Tidak ada potongan password yang tersisa di keluaran mana pun.
         foreach ([
             'Failed: smtp://smtpuser:p@ssw0rd@smtp.lessworry.id:587 unreachable',
-            'Gagal mengirim ke budi@lessworry.id lewat smtp://u:p@ssw0rd@smtp.lessworry.id',
+            'Gagal mengirim ke penerima@example.test lewat smtp://u:p@ssw0rd@smtp.example.test',
         ] as $pesan) {
             $this->assertStringNotContainsString(
                 'ssw0rd',
@@ -193,9 +420,15 @@ class GerbangVerifikasiEmailTest extends TestCase
      * Pagar arah sebaliknya. (API-122)
      *
      * Melepas pembatas `/` membuat polanya lebih longgar, jadi risikonya
-     * bergeser dari "kurang menyensor" ke "menelan alamat penerima". Alamat
-     * penerima bukan kredensial: kalau ia hilang dari log, itu regresi meski
-     * lognya terlihat lebih aman.
+     * bergeser dari "kurang menyensor" ke "menelan alamat penerima".
+     *
+     * Yang diuji di sini `tanpaKredensial()` SENDIRIAN, dan itu sengaja:
+     * pola kredensial tidak boleh meluber melewati batas DSN. Sejak API-121
+     * alamat penerima memang tidak lagi sampai ke log — `tanpaAlamatEmail()`
+     * yang membuangnya sesudah lintasan ini — tapi ia harus dibuang oleh
+     * lintasan yang BENAR. Kalau pola kredensial yang menelannya, nama host
+     * ikut hilang, dan itu regresi meski lognya terlihat sama amannya.
+     * Bentuk yang benar-benar ditulis ke log ada di `kasusPenyensoran()`.
      */
     public function test_penyensoran_tidak_menelan_alamat_penerima_atau_host(): void
     {
