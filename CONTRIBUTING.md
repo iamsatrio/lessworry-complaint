@@ -49,6 +49,9 @@ Satu saja cukup untuk menahan merge. Tidak ada pengecualian karena "cuma masalah
 - Pengaman supervisor aktif terakhir bisa dilucuti lewat cara apa pun, termasuk pencabutan privilege.
 - Kredensial masuk kode, komentar, atau log.
 - Data pribadi pelanggan masuk log aplikasi.
+- Pesan galat SMTP masuk log lewat lintasan penyensoran tunggal. `PengirimVerifikasiEmail::tanpaKredensial()` membuang kredensial saja, `tanpaAlamatEmail()` membuang alamat email saja; kode produksi memanggil `amanUntukLog()`, yang menjalankan keduanya dengan urutan yang benar. Separuh penyensoran bukan penyensoran — lintasan kredensial sendirian sudah pernah meloloskan alamat email anggota tim ke `storage/logs` (API-121). `tests/Feature/PenyensoranSatuPintuTest.php` menjaganya dan harus tetap ada serta lulus.
+
+  **Test penyensoran boleh memanggil kedua lintasan langsung**, dan itu bukan kelonggaran: menguji lapisannya satu per satu yang membuat ketahuan kalau lintasan kredensial meluber ke wilayah alamat. Yang dijaga pemanggil produksi.
 
 **Batas lapisan**
 
