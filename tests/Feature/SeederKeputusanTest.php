@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Outlet;
 use App\Models\User;
 use App\Models\UserAudit;
 use Database\Seeders\DatabaseSeeder;
@@ -10,7 +11,8 @@ use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 /**
- * Dua keputusan API-57, sebagaimana dijatuhkan di API-131.
+ * Dua keputusan API-57, sebagaimana dijatuhkan di API-131, dan satu lanjutannya
+ * di API-132.
  *
  * Keputusan pertama pernah berbunyi sebaliknya: peran di daftar seeder adalah
  * deklarasi yang berlaku tiap deploy, dan pengembaliannya cukup dicatat di
@@ -26,6 +28,12 @@ use Tests\TestCase;
  *    memblokirnya berarti akun kasir sungguhan mati tiap deploy. Yang tetap
  *    mati di alamat itu hanya akun yang masih memegang password bocor.
  *    Yang `@getnada.com` tetap diblokir tanpa syarat.
+ *
+ * API-132 menutup asimetri yang ditinggalkan keputusan pertama: `role` dijaga,
+ * `division` dan `outlet_id` tidak, jadi kasir yang sengaja diturunkan Admin
+ * kehilangan outletnya tiap deploy — kasir tanpa outlet tidak bisa bekerja.
+ * Satu aturan untuk ketiganya: seeder menulis kolom identitas hanya ketika ia
+ * MEMBUAT akunnya.
  */
 class SeederKeputusanTest extends TestCase
 {
@@ -197,5 +205,117 @@ class SeederKeputusanTest extends TestCase
 
         $this->assertStringContainsString('API-131', $readme,
             'README belum menyebut keputusan yang mencabut blokirnya.');
+    }
+
+    /* ---------- 3. `division` dan `outlet_id` dijaga sama seperti `role` (API-132) ---------- */
+
+    /**
+     * Penurunannya lewat halaman Pengguna, bukan `forceFill`: yang harus
+     * bertahan melewati deploy adalah keputusan yang dibuat di jalur yang
+     * benar-benar dipakai Admin, dan jalur itu yang diuji.
+     *
+     * Merah sebelum perbaikan: `role` bertahan (API-131), `outlet_id` kembali
+     * `null`, dan hasilnya kasir yang tidak melihat complaint satu pun —
+     * `Complaint::terlihatOleh` menutup cakupan kosong dengan `1 = 0`.
+     */
+    public function test_outlet_kasir_yang_diturunkan_tidak_dilepas_seeder(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $tebet = Outlet::where('nevira_outlet_id', '118')->firstOrFail();
+        $tsulasa = User::where('email', 'tsulasa@lessworry.id')->firstOrFail();
+
+        $this->actingAs($this->adminYangMenyetel())
+            ->put('/users/'.$tsulasa->id, [
+                'name' => $tsulasa->name, 'role' => 'kasir',
+                'outlet_id' => $tebet->id, 'division' => null, 'is_active' => 1,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($tebet->id, $tsulasa->fresh()->outlet_id, 'Halaman Pengguna sendiri tidak menyimpan outletnya.');
+
+        $this->seed(DatabaseSeeder::class);
+
+        $tsulasa = $tsulasa->fresh();
+
+        $this->assertSame('kasir', $tsulasa->role);
+        $this->assertSame(
+            $tebet->id,
+            $tsulasa->outlet_id,
+            'Deploy melepas outlet kasir tanpa ada yang memutuskan begitu — kasirnya tidak bisa bekerja pagi itu.'
+        );
+    }
+
+    /** Divisi dijaga dengan aturan yang sama, dan karena alasan yang sama. */
+    public function test_divisi_yang_disetel_tidak_dilepas_seeder(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $eric = User::where('email', 'eric@lessworry.id')->firstOrFail();
+
+        $this->actingAs($this->adminYangMenyetel())
+            ->put('/users/'.$eric->id, [
+                'name' => $eric->name, 'role' => 'divisi',
+                'outlet_id' => null, 'division' => 'produksi', 'is_active' => 1,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->seed(DatabaseSeeder::class);
+
+        $eric = $eric->fresh();
+
+        $this->assertSame('divisi', $eric->role);
+        $this->assertSame('produksi', $eric->division, 'Deploy melepas divisi yang disetel Admin.');
+    }
+
+    /**
+     * Yang dijaga penimpaannya, bukan pembuatannya: akun yang belum ada tetap
+     * lahir tanpa outlet dan tanpa divisi — kelima akun di daftar melihat
+     * seluruh outlet.
+     */
+    public function test_akun_yang_belum_ada_tetap_dibuat_tanpa_outlet_dan_tanpa_divisi(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        foreach (['satrio@lessworry.id', 'care@lessworry.id'] as $email) {
+            $user = User::where('email', $email)->firstOrFail();
+
+            $this->assertNull($user->outlet_id, $email.' lahir terikat outlet.');
+            $this->assertNull($user->division, $email.' lahir terikat divisi.');
+        }
+    }
+
+    /**
+     * Akibat yang diterima sadar di API-132: akun yang dulu terikat outlet
+     * lalu naik jadi `admin` MENYIMPAN nilai lamanya, dan itu dibersihkan
+     * sekali dengan tangan lewat halaman Pengguna. Test ini memaku akibat itu
+     * supaya tidak ada yang "memperbaikinya" dengan kode pembersih di seeder —
+     * kode itulah cacat yang API-132 buang.
+     */
+    public function test_seeder_tidak_membersihkan_outlet_sisa_pada_akun_yang_naik_peran(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $tebet = Outlet::where('nevira_outlet_id', '118')->firstOrFail();
+        $ghozi = User::where('email', 'ghozi@lessworry.id')->firstOrFail();
+        $ghozi->forceFill(['outlet_id' => $tebet->id])->save();
+
+        $this->seed(DatabaseSeeder::class);
+
+        $this->assertSame($tebet->id, $ghozi->fresh()->outlet_id);
+    }
+
+    /**
+     * Admin yang menjalankan perubahan lewat halaman Pengguna. Password
+     * sementara dan gerbang verifikasi email dilewati di sini karena yang
+     * diuji bukan keduanya.
+     */
+    private function adminYangMenyetel(): User
+    {
+        $satrio = User::where('email', 'satrio@lessworry.id')->firstOrFail();
+        $satrio->forceFill(['must_change_password' => false])->save();
+        $satrio->markEmailAsVerified();
+
+        return $satrio->fresh();
     }
 }

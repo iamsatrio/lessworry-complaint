@@ -34,6 +34,15 @@ lalu tidak menyimpannya di mana pun; semuanya wajib diganti saat login
 pertama. Menjalankan seeder ulang tidak menyetel ulang password yang sudah
 diganti sendiri.
 
+Seeder menulis kolom identitas — peran, status aktif, outlet, dan divisi —
+**hanya saat ia membuat akunnya** (API-131, API-132). Perubahan yang dibuat
+Admin lewat halaman Pengguna bertahan melewati deploy: kasir yang diturunkan
+dan diikat ke satu outlet tetap memegang outletnya. Akibatnya kolom outlet dan
+divisi juga tidak ikut dibersihkan saat akun naik jadi Admin atau Customer Care
+— nilai lamanya masih muncul sebagai label di daftar Pengguna, dan
+dikosongkan sekali dengan tangan dari halaman itu. Peran yang berlaku yang
+menentukan hak akses, bukan label itu.
+
 Semua akun awal beralamat `@lessworry.id`, dan itu syarat: kotak suratnya ada
 di Google Workspace Less Worry, jadi tautan verifikasi email (API-35) yang
 sampai ke sana benar-benar membuktikan kepemilikan akun. Verifikasi berlaku
