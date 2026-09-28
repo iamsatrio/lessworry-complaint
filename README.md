@@ -46,19 +46,24 @@ perannya**: `kasir`, `divisi`, dan `supervisor` tetap bisa dipilih di halaman
 Pengguna, dan akun sungguhannya dibuat Admin dari sana dengan alamat kerja
 masing-masing.
 
-> **Jangan memakai `kasir@lessworry.id`, `produksi@lessworry.id`, atau
-> `kurir@lessworry.id` untuk akun sungguhan itu.** Ketiga alamat tersebut
-> diblokir permanen: seeder menonaktifkannya dan membuang passwordnya
-> **setiap kali dijalankan**. Akun yang dibuat di salah satunya akan mati
-> pada deploy berikutnya, dan satu-satunya jejaknya adalah sebaris peringatan
-> di keluaran deploy — kasirnya baru tahu pagi berikutnya saat tidak bisa
-> masuk.
->
-> Alasannya: ketiganya pernah jadi akun bersama seeder lama dan pernah
-> memegang password yang ada di riwayat commit publik. Alamat yang pernah
-> begitu tidak dipulihkan, ia diganti. Pakai alamat kerja perorangan —
-> `budi@lessworry.id`, bukan `kasir@lessworry.id` — yang juga membuat jejak
-> audit complaint bisa menjawab "siapa", bukan cuma "kasir yang mana pun".
+`kasir@lessworry.id`, `produksi@lessworry.id`, dan `kurir@lessworry.id` **boleh
+dipakai** untuk akun sungguhan itu. Ketiganya sempat diblokir permanen oleh
+seeder — akun yang dibuat di salah satunya mati pada deploy berikutnya, dan
+kasirnya baru tahu pagi berikutnya saat tidak bisa masuk. Blokir itu dicabut di
+API-131. Seeder tidak lagi menyentuh akun di alamat ini: perannya, passwordnya,
+dan statusnya aktif tetap seperti yang disetel Admin.
+
+Satu-satunya sisa syaratnya: kalau akun di salah satu alamat itu masih memegang
+password harfiah yang pernah bocor di riwayat commit publik, seeder
+menonaktifkannya dan membuang passwordnya. Itu tidak pernah mengenai akun yang
+dibuat dari halaman Pengguna — aturan password di aplikasi membuat password itu
+tidak bisa dipasang siapa pun.
+
+> Pertimbangkan tetap memakai alamat kerja perorangan — `budi@lessworry.id`,
+> bukan `kasir@lessworry.id`. Bukan soal seeder, tapi soal jejak audit: akun
+> perorangan membuat riwayat complaint bisa menjawab "siapa", bukan cuma
+> "kasir yang mana pun". Akun bersama tetap sah kalau memang satu alat dipakai
+> bergantian.
 
 `care@lessworry.id` adalah akun peran, bukan akun perorangan: riwayat complaint
 mencatat "Customer Care" yang menutup tiket, bukan siapa orangnya. Begitu peran
@@ -67,10 +72,16 @@ API-45). Alamat lama `cc@lessworry.id` tidak dipakai ulang dan tetap
 dinonaktifkan.
 
 Akun seeder versi lama (`cc@`, `kasirbaru@`, `samsuri@`, `arifin@`,
-`adhyasta@`, `audry@`, alamat `kasir@`/`produksi@`/`kurir@` di `lessworry.id`,
-dan ketiga alamat `getnada.com`) dinonaktifkan dan passwordnya dibuang saat
-seeder dijalankan — tidak dihapus, supaya jejak audit complaint yang pernah
-disentuhnya utuh.
+`adhyasta@`, `audry@`, dan ketiga alamat `getnada.com`) dinonaktifkan dan
+passwordnya dibuang saat seeder dijalankan — tidak dihapus, supaya jejak audit
+complaint yang pernah disentuhnya utuh.
+
+Peran akun yang sudah ada **tidak** ditimpa seeder. Menurunkan peran seseorang
+lewat halaman Pengguna bertahan melewati deploy; daftar di atas cuma menentukan
+peran saat akun pertama kali dibuat. Kalau di satu mesin semua admin terkunci —
+misalnya akunnya dibuat seeder versi paling lama sebagai `supervisor` —
+pulihkan sekali dengan `php artisan lessworry:pulihkan-admin <email>`, yang
+tercatat di jejak audit akunnya.
 
 ## Memperbarui salinan yang sudah ada
 
