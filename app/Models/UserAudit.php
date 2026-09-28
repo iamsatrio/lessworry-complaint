@@ -48,6 +48,9 @@ class UserAudit extends Model
             'email_diverifikasi_manual' => 'Ditandai terverifikasi oleh admin',
             'email_diverifikasi_konsol' => 'Ditandai terverifikasi lewat perintah shell',
             'email_diubah' => 'Alamat email diubah',
+            // Aksi historis: seeder berhenti menimpa peran di API-131, jadi
+            // tidak ada baris baru. Labelnya tetap karena baris lama di mesin
+            // yang pernah menjalankan seeder versi itu masih harus terbaca.
             'peran_disetel_ulang_seeder' => 'Peran dikembalikan oleh seeder',
             default => $this->action,
         };

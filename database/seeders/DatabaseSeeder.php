@@ -4,21 +4,12 @@ namespace Database\Seeders;
 
 use App\Models\Outlet;
 use App\Models\User;
-use App\Services\JejakPengguna;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
-    /** Satu-satunya penulis jejak audit akun — sama dengan yang dipakai controller. */
-    private JejakPengguna $jejak;
-
-    public function __construct(?JejakPengguna $jejak = null)
-    {
-        $this->jejak = $jejak ?? new JejakPengguna;
-    }
-
     /**
      * Outlet nyata dan akun tim. Tidak ada complaint contoh.
      *
@@ -61,9 +52,9 @@ class DatabaseSeeder extends Seeder
     }
 
     /**
-     * Alamat yang TIDAK BOLEH lagi bisa dimasuki.
+     * Alamat yang TIDAK BOLEH lagi bisa dimasuki, apa pun password terakhirnya.
      *
-     * Empat sumbernya, satu perlakuannya:
+     * Tiga sumbernya, satu perlakuannya:
      *
      * 1. Akun demo seeder lama (`cc@`, `kasirbaru@`) — password harfiah
      *    `password` yang ada di riwayat commit publik.
@@ -72,11 +63,7 @@ class DatabaseSeeder extends Seeder
      *    kalau basis datanya baru; di mesin yang sudah memuat 11 akun versi
      *    lama, menghapus barisnya dari `$daftar` justru MENINGGALKANNYA
      *    HIDUP — seeder tidak menyentuh apa yang tidak disebutnya.
-     * 3. Tiga alamat `@lessworry.id` yang sempat pindah ke `getnada.com`:
-     *    `kasir@`, `produksi@`, `kurir@`. Orangnya tetap, alamatnya pindah,
-     *    jadi baris lamanya adalah akun kedua yang tidak dipakai siapa-siapa
-     *    — dan masih menerima password lamanya.
-     * 4. Ketiga alamat `getnada.com` itu sendiri (API-50): `kasir@`,
+     * 3. Ketiga alamat `getnada.com` itu sendiri (API-50): `kasir@`,
      *    `produksi@`, `kurir@`. `getnada.com` adalah kotak surat publik yang
      *    bisa dibaca siapa saja yang tahu alamatnya, jadi akunnya bukan cuma
      *    tidak diseed lagi — ia harus MATI di mesin yang pernah membuatnya.
@@ -93,12 +80,39 @@ class DatabaseSeeder extends Seeder
         'arifin@lessworry.id',
         'adhyasta@lessworry.id',
         'audry@lessworry.id',
-        'kasir@lessworry.id',
-        'produksi@lessworry.id',
-        'kurir@lessworry.id',
         'kasir@getnada.com',
         'produksi@getnada.com',
         'kurir@getnada.com',
+    ];
+
+    /**
+     * Alamat kerja yang pernah dipakai akun demo, dan karena itu hanya
+     * dimatikan kalau password bocornya MASIH BERLAKU pada akun di situ.
+     *
+     * Ketiganya dulu ada di DEMO_LAMA, jadi seeder mematikannya tiap kali
+     * jalan. Buffon menjalankan akibatnya: Admin membuat akun Kasir outlet
+     * Tebet dengan `kasir@lessworry.id` — alamat yang README-nya sendiri
+     * anjurkan — deploy berikutnya mematikannya, kasirnya tidak bisa masuk
+     * pagi berikutnya, dan jejaknya satu baris di keluaran deploy. Ia berulang
+     * tiap deploy, bukan sekali. Dicabut atas keputusan API-131.
+     *
+     * Yang dicabut tiga alamatnya, BUKAN aturan password bocornya: akun demo
+     * seeder paling awal memakai alamat yang sama dengan password harfiah
+     * `password` yang ada di riwayat commit publik, dan ia tetap harus mati —
+     * yang berbahaya passwordnya, bukan alamatnya. Syarat itulah bedanya
+     * dengan DEMO_LAMA, yang mati tanpa syarat.
+     *
+     * Akibat yang diterima sadar (API-131): akun bersama dari seeder sebelas
+     * akun yang sudah memakai password pilihan sendiri ikut tetap hidup di
+     * alamat ini. Kalau sisa akun demo semacam itu ternyata masih ada di
+     * produksi, ia dinonaktifkan SEKALI DENGAN TANGAN lewat halaman Pengguna.
+     * Jangan tambahkan kode untuk itu: kode yang mematikan alamat ini tiap
+     * deploy justru kesalahan yang API-131 perbaiki.
+     */
+    private const BEKAS_DEMO_DI_ALAMAT_KERJA = [
+        'kasir@lessworry.id',
+        'produksi@lessworry.id',
+        'kurir@lessworry.id',
     ];
 
     /**
@@ -141,12 +155,16 @@ class DatabaseSeeder extends Seeder
         // Verifikasi email tidak bisa berlaku penuh selama akun seperti itu
         // ada, jadi akunnya yang pergi, bukan verifikasinya yang dilonggarkan.
         //
-        // Jangan hidupkan lagi barisnya dengan niat baik. Alamatnya ada di
-        // DEMO_LAMA supaya mesin yang pernah membuatnya ikut mematikannya.
-        // Yang dibuang adalah AKUNNYA, bukan perannya: `kasir`, `divisi`, dan
-        // `supervisor` tetap bisa dipilih di halaman Pengguna, dan akun
-        // sungguhannya dibuat Admin dari sana — beralamat kerja, satu orang
-        // satu akun, bukan lewat seeder.
+        // Jangan hidupkan lagi barisnya dengan niat baik. Alamat
+        // `getnada.com`-nya ada di DEMO_LAMA supaya mesin yang pernah
+        // membuatnya ikut mematikannya. Yang dibuang adalah AKUNNYA, bukan
+        // perannya: `kasir`, `divisi`, dan `supervisor` tetap bisa dipilih di
+        // halaman Pengguna, dan akun sungguhannya dibuat Admin dari sana —
+        // beralamat kerja, satu orang satu akun, bukan lewat seeder.
+        //
+        // Alamat kerja `kasir@`, `produksi@`, dan `kurir@` di `lessworry.id`
+        // BOLEH dipakai untuk akun sungguhan itu (API-131). Lihat
+        // BEKAS_DEMO_DI_ALAMAT_KERJA untuk satu-satunya sisa syaratnya.
         //
         // Customer Care ditambahkan di API-45; sebelumnya complaint Sedang dan
         // Berat tidak punya penutup selain supervisor dan admin. Alamat lama
@@ -167,24 +185,9 @@ class DatabaseSeeder extends Seeder
         ];
 
         $dicetak = [];
-        $peranDikembalikan = [];
 
         foreach ($daftar as [$nama, $email, $peran]) {
             $user = User::where('email', $email)->first();
-
-            // Peran di daftar ini adalah DEKLARASI, bukan nilai awal seperti
-            // `is_active` — keputusan API-57 nomor 1. Daftarnya cara satrio
-            // menetapkan siapa memegang apa, dan API-50 memakainya persis
-            // begitu untuk menaikkan satu orang jadi admin. Kalau perannya
-            // jadi nilai awal, menyunting daftar berhenti berpengaruh pada
-            // mesin yang akunnya sudah ada — dan itu mematikan satu-satunya
-            // mekanisme yang dipakai untuk menetapkannya.
-            //
-            // Yang diperbaiki di sini bukan aturannya melainkan diamnya.
-            // Sebelum ini, peran yang diturunkan sengaja lewat halaman
-            // Pengguna kembali naik pada deploy berikutnya tanpa satu jejak
-            // pun — dan yang kembali bisa berupa peran tertinggi di sistem.
-            $peranLama = $user?->role;
 
             // Kelima akun ini melihat seluruh outlet dan tidak terikat divisi
             // mana pun, jadi kedua kolom itu kosong — dan disetel kosong,
@@ -192,18 +195,36 @@ class DatabaseSeeder extends Seeder
             // divisi ikut dilepaskan saat perannya naik.
             $atribut = [
                 'name' => $nama,
-                'role' => $peran,
                 'division' => null,
                 'outlet_id' => null,
             ];
 
-            // `is_active` hanya disetel saat akun DIBUAT. Menonaktifkan orang
-            // adalah keputusan manusia yang berumur — itu satu-satunya cara
-            // mencabut akses, karena akun tidak pernah dihapus. Deploy
-            // berikutnya tidak boleh menghidupkannya kembali tanpa ada yang
-            // memutuskan begitu.
+            // `is_active` dan `role` hanya disetel saat akun DIBUAT.
+            // Menonaktifkan orang dan menurunkan perannya adalah keputusan
+            // manusia yang berumur — keduanya satu-satunya cara mencabut akses,
+            // karena akun tidak pernah dihapus. Deploy berikutnya tidak boleh
+            // membatalkannya tanpa ada yang memutuskan begitu.
+            //
+            // `role` dulu ditulis tanpa syarat, dan itu pagar yang ada
+            // pintunya: Admin mencabut hak admin seseorang lewat halaman
+            // Pengguna, deploy berikutnya mengembalikan peran TERTINGGI di
+            // sistem, dan jejaknya satu baris di keluaran deploy. Diperbaiki
+            // atas keputusan API-131.
+            //
+            // Mengubah peran akun yang sudah ada tetap bisa — lewat halaman
+            // Pengguna, yang berjejak. Yang dilindungi di sini penimpaannya,
+            // bukan pembuatannya: akun yang belum ada tetap dibuat dengan
+            // peran dari daftar.
+            //
+            // Akibat yang perlu diketahui: di mesin yang akunnya dibuat seeder
+            // paling lama, `satrio@lessworry.id` bisa tertinggal sebagai
+            // `supervisor` dan terkunci dari pengelolaan pengguna. Jalan
+            // keluarnya bukan menimpa peran tiap deploy, melainkan
+            // `php artisan lessworry:pulihkan-admin <email>` — sekali, dan
+            // tercatat di jejak audit akunnya.
             if ($user === null) {
                 $atribut['is_active'] = true;
+                $atribut['role'] = $peran;
             }
 
             // Password diterbitkan kalau akunnya baru, atau kalau password
@@ -238,17 +259,10 @@ class DatabaseSeeder extends Seeder
                 $user->forceFill($atribut)->save();
             }
 
-            if ($peranLama !== null && $peranLama !== $peran) {
-                $this->jejak->peranDisetelUlangSeeder($user, $peranLama);
-                $peranDikembalikan[] = [$nama, $email, $peranLama, $peran];
-            }
-
             if ($perluPasswordBaru) {
-                $dicetak[] = [$nama, $email, $peran, $sementara];
+                $dicetak[] = [$nama, $email, $user->role, $sementara];
             }
         }
-
-        $this->laporkanPeranDikembalikan($peranDikembalikan);
 
         $this->matikanDemoLama();
 
@@ -282,52 +296,16 @@ class DatabaseSeeder extends Seeder
      * acak — bukan dihapus, supaya jejak audit complaint yang pernah
      * disentuhnya tetap utuh.
      *
-     * Passwordnya diganti tanpa syarat, bukan hanya kalau masih bocor:
-     * akun ini tidak boleh bisa dimasuki lagi apa pun password terakhirnya,
-     * dan `is_active = false` saja bisa terbalik oleh satu perbaikan manual.
+     * Untuk DEMO_LAMA passwordnya diganti tanpa syarat, bukan hanya kalau
+     * masih bocor: akun itu tidak boleh bisa dimasuki lagi apa pun password
+     * terakhirnya, dan `is_active = false` saja bisa terbalik oleh satu
+     * perbaikan manual.
      *
-     * ## Kenapa TIDAK ada pengecualian, termasuk untuk `kasir@` dkk.
-     *
-     * API-57 nomor 2 menawarkan melepas `kasir@`, `produksi@`, dan `kurir@`
-     * di `lessworry.id` begitu password bocornya tidak lagi berlaku, dengan
-     * alasan "yang berbahaya password bocornya, bukan alamatnya".
-     *
-     * Itu tidak bisa dibangun: `Hash::check` tidak membedakan dua keadaan
-     * yang justru harus dibedakan. Akun Kasir Tebet yang dibuat Admin dan
-     * akun bersama dari seeder sebelas-akun versi lama SAMA-SAMA berpassword
-     * bukan-bocor — yang kedua memakai password sendiri sejak awal, dan
-     * PeranAdminTest::test_tiga_akun_bersama_lama_ikut_dimatikan menuntutnya
-     * MATI. Melepas keduanya berarti meninggalkan akun bersama yang tidak
-     * dipegang siapa pun tetap hidup.
-     *
-     * Jadi ketiganya diblokir permanen, dan README yang harus berubah — ia
-     * yang menyuruh Admin memakai alamat itu. Lihat komentar API-57.
+     * BEKAS_DEMO_DI_ALAMAT_KERJA dijaga syarat, karena alamat itu sekarang
+     * dipakai akun kasir dan divisi yang sungguhan (API-131). Yang dimatikan
+     * hanya akun yang masih menerima password bocor — dan `Hash::check`
+     * menjawab tepat pertanyaan itu, bukan gejalanya.
      */
-    /**
-     * Laporkan peran yang dikembalikan seeder, kalau ada.
-     *
-     * Dicetak sebagai peringatan, bukan baris biasa: yang dikembalikan bisa
-     * berupa peran tertinggi di sistem, dan orang yang menjalankan deploy
-     * berhak tahu itu terjadi tanpa harus membuka halaman Pengguna.
-     *
-     * @param  array<int,array{0:string,1:string,2:string,3:string}>  $baris
-     */
-    private function laporkanPeranDikembalikan(array $baris): void
-    {
-        if (! $baris) {
-            return;
-        }
-
-        $this->command->newLine();
-        $this->command->warn('Peran dikembalikan ke daftar akun seeder:');
-        $this->command->table(['Nama', 'Email', 'Peran sebelumnya', 'Peran sekarang'], $baris);
-        $this->command->line(
-            'Daftar akun di seeder adalah deklarasi: ia berlaku tiap kali seeder jalan. '
-            .'Supaya perubahan peran bertahan, ubah daftarnya di DatabaseSeeder — bukan '
-            .'lewat halaman Pengguna. Tiap baris di atas juga tercatat di jejak audit akunnya.'
-        );
-    }
-
     private function matikanDemoLama(): void
     {
         $dimatikan = [];
@@ -339,11 +317,21 @@ class DatabaseSeeder extends Seeder
                 continue;
             }
 
-            $user->forceFill([
-                'is_active' => false,
-                'password' => Str::password(24, symbols: false),
-                'must_change_password' => true,
-            ])->save();
+            $this->matikan($user);
+
+            $dimatikan[] = $email;
+        }
+
+        foreach (self::BEKAS_DEMO_DI_ALAMAT_KERJA as $email) {
+            $user = User::where('email', $email)->first();
+
+            // Akun sungguhan di alamat ini tidak disentuh sama sekali:
+            // passwordnya sendiri, dan ia tetap hidup tiap deploy.
+            if ($user === null || ! Hash::check(self::PASSWORD_BOCOR, $user->password)) {
+                continue;
+            }
+
+            $this->matikan($user);
 
             $dimatikan[] = $email;
         }
@@ -353,5 +341,15 @@ class DatabaseSeeder extends Seeder
                 'Akun lama dinonaktifkan dan passwordnya dibuang: '.implode(', ', $dimatikan)
             );
         }
+    }
+
+    /** Dinonaktifkan dan passwordnya dibuang acak, bukan dihapus. */
+    private function matikan(User $user): void
+    {
+        $user->forceFill([
+            'is_active' => false,
+            'password' => Str::password(24, symbols: false),
+            'must_change_password' => true,
+        ])->save();
     }
 }

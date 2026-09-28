@@ -73,10 +73,12 @@ di bawah ini menahan rilis — bukan menahan pembangunan:
       Less Worry, jadi tautan verifikasi ke sana membuktikan kepemilikan dan
       **tidak ada satu pun yang perlu pengecualian.**
 
-      Akun kasir dan divisi sungguhan dibuat Admin lewat halaman Pengguna,
-      dengan alamat kerja perorangan. Ketiga alamat `kasir@`, `produksi@`, dan
-      `kurir@` di `lessworry.id` **diblokir permanen** — seeder mematikannya
-      tiap kali jalan. Peringatan lengkapnya di README.
+      Akun kasir dan divisi sungguhan dibuat Admin lewat halaman Pengguna.
+      Ketiga alamat `kasir@`, `produksi@`, dan `kurir@` di `lessworry.id`
+      **boleh dipakai**: blokir permanennya dicabut di API-131, karena yang
+      paling mungkin mati karenanya adalah akun kasir sungguhan, tiap deploy.
+      Alamat kerja perorangan tetap lebih disukai — alasannya jejak audit,
+      bukan seeder. Rinciannya di README.
 
       Penandaan manual lewat halaman Ubah Pengguna tetap ada untuk alamat yang
       ternyata tidak ada atau SMTP yang gagal, alasannya wajib dan tercatat di
