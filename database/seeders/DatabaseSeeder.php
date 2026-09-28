@@ -189,17 +189,15 @@ class DatabaseSeeder extends Seeder
         foreach ($daftar as [$nama, $email, $peran]) {
             $user = User::where('email', $email)->first();
 
-            // Kelima akun ini melihat seluruh outlet dan tidak terikat divisi
-            // mana pun, jadi kedua kolom itu kosong — dan disetel kosong,
-            // bukan dilewati, supaya akun yang dulu terikat outlet atau
-            // divisi ikut dilepaskan saat perannya naik.
+            // `name` ditulis tanpa syarat: nama bukan cara mencabut akses, dan
+            // tidak ada keputusan manusia yang hilang kalau seeder mengoreksi
+            // ejaannya.
             $atribut = [
                 'name' => $nama,
-                'division' => null,
-                'outlet_id' => null,
             ];
 
-            // `is_active` dan `role` hanya disetel saat akun DIBUAT.
+            // `is_active`, `role`, `division`, dan `outlet_id` hanya disetel
+            // saat akun DIBUAT.
             // Menonaktifkan orang dan menurunkan perannya adalah keputusan
             // manusia yang berumur — keduanya satu-satunya cara mencabut akses,
             // karena akun tidak pernah dihapus. Deploy berikutnya tidak boleh
@@ -214,7 +212,38 @@ class DatabaseSeeder extends Seeder
             // Mengubah peran akun yang sudah ada tetap bisa — lewat halaman
             // Pengguna, yang berjejak. Yang dilindungi di sini penimpaannya,
             // bukan pembuatannya: akun yang belum ada tetap dibuat dengan
-            // peran dari daftar.
+            // peran dari daftar, tanpa outlet dan tanpa divisi — kelima akun
+            // itu melihat seluruh outlet dan tidak terikat divisi mana pun.
+            //
+            // `division` dan `outlet_id` dulu ditulis tanpa syarat, dan
+            // alasannya sah pada masanya: supaya akun yang dulu terikat outlet
+            // atau divisi ikut dilepaskan saat perannya naik. Alasan itu batal
+            // atas keputusan API-132, karena harganya lebih besar dari yang
+            // dibelinya. Setelah `role` dijaga, akun di daftar ini BISA jadi
+            // kasir ber-outlet — Admin menurunkannya lewat halaman Pengguna —
+            // dan penulisan tanpa syarat melepas outletnya tiap deploy. Kasir
+            // tanpa outlet tidak melihat complaint satu pun (`Complaint`
+            // menutup cakupan kosong dengan `1 = 0`), jadi bukan kebocoran
+            // wewenang, melainkan kasir yang tidak bisa bekerja pagi itu.
+            //
+            // Yang dibeli penulisan tanpa syarat hanya satu kolom label di
+            // daftar Pengguna: nilai sisa pada akun `admin`/`customer_care`
+            // tidak berlaku di mana pun selain tampilan — setiap pembaca
+            // `outlet_id`/`division` yang lain bergerbang peran
+            // (`Complaint::terlihatOleh`, `Outlet`, `Tagihan`,
+            // `ComplaintController`).
+            //
+            // Akibat yang diterima sadar: akun yang dulu terikat outlet atau
+            // divisi lalu naik jadi `admin`/`customer_care` MENYIMPAN nilai
+            // lamanya, dan daftar Pengguna menampilkan label lama itu.
+            // Dibersihkan SEKALI DENGAN TANGAN lewat halaman Pengguna, aturan
+            // yang sama dengan BEKAS_DEMO_DI_ALAMAT_KERJA. Jangan tambahkan
+            // kode untuk itu: kode yang membersihkannya tiap deploy justru
+            // cacat yang API-132 buang.
+            //
+            // Satu aturan untuk keempat kolom, supaya orang berikutnya bisa
+            // mengingatnya: seeder menulis kolom identitas hanya ketika ia
+            // MEMBUAT akunnya.
             //
             // Akibat yang perlu diketahui: di mesin yang akunnya dibuat seeder
             // paling lama, `satrio@lessworry.id` bisa tertinggal sebagai
@@ -225,6 +254,8 @@ class DatabaseSeeder extends Seeder
             if ($user === null) {
                 $atribut['is_active'] = true;
                 $atribut['role'] = $peran;
+                $atribut['division'] = null;
+                $atribut['outlet_id'] = null;
             }
 
             // Password diterbitkan kalau akunnya baru, atau kalau password
